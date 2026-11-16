@@ -1,0 +1,142 @@
+"use client";
+
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Users,
+  Calendar,
+  CreditCard,
+  Cpu,
+  X,
+} from "lucide-react";
+import { clinicProfile } from "@/lib/mockData";
+
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+const navItems = [
+  { href: "/dashboard", label: "Daily Assistant", icon: LayoutDashboard },
+  { href: "/dashboard/patients", label: "Patients", icon: Users, badge: "EHR" },
+  { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
+  { href: "/dashboard/fees", label: "Fees & Collections", icon: CreditCard },
+  { href: "/dashboard/mcp", label: "ChatGPT MCP Hub", icon: Cpu, badge: "Live" },
+];
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
+  const pathname = usePathname();
+
+  return (
+    <>
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#162321] text-slate-200 border-r border-[#243532] flex flex-col justify-between transition-transform duration-200 lg:translate-x-0 ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Brand header */}
+        <div className="p-5 border-b border-[#243532] flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-xl bg-[#2F8EAC] flex items-center justify-center text-white shadow-sm">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2">
+                <path d="M7 4C5 4 4 6 4 9C4 13 6 17 8 20C9 21.5 10 21.5 10.5 20C11 18.5 11.5 16 12 16C12.5 16 13 18.5 13.5 20C14 21.5 15 21.5 16 20C18 17 20 13 20 9C20 6 19 4 17 4C14.5 4 13.5 6 12 6C10.5 6 9.5 4 7 4Z" />
+              </svg>
+            </div>
+            <div className="flex items-baseline">
+              <span className="font-bold text-xl tracking-tight text-white font-sans">
+                Dentally
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#BDDBD1] ml-1" />
+            </div>
+          </Link>
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#203330]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Navigation list */}
+        <div className="px-3 py-4 flex-1 space-y-1 overflow-y-auto">
+          <span className="px-3 text-[10px] font-mono uppercase tracking-[0.15em] text-[#7E9691] font-semibold block mb-2">
+            Practice Management
+          </span>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-[#2F8EAC]/25 text-white shadow-xs ring-1 ring-[#2F8EAC]/70 font-semibold"
+                    : "text-[#A7BCB7] hover:bg-[#203330] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon
+                    className={`w-4 h-4 ${
+                      isActive ? "text-[#C7E7EC]" : "text-[#7E9691] group-hover:text-slate-300"
+                    }`}
+                  />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold ${
+                      item.badge === "Live"
+                        ? "bg-[#2F8EAC]/30 text-[#C7E7EC] border border-[#2F8EAC]/50"
+                        : "bg-[#203330] text-[#BDDBD1]"
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Solo Dentist Profile footer */}
+        <div className="p-4 border-t border-[#243532] bg-[#121D1B]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#2F8EAC] flex items-center justify-center text-white text-xs font-bold shrink-0">
+              AR
+            </div>
+            <div className="overflow-hidden">
+              <h5 className="text-xs font-semibold text-white truncate">
+                {clinicProfile.dentistName}
+              </h5>
+              <p className="text-[10px] text-[#A7BCB7] font-mono truncate">
+                {clinicProfile.email}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-[#243532] flex items-center justify-between text-[11px] font-mono">
+            <span className="flex items-center gap-1.5 text-[#BDDBD1]">
+              <span className="w-2 h-2 rounded-full bg-[#BDDBD1] animate-pulse" />
+              ChatGPT MCP
+            </span>
+            <span className="text-[#7E9691]">Google Auth</span>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+};

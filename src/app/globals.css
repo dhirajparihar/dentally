@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-serif: 'Playfair Display', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+
+  body {
+    background-color: #FBF9F1;
+    color: #1E2D2B;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "cv11" 1, "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Monospace figures always render tabular numbers for medical precision */
+  code, kbd, samp, pre, .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Editorial Serif only when explicitly requested */
+  .font-serif {
+    font-family: var(--font-serif);
+    letter-spacing: -0.015em;
+  }
+
+  /* Dashboard headings default to clean modern sans */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Glassmorphism Navigation */
+.glass-nav {
+  background: rgba(251, 249, 241, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(231, 233, 227, 0.85);
+}
+
+/* Precision scrollbar for clinical grids */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #BDDBD1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2F8EAC;
+}
+
+/* 5-Surface Carving SVG surface classes */
+.surface-occlusal {
+  transition: all 120ms ease-out;
+}
