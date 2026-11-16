@@ -28,6 +28,8 @@ export default function DashboardOverviewPage() {
     fees,
     payments,
     clinicProfile,
+    loading,
+    loadSampleData,
     completeAppointment,
     updatePatient,
     recordPayment,
@@ -104,6 +106,40 @@ export default function DashboardOverviewPage() {
           </Link>
         </div>
       </div>
+
+      {/* Pristine Clinic Onboarding Card for New Accounts */}
+      {!loading && patients.length === 0 && (
+        <div className="bg-gradient-to-r from-[#F0F7F5] via-white to-[#E8F0F1] p-6 sm:p-7 rounded-2xl border-2 border-dashed border-[#2F8EAC]/40 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2F8EAC]/10 text-[#2F8EAC] text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Private Clinic Database Ready</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-[#1E2D2B]">
+              Welcome, Dr. {clinicProfile.dentistName}!
+            </h3>
+            <p className="text-xs sm:text-sm text-[#3D5450] leading-relaxed">
+              Your clinic is securely connected to your account (<strong>{clinicProfile.email}</strong>). All patient dossiers, appointments, and fees you create here are 100% private to your email.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            <Link
+              href="/dashboard/patients"
+              className="px-4 py-2.5 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all text-center flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add First Patient</span>
+            </Link>
+            <button
+              onClick={() => loadSampleData()}
+              className="px-4 py-2.5 rounded-xl bg-white border border-[#2F8EAC] text-[#2F8EAC] hover:bg-[#E8F0F1] text-xs sm:text-sm font-semibold transition-all text-center flex items-center justify-center gap-2 shadow-2xs"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Load Sample Records</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards: The 4 Core Pillars */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

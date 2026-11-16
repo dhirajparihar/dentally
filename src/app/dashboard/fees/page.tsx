@@ -191,7 +191,7 @@ export default function FeesPage() {
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-[#3D5450]">Solo Practice Financial Ledger</span>
                 <span className="text-[#3D5450]">•</span>
-                <span className="text-xs font-medium text-[#2F8EAC] font-mono">Dr. Ananya Ray</span>
+                <span className="text-xs font-medium text-[#2F8EAC] font-mono">{clinicProfile.dentistName}</span>
               </div>
             </div>
           </div>

@@ -32,6 +32,7 @@ import {
   ToothCondition,
 } from "@/lib/mockData";
 import { ToothMap } from "@/components/odontogram/ToothMap";
+import { useClinic } from "@/context/ClinicContext";
 
 interface Patient360DossierModalProps {
   patient: Patient | null;
@@ -56,6 +57,7 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
   onAddFee,
   onBookAppointment,
 }) => {
+  const { clinicProfile } = useClinic();
   // Clinical Note State
   const [newNoteText, setNewNoteText] = useState("");
   const [activeTab, setActiveTab] = useState<"clinical" | "odontogram" | "financials" | "appointments">("clinical");
@@ -1243,7 +1245,7 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
                         3. Pick Operatory Time Slot for {recallDate}:
                       </label>
                       <span className="text-[10px] font-mono text-[#7E9691]">
-                        Dr. Ananya Ray • Operatory 1
+                        {clinicProfile.dentistName} • Operatory 1
                       </span>
                     </div>
 

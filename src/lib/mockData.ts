@@ -10,6 +10,7 @@ export interface ToothCondition {
 
 export interface Patient {
   _id: string;
+  dentistEmail?: string;
   name: string;
   age: number;
   gender: "Male" | "Female" | "Other";
@@ -38,6 +39,7 @@ export interface Patient {
 
 export interface Appointment {
   _id: string;
+  dentistEmail?: string;
   patientId: string;
   patientName: string;
   patientPhone: string;
@@ -51,6 +53,7 @@ export interface Appointment {
 
 export interface FeeItem {
   _id: string;
+  dentistEmail?: string;
   patientId: string;
   patientName: string;
   date: string; // YYYY-MM-DD
@@ -65,6 +68,7 @@ export interface FeeItem {
 
 export interface PaymentTransaction {
   _id: string;
+  dentistEmail?: string;
   feeId?: string;
   patientId: string;
   patientName: string;

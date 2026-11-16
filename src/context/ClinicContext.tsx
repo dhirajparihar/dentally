@@ -1,27 +1,30 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { useSession } from "next-auth/react";
 import {
   Patient,
   Appointment,
   FeeItem,
   PaymentTransaction,
-  clinicProfile,
+  clinicProfile as defaultClinicProfile,
   initialPatients,
   initialAppointments,
   initialFees,
   initialPayments,
 } from "@/lib/mockData";
 
-interface ClinicContextType {
+export interface ClinicContextType {
   patients: Patient[];
   appointments: Appointment[];
   fees: FeeItem[];
   payments: PaymentTransaction[];
-  clinicProfile: typeof clinicProfile;
+  clinicProfile: typeof defaultClinicProfile;
   loading: boolean;
   isSyncing: boolean;
+  userEmail: string;
   refreshClinic: () => Promise<void>;
+  loadSampleData: () => Promise<void>;
   addPatient: (patient: Patient) => Promise<void>;
   updatePatient: (patient: Patient) => Promise<void>;
   bookAppointment: (appointment: Appointment) => Promise<void>;
@@ -34,18 +37,65 @@ interface ClinicContextType {
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [patients, setPatients] = useState<Patient[]>(initialPatients);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
-  const [fees, setFees] = useState<FeeItem[]>(initialFees);
-  const [payments, setPayments] = useState<PaymentTransaction[]>(initialPayments);
+  const { data: session, status } = useSession();
+  const userEmail = (session?.user?.email || "dr.ananya@dentally.app").toLowerCase().trim();
+  const isDemoUser = userEmail === "dr.ananya@dentally.app";
+
+  const [patients, setPatients] = useState<Patient[]>(() => (isDemoUser ? initialPatients : []));
+  const [appointments, setAppointments] = useState<Appointment[]>(() => (isDemoUser ? initialAppointments : []));
+  const [fees, setFees] = useState<FeeItem[]>(() => (isDemoUser ? initialFees : []));
+  const [payments, setPayments] = useState<PaymentTransaction[]>(() => (isDemoUser ? initialPayments : []));
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Fetch current state from the MCP/Clinic backend
+  // Dynamically tailor clinic profile to the logged-in doctor
+  const clinicProfile = useMemo(() => {
+    if (!session?.user) return defaultClinicProfile;
+    return {
+      ...defaultClinicProfile,
+      dentistName: session.user.name || "Dr. Dentist",
+      email: session.user.email || defaultClinicProfile.email,
+    };
+  }, [session?.user]);
+
+  // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async () => {
     try {
       setIsSyncing(true);
-      const res = await fetch("/api/clinic", { cache: "no-store" });
+      const url = `/api/clinic?email=${encodeURIComponent(userEmail)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setPatients(data.patients || []);
+        setAppointments(data.appointments || []);
+        setFees(data.fees || []);
+        setPayments(data.payments || []);
+      }
+    } catch (err) {
+      console.warn("Clinic sync fallback to local state:", err);
+    } finally {
+      setLoading(false);
+      setIsSyncing(false);
+    }
+  }, [userEmail]);
+
+  // Sync on session change and periodically poll every 15s for external MCP agent mutations
+  useEffect(() => {
+    if (status === "loading") return;
+    refreshClinic();
+    const interval = setInterval(refreshClinic, 15000);
+    return () => clearInterval(interval);
+  }, [status, refreshClinic]);
+
+  // Generic helper to post mutations scoped to current doctor
+  const postMutation = async (payload: Record<string, any>) => {
+    try {
+      setIsSyncing(true);
+      const res = await fetch("/api/clinic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, dentistEmail: userEmail }),
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.patients) setPatients(data.patients);
@@ -54,49 +104,32 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (data.payments) setPayments(data.payments);
       }
     } catch (err) {
-      console.warn("Clinic sync fallback to in-memory state:", err);
-    } finally {
-      setLoading(false);
-      setIsSyncing(false);
-    }
-  }, []);
-
-  // Initial load & periodic poll every 15s to capture ChatGPT MCP updates
-  useEffect(() => {
-    refreshClinic();
-    const interval = setInterval(refreshClinic, 15000);
-    return () => clearInterval(interval);
-  }, [refreshClinic]);
-
-  // Generic helper to post mutations
-  const postMutation = async (payload: Record<string, any>) => {
-    try {
-      setIsSyncing(true);
-      await fetch("/api/clinic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      console.error("Failed to sync mutation to MCP server:", err);
+      console.error("Failed to sync mutation to clinic API:", err);
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const loadSampleData = async () => {
+    await postMutation({ action: "load_sample_data" });
   };
 
   const addPatient = async (newPatient: Patient) => {
-    setPatients((prev) => [newPatient, ...prev.filter((p) => p._id !== newPatient._id)]);
-    await postMutation({ action: "add_patient", data: newPatient });
+    const scoped = { ...newPatient, dentistEmail: userEmail };
+    setPatients((prev) => [scoped, ...prev.filter((p) => p._id !== scoped._id)]);
+    await postMutation({ action: "add_patient", data: scoped });
   };
 
   const updatePatient = async (updated: Patient) => {
-    setPatients((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
-    await postMutation({ action: "update_patient", data: updated });
+    const scoped = { ...updated, dentistEmail: userEmail };
+    setPatients((prev) => prev.map((p) => (p._id === scoped._id ? scoped : p)));
+    await postMutation({ action: "update_patient", data: scoped });
   };
 
   const bookAppointment = async (newApt: Appointment) => {
-    setAppointments((prev) => [newApt, ...prev.filter((a) => a._id !== newApt._id)]);
-    await postMutation({ action: "book_appointment", data: newApt });
+    const scoped = { ...newApt, dentistEmail: userEmail };
+    setAppointments((prev) => [scoped, ...prev.filter((a) => a._id !== scoped._id)]);
+    await postMutation({ action: "book_appointment", data: scoped });
   };
 
   const completeAppointment = async (appointmentId: string) => {
@@ -128,13 +161,15 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addFee = async (newFee: FeeItem) => {
-    setFees((prev) => [newFee, ...prev.filter((f) => f._id !== newFee._id)]);
-    await postMutation({ action: "add_fee", data: newFee });
+    const scoped = { ...newFee, dentistEmail: userEmail };
+    setFees((prev) => [scoped, ...prev.filter((f) => f._id !== scoped._id)]);
+    await postMutation({ action: "add_fee", data: scoped });
   };
 
   const recordPayment = async (newPay: PaymentTransaction) => {
-    setPayments((prev) => [newPay, ...prev.filter((p) => p._id !== newPay._id)]);
-    await postMutation({ action: "record_payment", data: newPay });
+    const scoped = { ...newPay, dentistEmail: userEmail };
+    setPayments((prev) => [scoped, ...prev.filter((p) => p._id !== scoped._id)]);
+    await postMutation({ action: "record_payment", data: scoped });
   };
 
   return (
@@ -147,7 +182,9 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         clinicProfile,
         loading,
         isSyncing,
+        userEmail,
         refreshClinic,
+        loadSampleData,
         addPatient,
         updatePatient,
         bookAppointment,
@@ -169,4 +206,3 @@ export const useClinic = () => {
   }
   return context;
 };
-

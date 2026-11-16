@@ -10,6 +10,7 @@ import {
   Calendar,
   X,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import {
   Patient,
@@ -24,6 +25,8 @@ export default function PatientsPage() {
     payments,
     appointments,
     clinicProfile,
+    loading,
+    loadSampleData,
     addPatient,
     updatePatient,
     recordPayment,
@@ -155,7 +158,53 @@ export default function PatientsPage() {
       </div>
 
       {/* Patients Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      {filtered.length === 0 ? (
+        <div className="bg-white p-10 sm:p-14 rounded-2xl border border-[#DCE2DE] text-center space-y-4 max-w-xl mx-auto shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-[#E8F0F1] text-[#2F8EAC] flex items-center justify-center mx-auto border border-[#C7E7EC]">
+            <Users className="w-7 h-7" />
+          </div>
+          {patients.length === 0 ? (
+            <>
+              <h3 className="font-bold text-lg text-[#1E2D2B]">
+                Your Patient Directory is Clean & Private
+              </h3>
+              <p className="text-xs sm:text-sm text-[#3D5450] max-w-md mx-auto leading-relaxed">
+                No patient dossiers have been added to your clinic account yet. You can register your first patient right now, or load sample records to explore.
+              </p>
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={() => setIsAddOpen(true)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] transition-all text-xs flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Register First Patient</span>
+                </button>
+                <button
+                  onClick={() => loadSampleData()}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white border border-[#2F8EAC] text-[#2F8EAC] hover:bg-[#E8F0F1] font-semibold transition-all text-xs flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Load Sample Records</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="font-bold text-lg text-[#1E2D2B]">No Patients Found</h3>
+              <p className="text-xs text-[#3D5450]">
+                No records matched &quot;{search}&quot;. Try searching by name, phone number, or allergy.
+              </p>
+              <button
+                onClick={() => setSearch("")}
+                className="text-xs font-semibold text-[#2F8EAC] hover:underline"
+              >
+                Clear search filter
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map((patient) => {
           const balance = getBalance(patient._id);
 
@@ -251,7 +300,8 @@ export default function PatientsPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* 360° Dossier Panoramic Modal */}
       {selectedPatient && (

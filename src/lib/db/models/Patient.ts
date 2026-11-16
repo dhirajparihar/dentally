@@ -4,6 +4,7 @@ import { Patient } from "@/lib/mockData";
 const PatientSchema = new Schema<Patient>(
   {
     _id: { type: String, required: true },
+    dentistEmail: { type: String, required: true, index: true, default: "dr.ananya@dentally.app" },
     name: { type: String, required: true },
     age: { type: Number, required: true },
     gender: { type: String, required: true },

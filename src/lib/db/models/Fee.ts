@@ -4,6 +4,7 @@ import { FeeItem } from "@/lib/mockData";
 const FeeSchema = new Schema<FeeItem>(
   {
     _id: { type: String, required: true },
+    dentistEmail: { type: String, required: true, index: true, default: "dr.ananya@dentally.app" },
     patientId: { type: String, required: true, index: true },
     patientName: { type: String, required: true },
     date: { type: String, required: true, index: true },

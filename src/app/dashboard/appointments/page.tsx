@@ -235,7 +235,7 @@ export default function AppointmentsPage() {
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#2F8EAC] animate-pulse" />
             <h2 className="font-bold text-2xl sm:text-3xl text-[#1E2D2B] tracking-tight">
-              Dr. Ananya&apos;s Chair Schedule
+              {clinicProfile.dentistName}&apos;s Chair Schedule
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-[#586B67] mt-1">
@@ -443,7 +443,7 @@ export default function AppointmentsPage() {
                   No Patients Scheduled for this Date
                 </h3>
                 <p className="text-xs sm:text-sm text-[#586B67] max-w-md mx-auto mt-1">
-                  Dr. Ananya&apos;s chair is currently open all day. Tap below to schedule a walk-in, recall visit, or treatment session.
+                  {clinicProfile.dentistName}&apos;s chair is currently open all day. Tap below to schedule a walk-in, recall visit, or treatment session.
                 </p>
               </div>
               <button
@@ -738,7 +738,7 @@ export default function AppointmentsPage() {
             <div className="flex items-center justify-between pb-3 border-b border-[#E7E9E3]">
               <div>
                 <h3 className="font-bold text-lg text-[#1E2D2B]">
-                  Book Patient into Dr. Ananya&apos;s Chair
+                  Book Patient into {clinicProfile.dentistName}&apos;s Chair
                 </h3>
                 <p className="text-[11px] text-[#586B67] mt-0.5">
                   Single operatory schedule • Avoids time overlaps automatically
@@ -909,7 +909,7 @@ export default function AppointmentsPage() {
                   <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
-                      <strong>Solo Operatory Notice:</strong> Dr. Ananya is already scheduled with{" "}
+                      <strong>Solo Operatory Notice:</strong> {clinicProfile.dentistName} is already scheduled with{" "}
                       <strong>{conflict.patientName}</strong> at {form.time}. Please select an adjacent time slot to avoid double booking.
                     </span>
                   </div>

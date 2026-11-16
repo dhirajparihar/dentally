@@ -4,6 +4,7 @@ import { PaymentTransaction } from "@/lib/mockData";
 const PaymentSchema = new Schema<PaymentTransaction>(
   {
     _id: { type: String, required: true },
+    dentistEmail: { type: String, required: true, index: true, default: "dr.ananya@dentally.app" },
     feeId: { type: String },
     patientId: { type: String, required: true, index: true },
     patientName: { type: String, required: true },
