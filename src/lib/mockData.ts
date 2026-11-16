@@ -85,7 +85,7 @@ export const clinicProfile = {
   email: "dr.ananya@dentally.app",
   phone: "+91 98200 11223",
   address: "Linking Road, Bandra West, Mumbai 400050",
-  mcpServerUrl: "https://dentally.app/api/mcp",
+  mcpServerUrl: "https://dentally.reline.me/api/mcp",
 };
 
 export const generateDefaultToothMap = (): Record<number, ToothCondition> => {
