@@ -83,8 +83,9 @@ function calculatePatientBalance(patientId: string) {
   };
 }
 
-export async function executeMcpTool(name: string, args: any): Promise<any> {
-  const fresh = await getClinicData();
+export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
+  const email = (dentistEmail || "dr.ananya@dentally.app").toLowerCase().trim();
+  const fresh = await getClinicData(email);
   patientsState = fresh.patients;
   appointmentsState = fresh.appointments;
   feesState = fresh.fees;
@@ -113,7 +114,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
         history: [],
       };
       patientsState.unshift(newPatient);
-      await savePatient(newPatient);
+      await savePatient(newPatient, email);
 
       return {
         success: true,
@@ -180,7 +181,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       if (args.medicalAlerts) patient.medicalAlerts = args.medicalAlerts;
       if (args.bloodGroup) patient.bloodGroup = args.bloodGroup;
       if (args.address) patient.address = args.address;
-      await savePatient(patient);
+      await savePatient(patient, email);
 
       return {
         success: true,
@@ -224,7 +225,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       };
       patient.notes.unshift(newNote);
       patient.lastVisit = todayStr;
-      await savePatient(patient);
+      await savePatient(patient, email);
 
       return {
         success: true,
@@ -318,7 +319,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       };
 
       appointmentsState.unshift(newApt);
-      await saveAppointment(newApt);
+      await saveAppointment(newApt, email);
 
       return {
         success: true,
@@ -414,7 +415,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       apt.date = args.newDate;
       apt.time = args.newTime;
       if (args.reason) apt.notes = `${apt.notes || ""} [Rescheduled: ${args.reason}]`.trim();
-      await rescheduleAppointment(apt._id, apt.date, apt.time, args.reason);
+      await rescheduleAppointment(apt._id, apt.date, apt.time, args.reason, email);
 
       return {
         success: true,
@@ -429,7 +430,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
 
       apt.status = "cancelled";
       if (args.reason) apt.notes = `${apt.notes || ""} [Cancelled: ${args.reason}]`.trim();
-      await updateAppointmentStatus(apt._id, "cancelled");
+      await updateAppointmentStatus(apt._id, "cancelled", email);
 
       return {
         success: true,
@@ -498,7 +499,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       };
 
       feesState.unshift(newFee);
-      await saveFee(newFee);
+      await saveFee(newFee, email);
 
       return {
         success: true,
@@ -557,7 +558,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       };
 
       paymentsState.unshift(payment);
-      await savePayment(payment);
+      await savePayment(payment, email);
 
       // Update fee status if linked
       if (args.feeId) {
@@ -567,7 +568,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
             .filter((p) => p.feeId === fee._id)
             .reduce((sum, p) => sum + p.amount, 0);
           fee.status = totalPaidForFee >= fee.netAmount ? "paid" : "partial";
-          await saveFee(fee);
+          await saveFee(fee, email);
         }
       }
 
@@ -724,7 +725,7 @@ export async function executeMcpTool(name: string, args: any): Promise<any> {
       };
 
       paymentsState.unshift(refundRecord);
-      await savePayment(refundRecord);
+      await savePayment(refundRecord, email);
 
       return {
         success: true,

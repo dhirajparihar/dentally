@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { DENTALLY_MCP_TOOLS } from "@/lib/mcp/tools";
 import { executeMcpTool } from "@/lib/mcp/server";
 import { clinicProfile } from "@/lib/mockData";
+import { verifyAccessToken } from "@/lib/auth/oauth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -9,7 +10,7 @@ export const maxDuration = 10; // Vercel Free Tier max function timeout
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key, x-dentist-email",
 };
 
 export async function OPTIONS() {
@@ -20,6 +21,8 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
+  const baseUrl = process.env.NEXTAUTH_URL || "https://dentally.reline.me";
+
   // Returns MCP server metadata & discovery information
   return NextResponse.json(
     {
@@ -36,10 +39,11 @@ export async function GET(request: NextRequest) {
         resources: {},
         prompts: {},
       },
-      auth: {
+      authentication: {
         type: "oauth2",
-        provider: "google",
-        instruction: "Sign in with your registered dentist Gmail ID when prompted by ChatGPT",
+        authorization_url: `${baseUrl}/api/oauth/authorize`,
+        token_url: `${baseUrl}/api/oauth/token`,
+        scopes: ["openid", "email", "clinic"],
       },
       toolsCount: DENTALLY_MCP_TOOLS.length,
       tools: DENTALLY_MCP_TOOLS.map((t) => ({ name: t.name, description: t.description })),
@@ -63,6 +67,15 @@ function respond(data: any, statusOrInit: number | { status?: number } = 200) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Resolve Dentist Identity from Bearer OAuth Token or fallback headers
+    const authHeader = request.headers.get("authorization");
+    const verifiedDoctorEmail = await verifyAccessToken(authHeader);
+
+    // Fallbacks: query param ?email=, custom header x-dentist-email, or default demo account
+    const queryEmail = request.nextUrl.searchParams.get("email");
+    const headerEmail = request.headers.get("x-dentist-email");
+    const dentistEmail = (verifiedDoctorEmail || queryEmail || headerEmail || "dr.ananya@dentally.app").toLowerCase().trim();
+
     const body = await request.json();
     const { jsonrpc, id, method, params } = body;
 
@@ -104,7 +117,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Call a specific dental tool
+    // Call a specific dental tool scoped to the authenticated dentist
     if (method === "tools/call") {
       const toolName = params?.name;
       const toolArguments = params?.arguments || {};
@@ -124,7 +137,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const result = await executeMcpTool(toolName, toolArguments);
+        const result = await executeMcpTool(toolName, toolArguments, dentistEmail);
         return respond({
           jsonrpc: "2.0",
           id,
@@ -146,7 +159,7 @@ export async function POST(request: NextRequest) {
             content: [
               {
                 type: "text",
-                text: `Error executing ${toolName}: ${toolErr.message || String(toolErr)}`,
+                text: `Tool execution failed: ${toolErr.message || String(toolErr)}`,
               },
             ],
           },
@@ -154,35 +167,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Direct REST fallback if an agent posts `{ tool: "get_today_appointments", args: {} }`
-    if (body.tool) {
-      const result = await executeMcpTool(body.tool, body.args || {});
-      return respond({ success: true, tool: body.tool, data: result });
-    }
-
+    // Unhandled JSON-RPC method
     return respond(
       {
         jsonrpc: "2.0",
         id,
         error: {
           code: -32601,
-          message: `Method '${method}' not found. Supported methods: initialize, tools/list, tools/call, ping`,
+          message: `Method '${method}' not found`,
         },
       },
       { status: 404 }
     );
-  } catch (error: any) {
+  } catch (err: any) {
     return respond(
       {
         jsonrpc: "2.0",
         id: null,
         error: {
           code: -32700,
-          message: `Parse error: ${error.message}`,
+          message: `Parse error: ${err.message || String(err)}`,
         },
       },
       { status: 500 }
     );
   }
 }
-
