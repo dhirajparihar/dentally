@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { Menu, Plus } from "lucide-react";
+import { Menu, Plus, LogOut, ShieldCheck } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
 import { clinicProfile } from "@/lib/mockData";
 import { useClinic } from "@/context/ClinicContext";
 
@@ -13,15 +14,27 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title = "Clinical Dashboard" }) => {
   const { isSyncing } = useClinic();
+  const { data: session } = useSession();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const userName = session?.user?.name || clinicProfile.dentistName;
+  const userEmail = session?.user?.email || clinicProfile.email;
+  const userImage = session?.user?.image;
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 bg-[#FBF9F1]/95 backdrop-blur-md border-b border-[#E7E9E3] px-4 sm:px-6 lg:px-8 py-3.5">
+    <header className="sticky top-0 z-30 bg-[#FBF9F1]/95 backdrop-blur-md border-b border-[#DCE2DE] px-4 sm:px-6 lg:px-8 py-3.5">
       <div className="flex items-center justify-between gap-4">
         {/* Left: Mobile Menu + Title */}
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenMobileMenu}
-            className="lg:hidden p-2 rounded-xl text-[#586B67] hover:bg-[#E8F0F1]"
+            className="lg:hidden p-2 rounded-xl text-[#3D5450] hover:bg-[#E8F0F1]"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -29,8 +42,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title = "Clini
             <h1 className="font-bold text-lg sm:text-xl text-[#1E2D2B] tracking-tight font-sans">
               {title}
             </h1>
-            <p className="text-[11px] text-[#586B67] font-medium hidden sm:block">
-              {clinicProfile.name} • Dr. Ananya&apos;s Solo Chair Operatory
+            <p className="text-[11px] text-[#3D5450] font-medium hidden sm:block">
+              {clinicProfile.name} • {userName}&apos;s Operatory
             </p>
           </div>
         </div>
@@ -60,11 +73,48 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title = "Clini
             <span className="sm:hidden">Book</span>
           </Link>
 
-          {/* User Profile Avatar with Google Badge */}
-          <div className="flex items-center gap-2 pl-2 border-l border-[#E7E9E3]">
-            <div className="w-8 h-8 rounded-full bg-[#1E2D2B] text-white font-bold text-xs flex items-center justify-center border-2 border-[#BDDBD1] shadow-xs" title="Dr. Ananya Ray">
-              AR
-            </div>
+          {/* User Profile Avatar with Google Badge & Sign Out Dropdown */}
+          <div className="relative pl-2 border-l border-[#DCE2DE]">
+            <button
+              onClick={() => setShowProfileMenu((prev) => !prev)}
+              className="flex items-center gap-2 rounded-full focus:outline-none"
+              title={`${userName} (${userEmail})`}
+            >
+              {userImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={userImage}
+                  alt={userName}
+                  className="w-8 h-8 rounded-full border-2 border-[#BDDBD1] object-cover shadow-2xs"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#1E2D2B] text-white font-bold text-xs flex items-center justify-center border-2 border-[#BDDBD1] shadow-2xs">
+                  {initials}
+                </div>
+              )}
+            </button>
+
+            {/* Profile Dropdown */}
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-[#DCE2DE] shadow-xl p-3 z-50 text-xs animate-in fade-in zoom-in-95">
+                <div className="pb-2.5 mb-2 border-b border-[#DCE2DE]">
+                  <div className="font-bold text-[#1E2D2B] truncate">{userName}</div>
+                  <div className="text-[11px] text-[#3D5450] font-mono truncate">{userEmail}</div>
+                  <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    <span>Google Authenticated</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="w-full text-left px-3 py-2 rounded-xl text-rose-700 hover:bg-rose-50 flex items-center gap-2 font-medium transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

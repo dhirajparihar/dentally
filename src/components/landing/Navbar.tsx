@@ -2,10 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, Menu, X, Cpu, Users, Calendar, CreditCard } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Sparkles, ArrowRight, Menu, X, Cpu, Users, Calendar, CreditCard, Lock } from "lucide-react";
 
 export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: session } = useSession();
 
   return (
     <header className="sticky top-0 z-50 glass-nav">
@@ -51,13 +53,23 @@ export const Navbar: React.FC = () => {
               <Cpu className="w-3.5 h-3.5 text-[#2F8EAC]" />
               /api/mcp
             </Link>
-            <Link
-              href="/dashboard"
-              className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
-            >
-              Dentist Dashboard
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+            {session ? (
+              <Link
+                href="/dashboard"
+                className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
+              >
+                <span>Operatory Dashboard</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
+              >
+                <span>Dentist Sign In</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}

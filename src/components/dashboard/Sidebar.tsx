@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +11,7 @@ import {
   CreditCard,
   Cpu,
   X,
+  LogOut,
 } from "lucide-react";
 import { clinicProfile } from "@/lib/mockData";
 
@@ -28,6 +30,17 @@ const navItems = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const userName = session?.user?.name || clinicProfile.dentistName;
+  const userEmail = session?.user?.email || clinicProfile.email;
+  const userImage = session?.user?.image;
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <>
@@ -114,18 +127,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
         {/* Solo Dentist Profile footer */}
         <div className="p-4 border-t border-[#243532] bg-[#121D1B]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#2F8EAC] flex items-center justify-center text-white text-xs font-bold shrink-0">
-              AR
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {userImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={userImage}
+                  alt={userName}
+                  className="w-8 h-8 rounded-full border border-[#BDDBD1] object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#2F8EAC] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {initials}
+                </div>
+              )}
+              <div className="overflow-hidden min-w-0">
+                <h5 className="text-xs font-semibold text-white truncate">
+                  {userName}
+                </h5>
+                <p className="text-[10px] text-[#A7BCB7] font-mono truncate">
+                  {userEmail}
+                </p>
+              </div>
             </div>
-            <div className="overflow-hidden">
-              <h5 className="text-xs font-semibold text-white truncate">
-                {clinicProfile.dentistName}
-              </h5>
-              <p className="text-[10px] text-[#A7BCB7] font-mono truncate">
-                {clinicProfile.email}
-              </p>
-            </div>
+
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              title="Sign Out"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#203330] transition-colors shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="mt-3 pt-3 border-t border-[#243532] flex items-center justify-between text-[11px] font-mono">
@@ -133,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
               <span className="w-2 h-2 rounded-full bg-[#BDDBD1] animate-pulse" />
               ChatGPT MCP
             </span>
-            <span className="text-[#7E9691]">Google Auth</span>
+            <span className="text-[#BDDBD1]">Google Auth</span>
           </div>
         </div>
       </aside>

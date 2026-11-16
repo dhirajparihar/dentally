@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Plus_Jakarta_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -38,7 +39,7 @@ export default function RootLayout({
       className={`scroll-smooth ${playfair.variable} ${plusJakartaSans.variable} ${spaceMono.variable}`}
     >
       <body className="min-h-screen bg-[#FBF9F1] text-[#1E2D2B] selection:bg-[#BDDBD1] selection:text-[#162321] font-sans antialiased">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
