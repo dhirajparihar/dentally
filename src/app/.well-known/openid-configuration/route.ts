@@ -10,6 +10,7 @@ export async function GET() {
       issuer: baseUrl,
       authorization_endpoint: `${baseUrl}/api/oauth/authorize`,
       token_endpoint: `${baseUrl}/api/oauth/token`,
+      registration_endpoint: `${baseUrl}/api/oauth/register`,
       userinfo_endpoint: `${baseUrl}/api/clinic`,
       response_types_supported: ["code"],
       subject_types_supported: ["public"],
@@ -45,3 +46,4 @@ export async function OPTIONS() {
     },
   });
 }
+

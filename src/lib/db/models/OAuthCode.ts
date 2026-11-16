@@ -26,3 +26,4 @@ const OAuthCodeSchema = new Schema<IOAuthCode>(
 );
 
 export default mongoose.models.OAuthCode || mongoose.model<IOAuthCode>("OAuthCode", OAuthCodeSchema);
+
