@@ -14,9 +14,13 @@ const corsHeaders = {
 };
 
 export async function OPTIONS() {
+  const baseUrl = process.env.NEXTAUTH_URL || "https://dentally.reline.me";
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders,
+    headers: {
+      ...corsHeaders,
+      Link: `<${baseUrl}/.well-known/oauth-authorization-server>; rel="oauth-authorization-server"`,
+    },
   });
 }
 
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
         type: "oauth2",
         authorization_url: `${baseUrl}/api/oauth/authorize`,
         token_url: `${baseUrl}/api/oauth/token`,
+        registration_url: `${baseUrl}/api/oauth/register`,
         scopes: ["openid", "email", "clinic"],
       },
       toolsCount: DENTALLY_MCP_TOOLS.length,
@@ -51,6 +56,7 @@ export async function GET(request: NextRequest) {
     {
       headers: {
         ...corsHeaders,
+        Link: `<${baseUrl}/.well-known/oauth-authorization-server>; rel="oauth-authorization-server"`,
         "Cache-Control": "no-store, max-age=0",
       },
     }
