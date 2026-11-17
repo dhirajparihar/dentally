@@ -13,12 +13,12 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title = "Clinical Dashboard" }) => {
-  const { isSyncing } = useClinic();
+  const { isSyncing, clinicProfile } = useClinic();
   const { data: session, status } = useSession();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const userName = status === "loading" ? "Doctor" : (session?.user?.name || clinicProfile.dentistName);
-  const userEmail = status === "loading" ? "" : (session?.user?.email || clinicProfile.email);
+  const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
+  const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
   const userImage = session?.user?.image;
   const initials = userName
     .split(" ")

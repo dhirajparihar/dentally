@@ -95,6 +95,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
   const appointmentsState: Appointment[] = [...fresh.appointments];
   const feesState: FeeItem[] = [...fresh.fees];
   const paymentsState: PaymentTransaction[] = [...fresh.payments];
+  const clinicProfile = fresh.clinicProfile;
 
   // Helper to find patient by query (ID, phone or name) scoped to current doctor
   const findPatientHelper = (query: string): Patient | undefined => {

@@ -8,6 +8,7 @@ import {
   FeeItem,
   PaymentTransaction,
   clinicProfile as defaultClinicProfile,
+  ClinicProfile,
   initialPatients,
   initialAppointments,
   initialFees,
@@ -19,7 +20,7 @@ export interface ClinicContextType {
   appointments: Appointment[];
   fees: FeeItem[];
   payments: PaymentTransaction[];
-  clinicProfile: typeof defaultClinicProfile;
+  clinicProfile: ClinicProfile;
   loading: boolean;
   isSyncing: boolean;
   userEmail: string;
@@ -33,6 +34,7 @@ export interface ClinicContextType {
   rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<void>;
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
+  updateClinicProfile: (profile: Partial<ClinicProfile>) => Promise<void>;
 }
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
@@ -48,25 +50,22 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [clinicProfile, setClinicProfile] = useState<ClinicProfile>(() => ({
+    ...defaultClinicProfile,
+    dentistName: "Doctor",
+    email: userEmail,
+  }));
 
-  // Dynamically tailor clinic profile to the logged-in doctor
-  const clinicProfile = useMemo(() => {
-    if (status === "loading") {
-      return {
-        ...defaultClinicProfile,
-        dentistName: "Loading Clinic...",
-        email: "",
-      };
+  // Keep clinicProfile synced with authenticated session
+  useEffect(() => {
+    if (session?.user) {
+      setClinicProfile((prev) => ({
+        ...prev,
+        dentistName: prev.dentistName && prev.dentistName !== "Doctor" ? prev.dentistName : (session.user?.name || "Doctor"),
+        email: session.user?.email || prev.email,
+      }));
     }
-    if (!session?.user) {
-      return defaultClinicProfile;
-    }
-    return {
-      ...defaultClinicProfile,
-      dentistName: session.user.name || "Dr. Dentist",
-      email: session.user.email || defaultClinicProfile.email,
-    };
-  }, [session?.user, status]);
+  }, [session?.user]);
 
   // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async () => {
@@ -79,6 +78,17 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setAppointments(data.appointments || []);
         setFees(data.fees || []);
         setPayments(data.payments || []);
+        if (data.clinicProfile) {
+          setClinicProfile((prev) => ({
+            ...prev,
+            ...data.clinicProfile,
+            dentistName:
+              data.clinicProfile.dentistName && data.clinicProfile.dentistName !== "Doctor"
+                ? data.clinicProfile.dentistName
+                : (session?.user?.name || prev.dentistName || "Doctor"),
+            email: userEmail || data.clinicProfile.email,
+          }));
+        }
       }
     } catch (err) {
       console.warn("Clinic sync error:", err);
@@ -86,7 +96,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setLoading(false);
       setIsSyncing(false);
     }
-  }, []);
+  }, [session?.user?.name, userEmail]);
 
   // Sync when NextAuth finishes resolving the session (avoids flashing while loading)
   useEffect(() => {
@@ -196,6 +206,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "record_payment", data: scoped });
   };
 
+  const updateClinicProfile = async (profileData: Partial<ClinicProfile>) => {
+    setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail }));
+    await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
+  };
+
   return (
     <ClinicContext.Provider
       value={{
@@ -217,6 +232,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         rescheduleAppointment,
         addFee,
         recordPayment,
+        updateClinicProfile,
       }}
     >
       {children}

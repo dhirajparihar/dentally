@@ -3,12 +3,14 @@ import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import FeeModel from "./models/Fee";
 import PaymentModel from "./models/Payment";
+import { ClinicProfileModel } from "./models/ClinicProfile";
 import {
   initialPatients,
   initialAppointments,
   initialFees,
   initialPayments,
   clinicProfile,
+  ClinicProfile,
   Patient,
   Appointment,
   FeeItem,
@@ -23,6 +25,7 @@ const inMemoryStore: Record<
     appointments: Appointment[];
     fees: FeeItem[];
     payments: PaymentTransaction[];
+    clinicProfile?: ClinicProfile;
   }
 > = {};
 
@@ -140,11 +143,12 @@ export async function getClinicData(dentistEmail?: string): Promise<{
       // Strictly scoped to this doctor's email
       const filter = { dentistEmail: normalized };
 
-      const [patients, appointments, fees, payments] = await Promise.all([
+      const [patients, appointments, fees, payments, profileDoc] = await Promise.all([
         PatientModel.find(filter).lean().exec(),
         AppointmentModel.find(filter).lean().exec(),
         FeeModel.find(filter).lean().exec(),
         PaymentModel.find(filter).lean().exec(),
+        ClinicProfileModel.findOne(filter).lean().exec(),
       ]);
 
       const mappedPatients = (patients as any[]).map((p) => ({ ...p, _id: String(p._id) }));
@@ -152,21 +156,40 @@ export async function getClinicData(dentistEmail?: string): Promise<{
       const mappedFees = (fees as any[]).map((f) => ({ ...f, _id: String(f._id) }));
       const mappedPayments = (payments as any[]).map((p) => ({ ...p, _id: String(p._id) }));
 
+      const resolvedProfile: ClinicProfile = profileDoc
+        ? {
+            ...clinicProfile,
+            name: profileDoc.name || clinicProfile.name,
+            dentistName: profileDoc.dentistName || clinicProfile.dentistName,
+            qualification: profileDoc.qualification || clinicProfile.qualification,
+            regNo: profileDoc.regNo || clinicProfile.regNo,
+            phone: profileDoc.phone || clinicProfile.phone,
+            email: normalized,
+            address: profileDoc.address || clinicProfile.address,
+            upiId: profileDoc.upiId || clinicProfile.upiId,
+            slotDuration: profileDoc.slotDuration || clinicProfile.slotDuration,
+            workingHoursStart: profileDoc.workingHoursStart || clinicProfile.workingHoursStart,
+            workingHoursEnd: profileDoc.workingHoursEnd || clinicProfile.workingHoursEnd,
+            receiptFooter: profileDoc.receiptFooter || clinicProfile.receiptFooter,
+          }
+        : {
+            ...clinicProfile,
+            email: normalized,
+          };
+
       const mem = getOrCreateMemoryStore(normalized);
       mem.patients = mappedPatients;
       mem.appointments = mappedAppointments;
       mem.fees = mappedFees;
       mem.payments = mappedPayments;
+      mem.clinicProfile = resolvedProfile;
 
       return {
         patients: mappedPatients,
         appointments: mappedAppointments,
         fees: mappedFees,
         payments: mappedPayments,
-        clinicProfile: {
-          ...clinicProfile,
-          email: normalized,
-        },
+        clinicProfile: resolvedProfile,
         storage: "mongodb",
       };
     }
@@ -180,12 +203,48 @@ export async function getClinicData(dentistEmail?: string): Promise<{
     appointments: mem.appointments,
     fees: mem.fees,
     payments: mem.payments,
-    clinicProfile: {
+    clinicProfile: mem.clinicProfile || {
       ...clinicProfile,
       email: normalized,
     },
     storage: "memory",
   };
+}
+
+export async function saveClinicProfile(
+  profileData: Partial<ClinicProfile>,
+  dentistEmail: string
+): Promise<ClinicProfile> {
+  const normalized = dentistEmail.toLowerCase().trim();
+  if (!normalized) throw new Error("Dentist email required to save clinic profile");
+
+  const mem = getOrCreateMemoryStore(normalized);
+  const updated: ClinicProfile = {
+    ...(mem.clinicProfile || clinicProfile),
+    ...profileData,
+    email: normalized,
+  };
+  mem.clinicProfile = updated;
+
+  try {
+    const conn = await ensureDbInitialized();
+    if (conn) {
+      await ClinicProfileModel.findOneAndUpdate(
+        { dentistEmail: normalized },
+        {
+          $set: {
+            ...profileData,
+            dentistEmail: normalized,
+          },
+        },
+        { upsert: true, new: true }
+      );
+    }
+  } catch (err) {
+    console.error("Failed to persist clinic profile to MongoDB:", err);
+  }
+
+  return updated;
 }
 
 export async function savePatient(patient: Patient, dentistEmail?: string) {

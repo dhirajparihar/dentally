@@ -12,8 +12,10 @@ import {
   Cpu,
   X,
   LogOut,
+  Settings,
 } from "lucide-react";
-import { clinicProfile } from "@/lib/mockData";
+import { clinicProfile as defaultClinicProfile } from "@/lib/mockData";
+import { useClinic } from "@/context/ClinicContext";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -26,14 +28,16 @@ const navItems = [
   { href: "/dashboard/appointments", label: "Appointments", icon: Calendar },
   { href: "/dashboard/fees", label: "Fees & Collections", icon: CreditCard },
   { href: "/dashboard/mcp", label: "ChatGPT MCP Hub", icon: Cpu, badge: "Live" },
+  { href: "/dashboard/settings", label: "Clinic Settings", icon: Settings },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const { clinicProfile } = useClinic();
 
-  const userName = status === "loading" ? "Doctor" : (session?.user?.name || clinicProfile.dentistName);
-  const userEmail = status === "loading" ? "" : (session?.user?.email || clinicProfile.email);
+  const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
+  const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
   const userImage = session?.user?.image;
   const initials = userName
     .split(" ")

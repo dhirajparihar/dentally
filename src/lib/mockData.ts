@@ -81,7 +81,23 @@ export interface PaymentTransaction {
   isRefund?: boolean;
 }
 
-export const clinicProfile = {
+export interface ClinicProfile {
+  name: string;
+  dentistName: string;
+  qualification: string;
+  regNo: string;
+  email: string;
+  phone: string;
+  address: string;
+  upiId: string;
+  slotDuration: number;
+  workingHoursStart: string;
+  workingHoursEnd: string;
+  receiptFooter: string;
+  mcpServerUrl?: string;
+}
+
+export const clinicProfile: ClinicProfile = {
   name: "Dentally Clinic",
   dentistName: "Doctor",
   qualification: "BDS, MDS",
@@ -89,6 +105,11 @@ export const clinicProfile = {
   email: "clinic@dentally.reline.me",
   phone: "+91 98200 11223",
   address: "Dental Operatory",
+  upiId: "dentally@upi",
+  slotDuration: 30,
+  workingHoursStart: "09:30 AM",
+  workingHoursEnd: "08:00 PM",
+  receiptFooter: "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
   mcpServerUrl: "https://dentally.reline.me/api/mcp",
 };
 

@@ -9,9 +9,10 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
+  saveClinicProfile,
   seedSampleDataForDoctor,
 } from "@/lib/db/repository";
-import { Patient, Appointment, FeeItem, PaymentTransaction } from "@/lib/mockData";
+import { Patient, Appointment, FeeItem, PaymentTransaction, ClinicProfile } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -128,6 +129,11 @@ export async function POST(request: NextRequest) {
 
       case "record_payment": {
         await savePayment({ ...(data as PaymentTransaction), dentistEmail: email }, email);
+        break;
+      }
+
+      case "update_clinic_profile": {
+        await saveClinicProfile(data as Partial<ClinicProfile>, email);
         break;
       }
 
