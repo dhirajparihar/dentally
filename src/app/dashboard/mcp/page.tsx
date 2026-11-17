@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import {
   Cpu,
   Copy,
@@ -13,20 +14,42 @@ import {
   CreditCard,
   Bot,
   Zap,
+  Key,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import { DENTALLY_MCP_TOOLS, McpToolDefinition } from "@/lib/mcp/tools";
 import { clinicProfile } from "@/lib/mockData";
 
 export default function McpSettingsPage() {
+  const { data: session } = useSession();
   const [copied, setCopied] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<"all" | "patient" | "appointment" | "fee" | "assistant">("all");
   const [selectedTool, setSelectedTool] = useState<McpToolDefinition>(DENTALLY_MCP_TOOLS[0]);
   const [testOutput, setTestOutput] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [mcpUrl, setMcpUrl] = useState<string>("");
+  const [doctorToken, setDoctorToken] = useState<string>("");
 
-  const mcpUrl = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : clinicProfile.mcpServerUrl;
+  useEffect(() => {
+    // Fetch doctor's private tokenized URL
+    fetch("/api/mcp/key")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.mcpUrl) {
+          setMcpUrl(data.mcpUrl);
+          setDoctorToken(data.token);
+        } else {
+          setMcpUrl(`${window.location.origin}/api/mcp`);
+        }
+      })
+      .catch(() => {
+        setMcpUrl(`${window.location.origin}/api/mcp`);
+      });
+  }, [session?.user?.email]);
 
   const handleCopy = () => {
+    if (!mcpUrl) return;
     navigator.clipboard.writeText(mcpUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -60,7 +83,7 @@ export default function McpSettingsPage() {
     else if (tool.name === "get_monthly_collection") sampleParams = {};
 
     try {
-      const res = await fetch("/api/mcp", {
+      const res = await fetch(mcpUrl || "/api/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -82,6 +105,9 @@ export default function McpSettingsPage() {
     }
   };
 
+  const doctorName = session?.user?.name || clinicProfile.dentistName;
+  const doctorEmail = session?.user?.email || clinicProfile.email;
+
   return (
     <div className="space-y-8">
       {/* Title */}
@@ -98,49 +124,65 @@ export default function McpSettingsPage() {
         </p>
       </div>
 
-      {/* URL Banner */}
-      <div className="p-6 rounded-3xl bg-[#162321] text-white border border-[#243532] shadow-xl relative overflow-hidden">
+      {/* URL Banner: Private Scoped URL */}
+      <div className="p-6 sm:p-7 rounded-3xl bg-[#162321] text-white border border-[#243532] shadow-xl relative overflow-hidden">
         <div className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#203330] border border-[#2B423E] text-[#BDDBD1] text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-[#BDDBD1] animate-pulse" />
-            <span>MCP Remote Server: Online</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Private MCP Endpoint: Active</span>
             <span className="text-[#586B67]">•</span>
-            <span>Auth: Google Identity</span>
+            <span>Auth: None (Key Embedded in URL)</span>
           </div>
 
-          <h3 className="font-bold text-xl sm:text-2xl text-white">
-            Connect ChatGPT via Clinic URL
-          </h3>
+          <div>
+            <h3 className="font-bold text-xl sm:text-2xl text-white">
+              Connect ChatGPT in 30 Seconds
+            </h3>
+            <p className="text-xs sm:text-sm text-[#BDDBD1] mt-1 leading-relaxed font-sans">
+              Copy this private URL and paste it into ChatGPT. Because your unique authorization token is already inside the URL, you select <strong>Authentication: None</strong> in ChatGPT.
+            </p>
+          </div>
 
-          <p className="text-xs sm:text-sm text-[#BDDBD1] leading-relaxed font-sans">
-            Add this URL to ChatGPT under <strong>Settings → Connected Apps / MCP</strong>.
-            ChatGPT will redirect to <strong>Sign in with Google</strong> using your registered Gmail ID.
-            No API keys needed.
-          </p>
+          {/* Quick Setup Card */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+            <div className="p-3 rounded-2xl bg-[#0F1715]/70 border border-[#243532] space-y-1">
+              <span className="font-bold text-[#2F8EAC] font-mono block">1. Server URL</span>
+              <p className="text-[#A7BCB7] text-[11px]">Paste the private URL below into ChatGPT connection field.</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-[#0F1715]/70 border border-[#243532] space-y-1">
+              <span className="font-bold text-emerald-400 font-mono block">2. Authentication</span>
+              <p className="text-[#A7BCB7] text-[11px]">Select <strong>None</strong> (or No Auth) in the dropdown.</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-[#0F1715]/70 border border-[#243532] space-y-1">
+              <span className="font-bold text-[#BDDBD1] font-mono block">3. Click Save</span>
+              <p className="text-[#A7BCB7] text-[11px]">ChatGPT automatically loads all 10 clinical tools!</p>
+            </div>
+          </div>
 
-          <div className="flex items-center gap-2 p-2 rounded-2xl bg-[#0F1715] border border-[#243532] max-w-xl">
+          {/* URL Input with Copy Button */}
+          <div className="flex items-center gap-2 p-2 rounded-2xl bg-[#0F1715] border border-[#243532] max-w-2xl">
             <input
               type="text"
               readOnly
-              value={mcpUrl}
+              value={mcpUrl || "Loading your private MCP URL..."}
               className="bg-transparent font-mono text-xs sm:text-sm text-[#C7E7EC] px-3 flex-1 outline-none truncate"
             />
             <button
               onClick={handleCopy}
-              className="px-4 py-2 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shrink-0 shadow-sm"
             >
-              {copied ? <Check className="w-4 h-4 text-[#BDDBD1]" /> : <Copy className="w-4 h-4" />}
-              <span>{copied ? "Copied!" : "Copy URL"}</span>
+              {copied ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              <span>{copied ? "Copied!" : "Copy Private URL"}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-6 pt-4 border-t border-[#243532] flex flex-wrap items-center justify-between text-xs font-mono text-[#A7BCB7] gap-2">
           <span className="flex items-center gap-2 text-white">
-            <ShieldCheck className="w-4 h-4 text-[#BDDBD1]" />
-            Authenticated for: {clinicProfile.dentistName} ({clinicProfile.email})
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            Scoped to: <strong className="text-[#C7E7EC]">{doctorName}</strong> ({doctorEmail})
           </span>
-          <span>{DENTALLY_MCP_TOOLS.length} Active AI Tools</span>
+          <span className="text-[#BDDBD1]">{DENTALLY_MCP_TOOLS.length} Active AI Tools Ready</span>
         </div>
       </div>
 
@@ -178,59 +220,69 @@ export default function McpSettingsPage() {
           >
             <div>
               <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-                <span className="font-mono font-bold text-[#2F8EAC] bg-[#E8F0F1] px-2.5 py-1 rounded-lg border border-[#C7E7EC] text-[11px]">
+                <span className="font-mono font-bold text-[#1E2D2B] group-hover:text-[#2F8EAC] transition-colors">
                   {tool.name}
                 </span>
-                <button
-                  onClick={() => runTestTool(tool)}
-                  disabled={loading}
-                  className="px-3 py-1 rounded-lg text-[#1E2D2B] hover:bg-[#E8F0F1] flex items-center gap-1.5 font-bold text-[11px] border border-[#DCE2DE] shadow-2xs group-hover:border-[#2F8EAC]"
-                >
-                  <Play className="w-3 h-3 text-[#2F8EAC] fill-current" />
-                  <span>Test</span>
-                </button>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#E8F0F1] text-[#2F8EAC] font-semibold uppercase">
+                  {tool.category}
+                </span>
               </div>
-
-              <p className="text-[#3D5450] mt-3 leading-relaxed font-sans font-normal">
+              <p className="mt-2 text-[#586B67] leading-relaxed line-clamp-3">
                 {tool.description}
               </p>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-[#DCE2DE] flex items-center justify-between text-[11px] font-mono text-[#3D5450]">
-              <span className="uppercase font-bold text-[#1E2D2B]">{tool.category}</span>
-              <span className="text-[#2F8EAC] font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Tool
+            <div className="mt-4 pt-3 border-t border-[#DCE2DE] flex items-center justify-between">
+              <span className="text-[11px] font-mono text-[#7E9691]">
+                {Object.keys(tool.inputSchema?.properties || {}).length} arguments
               </span>
+              <button
+                onClick={() => runTestTool(tool)}
+                className="px-3 py-1.5 rounded-lg bg-[#E8F0F1] hover:bg-[#2F8EAC] hover:text-white text-[#2F8EAC] font-semibold font-mono text-[11px] flex items-center gap-1 transition-all"
+              >
+                <Play className="w-3 h-3" />
+                <span>Simulate Call</span>
+              </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Live In-Browser Execution Console */}
-      <div className="bg-[#162321] rounded-3xl p-6 text-white border border-[#243532] space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-[#243532]">
+      {/* Live Tool Inspector Console */}
+      <div className="p-6 rounded-3xl bg-white border border-[#DCE2DE] shadow-card-subtle space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-[#DCE2DE]">
           <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-[#BDDBD1]" />
-            <h4 className="font-bold font-mono text-sm">MCP Live Tool Inspector</h4>
+            <Terminal className="w-4 h-4 text-[#2F8EAC]" />
+            <h4 className="font-bold text-sm text-[#1E2D2B]">
+              MCP Tool Execution Inspector ({selectedTool.name})
+            </h4>
           </div>
-          <span className="text-xs font-mono text-[#A7BCB7]">
-            Testing: <strong className="text-[#BDDBD1]">{selectedTool.name}</strong>
-          </span>
+          {loading && (
+            <span className="text-xs font-mono text-[#2F8EAC] animate-pulse">
+              Dispatching JSON-RPC...
+            </span>
+          )}
         </div>
 
-        <div className="bg-[#0F1715] p-4 rounded-2xl border border-[#243532] font-mono text-xs overflow-x-auto min-h-[140px] flex flex-col justify-between">
-          <pre className="text-[#BDDBD1] leading-relaxed max-h-[300px]">
-            {loading
-              ? "Executing tool against clinic records via MCP..."
-              : testOutput
-              ? JSON.stringify(testOutput, null, 2)
-              : `Click "Test" on any tool above (e.g. search_patient, get_today_appointments, get_daily_collection) to inspect the JSON response.`}
-          </pre>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs font-mono">
+          <div className="space-y-1.5">
+            <span className="font-bold text-[#3D5450] text-[11px] uppercase tracking-wider">
+              Tool Schema Input Parameters
+            </span>
+            <pre className="p-4 rounded-2xl bg-[#0F1715] text-[#C7E7EC] overflow-x-auto max-h-72 border border-[#243532] text-[11px] leading-relaxed">
+              {JSON.stringify(selectedTool.inputSchema, null, 2)}
+            </pre>
+          </div>
 
-          <div className="pt-2 border-t border-[#243532] flex items-center justify-between text-[10px] text-[#7E9691]">
-            <span>JSON-RPC 2.0 Spec (Remote MCP)</span>
-            <span>Google OAuth Authenticated</span>
+          <div className="space-y-1.5">
+            <span className="font-bold text-[#3D5450] text-[11px] uppercase tracking-wider">
+              Live Response Output
+            </span>
+            <pre className="p-4 rounded-2xl bg-[#0F1715] text-emerald-300 overflow-x-auto max-h-72 border border-[#243532] text-[11px] leading-relaxed">
+              {testOutput
+                ? JSON.stringify(testOutput, null, 2)
+                : '// Click "Simulate Call" above to test any MCP tool directly against your database.'}
+            </pre>
           </div>
         </div>
       </div>

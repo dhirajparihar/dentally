@@ -6,6 +6,7 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
+  DEFAULT_DEMO_EMAIL,
 } from "@/lib/db/repository";
 import {
   initialPatients,
@@ -84,7 +85,7 @@ function calculatePatientBalance(patientId: string) {
 }
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
-  const email = (dentistEmail || "dr.ananya@dentally.app").toLowerCase().trim();
+  const email = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
   const fresh = await getClinicData(email);
   patientsState = fresh.patients;
   appointmentsState = fresh.appointments;
@@ -445,6 +446,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
 
       apt.status = "completed";
       if (args.notes) apt.notes = `${apt.notes || ""} [Completed: ${args.notes}]`.trim();
+      await updateAppointmentStatus(apt._id, "completed", email);
 
       // Update patient last visit
       const patient = findPatientHelper(apt.patientId);
@@ -456,6 +458,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
           doctor: clinicProfile.dentistName,
           notes: args.notes || "Completed as scheduled.",
         });
+        await savePatient(patient, email);
       }
 
       return {
