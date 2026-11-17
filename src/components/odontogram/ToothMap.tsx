@@ -48,15 +48,15 @@ export const ToothMap: React.FC<ToothMapProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-[#E7E9E3] gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-base sm:text-lg text-[#1E2D2B] flex items-center gap-2 tracking-tight">
-              Anatomical 32-Tooth Odontogram
+            <h3 className="font-bold text-base sm:text-lg text-[#1E2D2B] flex flex-wrap items-center gap-2 tracking-tight">
+              Teeth Chart
               <span className="text-[11px] bg-[#E8F0F1] text-[#2F8EAC] font-mono font-bold px-2.5 py-0.5 rounded-md border border-[#C7E7EC]">
-                FDI Two-Digit Standard (ISO 3950)
+                FDI
               </span>
             </h3>
           </div>
           <p className="text-xs text-[#586B67] mt-1 font-sans">
-            Click any tooth to carve 5 anatomical surfaces (Mesial, Occlusal, Distal, Buccal, Lingual).
+            Select a tooth to view or update its surfaces.
           </p>
         </div>
 
@@ -84,7 +84,8 @@ export const ToothMap: React.FC<ToothMapProps> = ({
       </div>
 
       {/* Dental Arch Geometric Blueprint View */}
-      <div className="my-6 overflow-x-auto pb-2">
+      <p className="mt-4 text-xs text-[#64748B] sm:hidden">Swipe horizontally to view all teeth.</p>
+      <div className="my-6 overflow-x-auto pb-2" role="region" aria-label="Scrollable tooth chart" tabIndex={0}>
         <div className="min-w-[680px] flex flex-col items-center gap-5">
           {/* Maxillary (Upper) Arch */}
           <div className="w-full flex flex-col items-center">
@@ -210,7 +211,7 @@ export const ToothMap: React.FC<ToothMapProps> = ({
                 className="px-4 py-2 rounded-xl bg-[#2F8EAC] text-white font-bold text-xs hover:bg-[#24728A] transition-all flex items-center gap-1.5 shadow-xs"
               >
                 <Sliders className="w-3.5 h-3.5 stroke-[2.5]" />
-                Carve 5-Surfaces (MOD)
+                Edit Surfaces
               </button>
             )}
             <button

@@ -1,238 +1,137 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  Cpu,
-  Copy,
-  Check,
-  ShieldCheck,
-  Terminal,
-  Play,
-  Users,
-  Calendar,
-  CreditCard,
-  Bot,
-  Zap,
-} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Copy, Check, ShieldCheck, Play, Search, X, Terminal, ChevronRight } from "lucide-react";
 import { DENTALLY_MCP_TOOLS, McpToolDefinition } from "@/lib/mcp/tools";
-import { clinicProfile } from "@/lib/mockData";
+import { useClinic } from "@/context/ClinicContext";
+
+const categories = [
+  { id: "all", label: "All" },
+  { id: "patient", label: "Patients" },
+  { id: "appointment", label: "Appointments" },
+  { id: "fee", label: "Billing" },
+  { id: "assistant", label: "Assistant" },
+] as const;
 
 export default function McpSettingsPage() {
+  const { clinicProfile, patients } = useClinic();
+  const [mcpUrl, setMcpUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<"all" | "patient" | "appointment" | "fee" | "assistant">("all");
-  const [selectedTool, setSelectedTool] = useState<McpToolDefinition>(DENTALLY_MCP_TOOLS[0]);
-  const [testOutput, setTestOutput] = useState<any>(null);
+  const [copyError, setCopyError] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<typeof categories[number]["id"]>("all");
+  const [selectedTool, setSelectedTool] = useState<McpToolDefinition>(DENTALLY_MCP_TOOLS.find((tool) => tool.name === "get_today_appointments") || DENTALLY_MCP_TOOLS[0]);
+  const [argumentsText, setArgumentsText] = useState("{}");
+  const [testOutput, setTestOutput] = useState<unknown>(null);
+  const [testError, setTestError] = useState("");
   const [loading, setLoading] = useState(false);
+  const inspectorRef = useRef<HTMLElement>(null);
+  const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const mcpUrl = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : clinicProfile.mcpServerUrl;
+  useEffect(() => {
+    setMcpUrl(`${window.location.origin}/api/mcp`);
+    return () => { if (copyTimeout.current) clearTimeout(copyTimeout.current); };
+  }, []);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(mcpUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(mcpUrl);
+      setCopied(true);
+      setCopyError("");
+      if (copyTimeout.current) clearTimeout(copyTimeout.current);
+      copyTimeout.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError("Select the URL to copy it manually.");
+    }
   };
 
-  const filteredTools = DENTALLY_MCP_TOOLS.filter((t) => {
-    if (selectedCategory === "all") return true;
-    return t.category === selectedCategory;
-  });
+  const filteredTools = DENTALLY_MCP_TOOLS.filter((tool) => (selectedCategory === "all" || tool.category === selectedCategory) && `${tool.name} ${tool.description}`.toLowerCase().includes(search.trim().toLowerCase()));
 
-  const runTestTool = async (tool: McpToolDefinition) => {
+  const selectTool = (tool: McpToolDefinition) => {
     setSelectedTool(tool);
-    setLoading(true);
+    const patient = patients[0];
+    let parameters: Record<string, unknown> = {};
+    if (tool.name === "search_patient") parameters = { query: patient?.name || "" };
+    else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history"].includes(tool.name)) parameters = { patientId: patient?._id || "" };
+    else if (tool.name === "get_upcoming_appointments") parameters = { limit: 5 };
+    else if (tool.name === "check_available_slots") parameters = { date: "today" };
+    else if (tool.name === "get_patient_summary") parameters = { patientQuery: patient?.name || "" };
+    else if (tool.name === "search_patient_by_phone") parameters = { phone: patient?.phone || "" };
+    setArgumentsText(JSON.stringify(parameters, null, 2));
+    setTestOutput(null);
+    setTestError("");
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      inspectorRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    }
+  };
 
-    let sampleParams: Record<string, any> = {};
-    if (tool.name === "search_patient") sampleParams = { query: "Rahul Sharma" };
-    else if (tool.name === "get_patient_details") sampleParams = { patientId: "pat_101" };
-    else if (tool.name === "get_patient_history") sampleParams = { patientId: "pat_101" };
-    else if (tool.name === "get_patient_balance") sampleParams = { patientId: "pat_101" };
-    else if (tool.name === "get_patient_fees_history") sampleParams = { patientId: "pat_101" };
-    else if (tool.name === "get_patient_appointment_history") sampleParams = { patientId: "pat_101" };
-    else if (tool.name === "get_today_appointments") sampleParams = {};
-    else if (tool.name === "get_upcoming_appointments") sampleParams = { limit: 5 };
-    else if (tool.name === "check_available_slots") sampleParams = { date: "today" };
-    else if (tool.name === "get_daily_collection") sampleParams = {};
-    else if (tool.name === "get_daily_summary") sampleParams = {};
-    else if (tool.name === "get_patients_with_pending_fees") sampleParams = {};
-    else if (tool.name === "get_patient_summary") sampleParams = { patientQuery: "Rahul Sharma" };
-    else if (tool.name === "get_pending_fees") sampleParams = {};
-    else if (tool.name === "search_patient_by_phone") sampleParams = { phone: "98201" };
-    else if (tool.name === "get_monthly_collection") sampleParams = {};
-
+  const runTestTool = async () => {
+    let parameters: Record<string, unknown>;
     try {
-      const res = await fetch("/api/mcp", {
+      const parsed: unknown = JSON.parse(argumentsText);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      parameters = parsed as Record<string, unknown>;
+    } catch {
+      setTestError("Enter a valid JSON object for the tool arguments.");
+      return;
+    }
+    setLoading(true);
+    setTestOutput(null);
+    setTestError("");
+    try {
+      const response = await fetch("/api/mcp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: `mcp_req_${Date.now()}`,
-          method: "tools/call",
-          params: {
-            name: tool.name,
-            arguments: sampleParams,
-          },
-        }),
+        body: JSON.stringify({ jsonrpc: "2.0", id: `mcp_req_${Date.now()}`, method: "tools/call", params: { name: selectedTool.name, arguments: parameters } }),
       });
-      const data = await res.json();
+      const data: unknown = await response.json();
       setTestOutput(data);
-    } catch (e: any) {
-      setTestOutput({ error: e.message });
+      if (!response.ok) setTestError(`Request failed (${response.status}). See the response below.`);
+    } catch (error) {
+      setTestError(error instanceof Error ? error.message : "Unable to run this tool.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-8">
-      {/* Title */}
-      <div>
-        <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#2F8EAC] animate-pulse" />
-          <h2 className="font-bold text-2xl sm:text-3xl text-[#1E2D2B] flex items-center gap-2.5 tracking-tight">
-            <Cpu className="w-6 h-6 text-[#2F8EAC]" />
-            Dentist AI MCP Server Hub
-          </h2>
+    <div className="mcp-workspace space-y-4">
+      <section className="mcp-connection" aria-labelledby="connection-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h2 id="connection-heading" className="text-base font-bold">Connect your assistant</h2><p className="mt-1 text-xs leading-5 text-[#64748B]">Use your clinic&apos;s MCP endpoint to connect your assistant.</p></div>
+          <span className="mcp-protocol">MCP &middot; JSON-RPC 2.0</span>
         </div>
-        <p className="text-xs sm:text-sm text-[#586B67] mt-1">
-          Model Context Protocol endpoint providing ChatGPT complete access to Patients, Appointments, and Fees.
-        </p>
-      </div>
+        <label htmlFor="mcp-endpoint" className="mb-2 mt-4 block text-xs font-medium text-[#52627A]">Server URL</label>
+        <div className="mcp-endpoint-field"><input id="mcp-endpoint" type="text" readOnly value={mcpUrl} placeholder="Loading endpoint..." onFocus={(event) => event.currentTarget.select()} /><button type="button" onClick={handleCopy} disabled={!mcpUrl} className="workspace-button primary">{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "Copied" : "Copy URL"}</button></div>
+        {copyError && <p role="status" className="mt-2 text-xs text-[#64748B]">{copyError}</p>}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-[#64748B]"><p className="flex min-w-0 items-center gap-1.5"><ShieldCheck size={14} className="shrink-0 text-[#0089A8]" /><span className="break-all">{clinicProfile.dentistName} &middot; {clinicProfile.email}</span></p><span>{DENTALLY_MCP_TOOLS.length} tools</span></div>
+        <details className="mcp-connection-help"><summary>Connection details</summary><p>Add the server URL in your MCP client and sign in with your clinic account when prompted. No API key is required.</p></details>
+      </section>
 
-      {/* URL Banner */}
-      <div className="p-6 rounded-3xl bg-[#162321] text-white border border-[#243532] shadow-xl relative overflow-hidden">
-        <div className="max-w-3xl space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#203330] border border-[#2B423E] text-[#BDDBD1] text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-[#BDDBD1] animate-pulse" />
-            <span>MCP Remote Server: Online</span>
-            <span className="text-[#586B67]">•</span>
-            <span>Auth: Google Identity</span>
+      <div className="mcp-layout">
+        <section className="mcp-tool-browser" aria-labelledby="tools-heading">
+          <div className="mcp-browser-controls">
+            <div className="mb-3 flex items-center justify-between gap-2"><h2 id="tools-heading" className="text-sm font-semibold">Tools</h2><span className="text-xs text-[#8291A7]">{filteredTools.length} results</span></div>
+            <div className="workspace-search"><Search size={16} aria-hidden="true" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search MCP tools" placeholder="Search tools" />{search && <button type="button" onClick={() => setSearch("")} aria-label="Clear tool search"><X size={15} /></button>}</div>
+            <div className="mcp-category-list" role="group" aria-label="Tool category">{categories.map(({ id, label }) => <button key={id} type="button" aria-pressed={selectedCategory === id} onClick={() => setSelectedCategory(id)}>{label}<span>{id === "all" ? DENTALLY_MCP_TOOLS.length : DENTALLY_MCP_TOOLS.filter((tool) => tool.category === id).length}</span></button>)}</div>
           </div>
-
-          <h3 className="font-bold text-xl sm:text-2xl text-white">
-            Connect ChatGPT via Clinic URL
-          </h3>
-
-          <p className="text-xs sm:text-sm text-[#BDDBD1] leading-relaxed font-sans">
-            Add this URL to ChatGPT under <strong>Settings → Connected Apps / MCP</strong>.
-            ChatGPT will redirect to <strong>Sign in with Google</strong> using your registered Gmail ID.
-            No API keys needed.
-          </p>
-
-          <div className="flex items-center gap-2 p-2 rounded-2xl bg-[#0F1715] border border-[#243532] max-w-xl">
-            <input
-              type="text"
-              readOnly
-              value={mcpUrl}
-              className="bg-transparent font-mono text-xs sm:text-sm text-[#C7E7EC] px-3 flex-1 outline-none truncate"
-            />
-            <button
-              onClick={handleCopy}
-              className="px-4 py-2 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shrink-0"
-            >
-              {copied ? <Check className="w-4 h-4 text-[#BDDBD1]" /> : <Copy className="w-4 h-4" />}
-              <span>{copied ? "Copied!" : "Copy URL"}</span>
-            </button>
+          <div className="mcp-tool-list" role="group" aria-label="Available tools">
+            {filteredTools.length === 0 ? <p className="p-6 text-center text-xs text-[#64748B]">No matching tools.</p> : filteredTools.map((tool) => <button key={tool.name} type="button" disabled={loading} aria-pressed={selectedTool.name === tool.name} onClick={() => selectTool(tool)} className="mcp-tool-row"><div className="min-w-0 flex-1"><h3>{tool.name.replace(/_/g, " ")}</h3><p>{tool.name}</p></div><span className="mcp-tool-category">{categories.find((category) => category.id === tool.category)?.label}</span><ChevronRight size={15} className="shrink-0" aria-hidden="true" /></button>)}
           </div>
-        </div>
+        </section>
 
-        <div className="mt-6 pt-4 border-t border-[#243532] flex flex-wrap items-center justify-between text-xs font-mono text-[#A7BCB7] gap-2">
-          <span className="flex items-center gap-2 text-white">
-            <ShieldCheck className="w-4 h-4 text-[#BDDBD1]" />
-            Authenticated for: {clinicProfile.dentistName} ({clinicProfile.email})
-          </span>
-          <span>{DENTALLY_MCP_TOOLS.length} Active AI Tools</span>
-        </div>
-      </div>
-
-      {/* Category Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-2">
-        {(
-          [
-            { id: "all", label: `All Tools (${DENTALLY_MCP_TOOLS.length})` },
-            { id: "patient", label: "1. Patients (10)" },
-            { id: "appointment", label: "2. Appointments (9)" },
-            { id: "fee", label: "3. Fees & History (11)" },
-            { id: "assistant", label: "4. Daily Assistant (6)" },
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setSelectedCategory(tab.id)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
-              selectedCategory === tab.id
-                ? "bg-[#1E2D2B] text-white shadow-sm ring-1 ring-[#2F8EAC]"
-                : "bg-white text-[#2D433F] border border-[#DCE2DE] hover:border-[#2F8EAC] hover:bg-[#F8FAF9]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tools Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredTools.map((tool) => (
-          <div
-            key={tool.name}
-            className="p-5 rounded-2xl bg-white border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] flex flex-col justify-between hover:border-[#2F8EAC]/70 transition-all text-xs group"
-          >
-            <div>
-              <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-                <span className="font-mono font-bold text-[#2F8EAC] bg-[#E8F0F1] px-2.5 py-1 rounded-lg border border-[#C7E7EC] text-[11px]">
-                  {tool.name}
-                </span>
-                <button
-                  onClick={() => runTestTool(tool)}
-                  disabled={loading}
-                  className="px-3 py-1 rounded-lg text-[#1E2D2B] hover:bg-[#E8F0F1] flex items-center gap-1.5 font-bold text-[11px] border border-[#DCE2DE] shadow-2xs group-hover:border-[#2F8EAC]"
-                >
-                  <Play className="w-3 h-3 text-[#2F8EAC] fill-current" />
-                  <span>Test</span>
-                </button>
-              </div>
-
-              <p className="text-[#3D5450] mt-3 leading-relaxed font-sans font-normal">
-                {tool.description}
-              </p>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-[#DCE2DE] flex items-center justify-between text-[11px] font-mono text-[#3D5450]">
-              <span className="uppercase font-bold text-[#1E2D2B]">{tool.category}</span>
-              <span className="text-[#2F8EAC] font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Tool
-              </span>
-            </div>
+        <section ref={inspectorRef} className="mcp-inspector" aria-labelledby="inspector-heading">
+          <div className="mcp-inspector-header"><Terminal size={17} className="text-[#0089A8]" aria-hidden="true" /><h2 id="inspector-heading" className="text-sm font-semibold">Tool Inspector</h2></div>
+          <div className="p-4 sm:p-5">
+            <h3 className="break-all text-sm font-semibold text-[#00738E]">{selectedTool.name}</h3><p className="mt-2 text-xs leading-6 text-[#64748B]">{selectedTool.description}</p>
+            <details className="mcp-schema"><summary>Input schema</summary><pre>{JSON.stringify(selectedTool.inputSchema, null, 2)}</pre></details>
+            <label htmlFor="tool-arguments" className="mb-2 mt-4 block text-xs font-semibold text-[#52627A]">Arguments <span className="font-normal text-[#8291A7]">JSON</span></label>
+            <textarea id="tool-arguments" value={argumentsText} onChange={(event) => setArgumentsText(event.target.value)} disabled={loading} rows={5} spellCheck={false} className="mcp-arguments" />
+            {testError && <p role="alert" className="mt-2 text-xs leading-5 text-rose-700">{testError}</p>}
+            <div className="mt-3 flex justify-end"><button type="button" disabled={loading} onClick={runTestTool} className="workspace-button primary"><Play size={14} />{loading ? "Running..." : "Run Tool"}</button></div>
+            <div className="mt-5 border-t border-[#E4E9F0] pt-4"><h4 className="mb-2 text-xs font-semibold text-[#52627A]">Response</h4><div aria-busy={loading}>{loading ? <p role="status" className="mcp-response-placeholder">Running against clinic records...</p> : testOutput !== null ? <pre className="mcp-response" tabIndex={0} aria-label="MCP tool response">{JSON.stringify(testOutput, null, 2)}</pre> : <p className="mcp-response-placeholder">Select a tool and run it to see the response.</p>}</div></div>
           </div>
-        ))}
-      </div>
-
-      {/* Live In-Browser Execution Console */}
-      <div className="bg-[#162321] rounded-3xl p-6 text-white border border-[#243532] space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-[#243532]">
-          <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-[#BDDBD1]" />
-            <h4 className="font-bold font-mono text-sm">MCP Live Tool Inspector</h4>
-          </div>
-          <span className="text-xs font-mono text-[#A7BCB7]">
-            Testing: <strong className="text-[#BDDBD1]">{selectedTool.name}</strong>
-          </span>
-        </div>
-
-        <div className="bg-[#0F1715] p-4 rounded-2xl border border-[#243532] font-mono text-xs overflow-x-auto min-h-[140px] flex flex-col justify-between">
-          <pre className="text-[#BDDBD1] leading-relaxed max-h-[300px]">
-            {loading
-              ? "Executing tool against clinic records via MCP..."
-              : testOutput
-              ? JSON.stringify(testOutput, null, 2)
-              : `Click "Test" on any tool above (e.g. search_patient, get_today_appointments, get_daily_collection) to inspect the JSON response.`}
-          </pre>
-
-          <div className="pt-2 border-t border-[#243532] flex items-center justify-between text-[10px] text-[#7E9691]">
-            <span>JSON-RPC 2.0 Spec (Remote MCP)</span>
-            <span>Google OAuth Authenticated</span>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   );

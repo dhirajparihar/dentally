@@ -16,20 +16,16 @@ import {
   Plus,
   IndianRupee,
   Share2,
-  ShieldAlert,
   Sparkles,
   Receipt,
   Activity,
-  ArrowRight,
-  Stethoscope,
-  ChevronRight,
+  Droplet,
 } from "lucide-react";
 import {
   Patient,
   FeeItem,
   PaymentTransaction,
   Appointment,
-  clinicProfile,
   ToothCondition,
 } from "@/lib/mockData";
 import { ToothMap } from "@/components/odontogram/ToothMap";
@@ -255,502 +251,113 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const getWhatsAppBillUrl = () => {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const text = `Hello ${patient.name}, thank you for visiting ${clinicProfile.name}.\n\nTotal Billed: ₹${totalBilled.toLocaleString()}\nTotal Paid: ₹${totalPaid.toLocaleString()}\nOutstanding Balance: ₹${outstandingBalance.toLocaleString()}.\n\nFeel free to reach out to us at ${clinicProfile.phone}.`;
+    const text = `Hello ${patient.name}, thank you for visiting ${clinicProfile.name}.\n\nTotal Billed: ₹${totalBilled.toLocaleString()}\nTotal Paid: ₹${totalPaid.toLocaleString()}\nBalance Due: ₹${outstandingBalance.toLocaleString()}.\n\nFeel free to reach out to us at ${clinicProfile.phone}.`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
   };
 
-  const hasAllergies = patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None";
+  const medicalAlerts = patient.medicalAlerts.filter((alert) => alert.trim() && alert.trim().toLowerCase() !== "none");
+  const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+  const tabs = [
+    { id: "clinical", label: "Notes", icon: FileText },
+    { id: "odontogram", label: "Teeth Chart", icon: Activity },
+    { id: "financials", label: "Billing", icon: CreditCard },
+    { id: "appointments", label: "Visits", icon: Calendar },
+  ] as const;
+  const presetLabels = ["RCT dressing", "Crown prep", "Crown cemented", "Restoration", "Scaling", "Suture removal", "Local anesthesia"];
 
   return (
-    <div className="w-full">
-      <div className="bg-white w-full rounded-3xl shadow-sm border border-[#E7E9E3] overflow-hidden flex flex-col">
-        
-        {/* ================= 1. SLIM CLINICAL MASTHEAD (HEADER) ================= */}
-        <div className="bg-[#1E2D2B] text-white px-5 sm:px-6 py-3.5 border-b border-[#2C413D] shrink-0">
-          <div className="flex items-center justify-between gap-4">
-            
-            {/* Left: Patient Identity & Core Medical Alerts */}
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-2xl bg-[#2F8EAC] text-white flex items-center justify-center font-bold text-lg shadow-inner shrink-0 border border-[#C7E7EC]/30">
-                {patient.name[0]}
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">
-                    {patient.name}
-                  </h2>
-                  <span className="font-mono text-[11px] bg-[#2A3E3B] text-[#BDDBD1] px-2 py-0.5 rounded border border-[#37524E]">
-                    {patient._id}
-                  </span>
-                  <span className="font-mono text-[11px] bg-[#2A3E3B] text-slate-200 px-2 py-0.5 rounded border border-[#37524E]">
-                    {patient.gender}, {patient.age}y
-                  </span>
-                  <span className="font-mono text-[11px] font-bold bg-[#2A3E3B] text-[#BDDBD1] px-2 py-0.5 rounded border border-[#37524E]">
-                    {patient.bloodGroup || "O+"}
-                  </span>
-
-                  {/* High Priority Medical Safety Badge */}
-                  {hasAllergies ? (
-                    patient.medicalAlerts.map((alert, idx) => (
-                      <span
-                        key={idx}
-                        className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/50 flex items-center gap-1 animate-pulse"
-                      >
-                        <AlertTriangle className="w-3 h-3 text-rose-400" />
-                        {alert}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-[11px] font-mono text-[#BDDBD1] bg-[#2A3E3B] px-2 py-0.5 rounded border border-[#37524E] flex items-center gap-1 hidden sm:flex">
-                      <CheckCircle2 className="w-3 h-3 text-[#BDDBD1]" />
-                      No Drug Allergies
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3 text-xs text-[#A7BCB7] font-mono mt-0.5 flex-wrap">
-                  <a
-                    href={`tel:${patient.phone}`}
-                    className="flex items-center gap-1 text-[#BDDBD1] hover:underline"
-                  >
-                    <Phone className="w-3 h-3 text-[#2F8EAC]" />
-                    {patient.phone}
-                  </a>
-                  {patient.email && (
-                    <span className="hidden md:flex items-center gap-1 text-[#A7BCB7] truncate max-w-[200px]">
-                      <Mail className="w-3 h-3 text-slate-400" />
-                      {patient.email}
-                    </span>
-                  )}
-                  {upcomingAppt && (
-                    <span className="hidden lg:flex items-center gap-1 text-[#BDDBD1]">
-                      <Clock className="w-3 h-3 text-[#2F8EAC]" />
-                      Next: {upcomingAppt.date} ({upcomingAppt.time})
-                    </span>
-                  )}
-                </div>
-              </div>
+    <div className="patient-detail patient-workspace min-w-0 space-y-4">
+      <section className="patient-summary" aria-label="Patient summary">
+        <div className="patient-heading">
+          <div className="patient-identity">
+            <div className="flex min-w-0 items-start gap-1.5">
+              <button type="button" onClick={onBack} className="detail-back" aria-label="Back to patients"><ArrowLeft size={16} /></button>
+              <h2 className="min-w-0 break-words text-xl font-bold text-[#111C3A] sm:text-2xl">{patient.name}</h2>
             </div>
-
-            {/* Right: Balance Chip + Quick Actions + Close */}
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Balance Badge */}
-              <div
-                className={`font-mono text-xs px-2.5 py-1 rounded-xl font-bold hidden sm:flex items-center gap-1.5 ${
-                  outstandingBalance > 0
-                    ? "bg-rose-950/80 text-rose-300 border border-rose-800"
-                    : "bg-[#2A3E3B] text-[#BDDBD1] border border-[#37524E]"
-                }`}
-              >
-                <span>Balance:</span>
-                <span>{outstandingBalance > 0 ? `₹${outstandingBalance.toLocaleString()} Due` : "Cleared"}</span>
-              </div>
-
-              {/* WhatsApp Button */}
-              <a
-                href={getWhatsAppReminderUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Send WhatsApp Message"
-                className="px-3 py-1.5 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">WhatsApp</span>
-              </a>
-
-              {/* Call Button */}
-              <a
-                href={`tel:${patient.phone}`}
-                title="Call Patient"
-                className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-[#2A3E3B] hover:bg-[#344D49] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-all border border-[#37524E]"
-              >
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                <span className="hidden sm:inline">Call</span>
-              </a>
-
-              {/* Close Button */}
-              <button
-                onClick={onBack}
-                title="Back to patients" aria-label="Back to patients"
-                className="p-1.5 rounded-xl bg-[#2A3E3B] hover:bg-[#344D49] text-slate-400 hover:text-white transition-all border border-[#37524E]"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            </div>
+            <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
+              <span>{patient.age} yrs &middot; {patient.gender}</span><span className="break-all">ID: {patient._id}</span>
+            </p>
           </div>
-        </div>
-
-        {/* ================= 2. PRO CLINICAL TAB NAVIGATION ================= */}
-        <div className="bg-[#F8FAF9] px-5 sm:px-6 py-2.5 border-b border-[#DCE2DE] flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab("clinical")}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all ${
-                activeTab === "clinical"
-                  ? "bg-white text-[#1E2D2B] shadow-2xs border border-[#DCE2DE] ring-1 ring-[#2F8EAC]/40"
-                  : "text-[#3D5450] hover:text-[#1E2D2B] hover:bg-white/60"
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5 text-[#2F8EAC]" />
-              <span>Clinical Chart & Notes</span>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-[#E8F0F1] text-[#2F8EAC]">
-                {patient.notes.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("odontogram")}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all ${
-                activeTab === "odontogram"
-                  ? "bg-white text-[#1E2D2B] shadow-2xs border border-[#DCE2DE] ring-1 ring-[#2F8EAC]/40"
-                  : "text-[#3D5450] hover:text-[#1E2D2B] hover:bg-white/60"
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 text-[#2F8EAC]" />
-              <span>32-Tooth Odontogram</span>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-[#E8F0F1] text-[#2F8EAC]">
-                FDI
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("financials")}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all ${
-                activeTab === "financials"
-                  ? "bg-white text-[#1E2D2B] shadow-2xs border border-[#DCE2DE] ring-1 ring-[#2F8EAC]/40"
-                  : "text-[#3D5450] hover:text-[#1E2D2B] hover:bg-white/60"
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5 text-[#2F8EAC]" />
-              <span>Fees & Billing</span>
-              {outstandingBalance > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-bold">
-                  ₹{outstandingBalance.toLocaleString()}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab("appointments")}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all ${
-                activeTab === "appointments"
-                  ? "bg-white text-[#1E2D2B] shadow-2xs border border-[#DCE2DE] ring-1 ring-[#2F8EAC]/40"
-                  : "text-[#3D5450] hover:text-[#1E2D2B] hover:bg-white/60"
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5 text-[#2F8EAC]" />
-              <span>Appointments</span>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-[#E8F0F1] text-[#2F8EAC]">
-                {patientAppts.length}
-              </span>
-            </button>
+          <div className="patient-medical" role="group" aria-label="Blood group and medical alerts">
+            <span className="blood-badge"><Droplet size={16} aria-hidden="true" /><span className="sr-only">Blood group: </span>{patient.bloodGroup || "Not recorded"}</span>
+            {medicalAlerts.map((alert, index) => (
+              <span key={index} className="allergy-badge" role="note" aria-label={`Medical alert: ${alert}`}><AlertTriangle size={17} className="shrink-0" aria-hidden="true" /><span>{alert}</span></span>
+            ))}
+            {medicalAlerts.length === 0 && <span className="text-xs text-[#64748B]">No medical alerts recorded</span>}
           </div>
-
-          <span className="text-[11px] font-mono font-medium text-[#3D5450] hidden md:inline">
-            Press ESC to exit
+          <span className={`patient-payment ${outstandingBalance > 0 ? "due" : "settled"}`}>
+            <CreditCard size={15} aria-hidden="true" />{outstandingBalance > 0 ? `${money(outstandingBalance)} due` : "Settled"}
           </span>
         </div>
+        <div className="patient-contact-row">
+          <a href={`tel:${patient.phone}`} className="patient-phone"><Phone size={17} aria-hidden="true" /><span>{patient.phone}</span></a>
+          {patient.email && <a href={`mailto:${patient.email}`} className="patient-email"><Mail size={17} className="shrink-0" aria-hidden="true" /><span>{patient.email}</span></a>}
+          <a href={getWhatsAppReminderUrl()} target="_blank" rel="noopener noreferrer" className="detail-button secondary patient-whatsapp"><Share2 size={16} aria-hidden="true" />WhatsApp</a>
+        </div>
+      </section>
 
-        {/* ================= 3. 360° DOSSIER CONTENT BODY ================= */}
-        <div className="p-5 sm:p-6 flex-1 bg-[#FBF9F1]/60">
-          
-          {/* ================= TAB 1: CLINICAL CHART & NOTES ================= */}
-          {activeTab === "clinical" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-4">
-              
-              {/* Left Column (65%): Chairside Note Composer + Timeline */}
-              <div className="lg:col-span-7 space-y-5">
-                
-                {/* Note Composer Card */}
-                <div className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3.5">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-                    <h3 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-[#E8F0F1] flex items-center justify-center text-[#2F8EAC]">
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </div>
-                      <span>Add Chairside Consultation Note</span>
-                    </h3>
-                    <span className="text-[11px] font-mono font-medium text-[#3D5450]">
-                      Attending: <strong className="text-[#1E2D2B]">{clinicProfile.dentistName}</strong>
-                    </span>
-                  </div>
+      <div className="patient-tabs" role="tablist" aria-label="Patient records" onKeyDown={(event) => {
+        const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!offset && event.key !== "Home" && event.key !== "End") return;
+        event.preventDefault();
+        const index = tabs.findIndex((tab) => tab.id === activeTab);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + offset + tabs.length) % tabs.length;
+        setActiveTab(tabs[next].id);
+        event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+      }}>
+        {tabs.map(({ id, label, icon: Icon }) => (
+          <button key={id} type="button" id={`patient-tab-${id}`} role="tab" aria-selected={activeTab === id} aria-controls={`patient-panel-${id}`} tabIndex={activeTab === id ? 0 : -1} onClick={() => setActiveTab(id)} className={`patient-tab ${activeTab === id ? "selected" : ""}`}>
+            <Icon size={16} className="hidden sm:block" aria-hidden="true" />{label}
+          </button>
+        ))}
+      </div>
 
-                  {/* 1-Line Sleek Horizontal Quick Phrases */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-[#1E2D2B] tracking-wide flex items-center gap-1">
-                        <span>⚡ 1-Tap Clinical Presets</span>
-                        <span className="text-[10px] font-normal text-[#3D5450] font-mono">(Click to append)</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                      {quickPhrases.map((phrase, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleInsertPhrase(phrase)}
-                          className="text-[11px] px-2.5 py-1.5 rounded-lg bg-[#F0F7F5] hover:bg-[#BDDBD1]/50 text-[#1E2D2B] font-medium border border-[#BDDBD1] transition-colors whitespace-nowrap shrink-0 shadow-2xs"
-                        >
-                          + {phrase}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Textarea */}
-                  <textarea
-                    rows={3}
-                    value={newNoteText}
-                    onChange={(e) => setNewNoteText(e.target.value)}
-                    placeholder="Enter diagnosis, tooth #, procedure notes, anesthesia dosage, or prescription..."
-                    className="w-full p-3 rounded-xl border border-[#DCE2DE] bg-white outline-none focus:border-[#2F8EAC] focus:ring-1 focus:ring-[#2F8EAC] text-xs text-[#1E2D2B] placeholder-[#7E9691] resize-none"
-                  />
-
-                  {/* Submit Bar */}
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-[#3D5450] font-mono font-medium">
-                      Date: {new Date().toISOString().split("T")[0]}
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      {newNoteText && (
-                        <button
-                          type="button"
-                          onClick={() => setNewNoteText("")}
-                          className="px-3 py-1.5 rounded-xl text-xs text-[#3D5450] hover:text-[#1E2D2B] font-medium"
-                        >
-                          Clear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleSaveNote}
-                        disabled={!newNoteText.trim()}
-                        className="px-4 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A] transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        Save Consultation Note
-                      </button>
-                    </div>
+      <div id={`patient-panel-${activeTab}`} role="tabpanel" aria-labelledby={`patient-tab-${activeTab}`} tabIndex={0} className="patient-tab-content">
+        {activeTab === "clinical" && (
+          <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-5">
+            <div className="min-w-0 space-y-4">
+              <section className="detail-card consultation-card" aria-labelledby="consultation-heading">
+                <div className="flex flex-wrap items-center justify-between gap-2"><h3 id="consultation-heading" className="text-base font-bold">New Consultation</h3><span className="consultation-date"><Calendar size={14} aria-hidden="true" />{new Date().toISOString().split("T")[0]}</span></div>
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-[#64748B]">Quick presets</p>
+                  <div className="flex flex-wrap gap-2">
+                    {quickPhrases.map((phrase, i) => <button key={phrase} type="button" onClick={() => handleInsertPhrase(phrase)} title={phrase} aria-label={`Add preset: ${phrase}`} className="note-preset"><Plus size={13} aria-hidden="true" />{presetLabels[i]}</button>)}
                   </div>
                 </div>
-
-                {/* Clinical Notes Timeline Stream */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-[#2F8EAC]" />
-                      <span>Clinical Notes History ({patient.notes.length})</span>
-                    </h4>
-                    <span className="text-[10px] font-mono text-[#3D5450] uppercase font-bold">Permanent Medical Record</span>
+                <label htmlFor="consultation-note" className="mb-2 mt-4 block text-xs font-semibold text-[#52627A]">Clinical notes</label>
+                <textarea id="consultation-note" rows={5} value={newNoteText} onChange={(event) => setNewNoteText(event.target.value)} placeholder="Diagnosis, tooth, treatment, or prescription..." className="consultation-input" />
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex items-center gap-2">
+                    {newNoteText && <button type="button" onClick={() => setNewNoteText("")} className="detail-button secondary">Clear</button>}
+                    <button type="button" onClick={handleSaveNote} disabled={!newNoteText.trim()} className="detail-button primary"><Send size={15} aria-hidden="true" />Save Note</button>
                   </div>
-
-                  {patient.notes.length === 0 ? (
-                    <div className="p-6 rounded-2xl bg-white border border-[#DCE2DE] text-center text-xs text-[#3D5450]">
-                      No clinical notes recorded yet. Use the composer above to log the first consultation.
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {patient.notes.map((n) => (
-                        <div
-                          key={n.id}
-                          className="p-4 rounded-2xl bg-white border border-[#DCE2DE] space-y-1.5 hover:border-[#2F8EAC]/60 transition-colors shadow-2xs"
-                        >
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="font-bold text-[#1E2D2B]">{n.date}</span>
-                            <span className="bg-[#E8F0F1] text-[#2F8EAC] border border-[#C7E7EC] px-2 py-0.5 rounded font-sans font-semibold">
-                              {n.doctor}
-                            </span>
-                          </div>
-                          <p className="text-xs text-[#1E2D2B] leading-relaxed font-sans">
-                            {n.text}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </div>
-
-              {/* Right Column (35%): Treated Teeth + Odontogram Gateway + Quick Actions */}
-              <div className="lg:col-span-5 space-y-5">
-                
-                {/* Treated Teeth Overview Card */}
-                <div className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3.5">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-                    <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-[#E8F0F1] flex items-center justify-center text-[#2F8EAC]">
-                        <Stethoscope className="w-3.5 h-3.5" />
-                      </div>
-                      <span>Treated Teeth Summary</span>
-                    </h4>
-                    <span className="text-[10px] font-mono text-[#3D5450] font-bold">FDI Notation</span>
-                  </div>
-
-                  {patient.history.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {patient.history.map((h, i) => (
-                        <div
-                          key={i}
-                          className="p-3 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE] space-y-1"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono font-bold text-[#2F8EAC]">
-                              {h.tooth || "General"}
-                            </span>
-                            <span className="text-[10px] font-mono text-[#3D5450] font-medium">{h.date}</span>
-                          </div>
-                          <p className="font-semibold text-[#1E2D2B] text-[11px] truncate" title={h.procedure}>
-                            {h.procedure}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[#3D5450] py-2">
-                      No previous dental procedures recorded.
-                    </p>
-                  )}
-
-                  {/* Switch to Full Odontogram Action */}
-                  <button
-                    onClick={() => setActiveTab("odontogram")}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[#E8F0F1] hover:bg-[#BDDBD1]/40 text-[#2F8EAC] border border-[#C7E7EC] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors mt-2"
-                  >
-                    <span>Open Interactive 32-Tooth Odontogram</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Financial Health Snapshot */}
-                <div className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3.5">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-                    <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-[#E8F0F1] flex items-center justify-center text-[#2F8EAC]">
-                        <CreditCard className="w-3.5 h-3.5" />
-                      </div>
-                      <span>Billing & Dues</span>
-                    </h4>
-                    <span className="text-[10px] font-mono text-[#3D5450] font-bold">Ledger</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="p-3 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE]">
-                      <span className="text-[10px] font-mono text-[#3D5450] uppercase font-bold">Total Billed</span>
-                      <div className="text-base font-bold font-mono text-[#1E2D2B] mt-0.5">
-                        ₹{totalBilled.toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className={`p-3 rounded-xl border ${
-                      outstandingBalance > 0
-                        ? "bg-rose-50 border-rose-200"
-                        : "bg-[#E8F0F1]/60 border-[#C7E7EC]"
-                    }`}>
-                      <span className={`text-[10px] font-mono uppercase font-bold ${
-                        outstandingBalance > 0 ? "text-rose-800" : "text-[#2F8EAC]"
-                      }`}>
-                        Outstanding
-                      </span>
-                      <div className={`text-base font-bold font-mono mt-0.5 ${
-                        outstandingBalance > 0 ? "text-rose-700" : "text-[#2F8EAC]"
-                      }`}>
-                        ₹{outstandingBalance.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setActiveTab("financials");
-                      setShowPaymentForm(true);
-                      if (outstandingBalance > 0) setPayAmount(outstandingBalance.toString());
-                    }}
-                    className="w-full py-2 px-3 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs"
-                  >
-                    <IndianRupee className="w-3.5 h-3.5" />
-                    <span>Record Payment / Invoice</span>
-                  </button>
-                </div>
-
-                {/* Chairside Recall Shortcut Card */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E7E9E3] shadow-card-subtle space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4 text-[#2F8EAC]" />
-                      Next Appointment / Recall
-                    </h4>
-                    {upcomingAppt && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
-                        Confirmed
-                      </span>
-                    )}
-                  </div>
-
-                  {upcomingAppt ? (
-                    <div className="p-3 rounded-xl bg-[#E8F0F1]/60 border border-[#C7E7EC] text-xs space-y-1">
-                      <div className="font-bold text-[#1E2D2B] flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#2F8EAC]" />
-                        <span>{upcomingAppt.date} at {upcomingAppt.time}</span>
-                      </div>
-                      <p className="text-[11px] text-[#586B67]">{upcomingAppt.procedure}</p>
-                      <div className="pt-1">
-                        <a
-                          href={getWhatsAppReminderUrl()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-semibold text-[#2F8EAC] hover:underline flex items-center gap-1"
-                        >
-                          <Share2 className="w-3 h-3" /> Send WhatsApp Reminder
-                        </a>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-xs text-[#586B67]">
-                        No upcoming visit booked yet. Schedule recall chairside before the patient leaves.
-                      </p>
-                      <button
-                        onClick={() => {
-                          setActiveTab("appointments");
-                          setShowRecallForm(true);
-                        }}
-                        className="w-full py-2 px-3 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Book Follow-Up Recall (+1 Week / +2 Weeks)</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+              </section>
+              <details className="detail-card patient-information">
+                <summary className="cursor-pointer text-sm font-semibold">Patient information</summary>
+                <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                  <div><dt>Registered</dt><dd>{patient.registeredDate}</dd></div>
+                  <div><dt>Last visit</dt><dd>{patient.lastVisit || "Not recorded"}</dd></div>
+                  <div><dt>Follow-up due</dt><dd>{patient.followUpDue || "Not set"}</dd></div>
+                  <div><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
+                </dl>
+              </details>
             </div>
-          )}
+            <section className="min-w-0 space-y-3" aria-labelledby="previous-notes-heading">
+              <h3 id="previous-notes-heading" className="flex items-center gap-2 text-sm font-semibold">Previous Notes <span className="section-count">{patient.notes.length}</span></h3>
+              {patient.notes.length === 0 ? <p className="detail-card text-sm text-[#64748B]">No notes yet.</p> : patient.notes.map((note) => (
+                <article key={note.id} className="detail-card note-card">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"><time className="font-semibold text-[#52627A]">{note.date}</time><span className="text-[#64748B]">{note.doctor}</span></div>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#111C3A]">{note.text}</p>
+                </article>
+              ))}
+            </section>
+          </div>
+        )}
 
-          {/* ================= TAB 2: 32-TOOTH ODONTOGRAM STUDIO ================= */}
-          {activeTab === "odontogram" && (
-            <div className="bg-white p-4 sm:p-6 rounded-2xl border border-[#E7E9E3] shadow-card-subtle space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#E7E9E3]">
-                <div>
-                  <h3 className="font-bold text-base text-[#1E2D2B] flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-[#2F8EAC]" />
-                    Interactive 32-Tooth Adult Odontogram (FDI Two-Digit Notation)
-                  </h3>
-                  <p className="text-xs text-[#586B67] mt-0.5">
-                    Click any tooth to examine, diagnose, or carve surfaces. Auto-logs changes directly to patient history.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] font-mono bg-[#E8F0F1] text-[#2F8EAC] border border-[#C7E7EC] px-2.5 py-1 rounded-lg">
-                    Patient: {patient.name}
-                  </span>
-                </div>
-              </div>
-
-              {/* Tooth Map Component */}
-              <ToothMap
+        {activeTab === "odontogram" && (
+          <div className="min-w-0 space-y-4">
+            <ToothMap
                 readOnly={false}
                 patientName={patient.name}
                 onUpdateTooth={(tooth: ToothCondition) => {
@@ -767,30 +374,45 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   });
                 }}
               />
-            </div>
-          )}
+            <section aria-labelledby="treatment-history-heading" className="space-y-3">
+              <h3 id="treatment-history-heading" className="text-sm font-semibold">Treatment History</h3>
+              {patient.history.length === 0 ? <p className="detail-card text-sm text-[#64748B]">No treatments recorded.</p> : (
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {patient.history.map((entry, i) => (
+                    <article key={i} className="detail-card note-card">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold text-[#0089A8]">{entry.tooth || "General"}</span><time className="text-[#64748B]">{entry.date}</time></div>
+                      <h4 className="mt-2 text-sm font-semibold">{entry.procedure}</h4>
+                      {entry.notes && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[#52627A]">{entry.notes}</p>}
+                      <p className="mt-2 text-xs text-[#64748B]">{entry.doctor}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
 
           {/* ================= TAB 3: FEES & FINANCIALS ================= */}
           {activeTab === "financials" && (
             <div className="space-y-5">
               {/* Top Financial Stat Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-white border border-[#E7E9E3] shadow-card-subtle text-xs space-y-1">
-                  <span className="text-[#586B67] font-mono text-[11px] uppercase">Total Billed</span>
-                  <div className="text-xl font-bold font-mono text-[#1E2D2B]">
+                <div className="p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle text-xs space-y-1">
+                  <span className="text-[#64748B] font-mono text-[11px] uppercase">Total Billed</span>
+                  <div className="text-xl font-bold font-mono text-[#111C3A]">
                     ₹{totalBilled.toLocaleString()}
                   </div>
-                  <span className="text-[10px] text-[#7E9691] font-mono">
+                  <span className="text-[10px] text-[#8291A7] font-mono">
                     {patientFees.length} procedure invoice(s)
                   </span>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#E8F0F1]/60 border border-[#C7E7EC] shadow-card-subtle text-xs space-y-1">
-                  <span className="text-[#2F8EAC] font-mono text-[11px] uppercase">Total Paid</span>
-                  <div className="text-xl font-bold font-mono text-[#2F8EAC]">
+                <div className="p-4 rounded-2xl bg-[#EDF7FA]/60 border border-[#D4EDF3] shadow-card-subtle text-xs space-y-1">
+                  <span className="text-[#0089A8] font-mono text-[11px] uppercase">Total Paid</span>
+                  <div className="text-xl font-bold font-mono text-[#0089A8]">
                     ₹{totalPaid.toLocaleString()}
                   </div>
-                  <span className="text-[10px] text-[#24728A] font-mono">
+                  <span className="text-[10px] text-[#00738E] font-mono">
                     {patientPayments.length} payment transaction(s)
                   </span>
                 </div>
@@ -799,19 +421,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   className={`p-4 rounded-2xl border text-xs space-y-1 shadow-card-subtle ${
                     outstandingBalance > 0
                       ? "bg-rose-50/80 border-rose-200"
-                      : "bg-white border-[#E7E9E3]"
+                      : "bg-white border-[#E4E9F0]"
                   }`}
                 >
                   <span
                     className={`font-mono text-[11px] uppercase ${
-                      outstandingBalance > 0 ? "text-rose-800" : "text-[#586B67]"
+                      outstandingBalance > 0 ? "text-rose-800" : "text-[#64748B]"
                     }`}
                   >
-                    Outstanding Balance
+                    Balance Due
                   </span>
                   <div
                     className={`text-xl font-bold font-mono ${
-                      outstandingBalance > 0 ? "text-rose-600" : "text-[#2F8EAC]"
+                      outstandingBalance > 0 ? "text-rose-600" : "text-[#0089A8]"
                     }`}
                   >
                     ₹{outstandingBalance.toLocaleString()}
@@ -821,9 +443,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       href={getWhatsAppBillUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] font-semibold text-[#2F8EAC] hover:underline flex items-center gap-0.5 pt-0.5"
+                      className="text-[10px] font-semibold text-[#0089A8] hover:underline flex items-center gap-0.5 pt-0.5"
                     >
-                      <Share2 className="w-3 h-3" /> Send WhatsApp Dues Reminder
+                      <Share2 className="w-3 h-3" /> Send Reminder
                     </a>
                   )}
                 </div>
@@ -831,7 +453,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
               {/* Action Buttons to Add Fee or Record Payment */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
                       setShowPaymentForm(!showPaymentForm);
@@ -840,10 +462,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         setPayAmount(outstandingBalance.toString());
                       }
                     }}
-                    className="px-4 py-2 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                    className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
                   >
                     <IndianRupee className="w-4 h-4" />
-                    Record Patient Payment
+                    Record Payment
                   </button>
 
                   <button
@@ -851,10 +473,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       setShowFeeForm(!showFeeForm);
                       setShowPaymentForm(false);
                     }}
-                    className="px-4 py-2 rounded-xl bg-[#1E2D2B] hover:bg-[#2A3E3B] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                    className="px-4 py-2 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
                   >
                     <Plus className="w-4 h-4" />
-                    Add Treatment Fee
+                    Add Fee
                   </button>
                 </div>
 
@@ -862,10 +484,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   href={getWhatsAppBillUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E7E9E3] text-[#2F8EAC] text-xs font-semibold flex items-center gap-1.5 hover:bg-[#E8F0F1] transition-colors"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E4E9F0] text-[#0089A8] text-xs font-semibold flex items-center gap-1.5 hover:bg-[#EDF7FA] transition-colors"
                 >
                   <Receipt className="w-3.5 h-3.5" />
-                  Send Itemized Bill via WhatsApp
+                  Share Bill
                 </a>
               </div>
 
@@ -873,14 +495,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {showPaymentForm && (
                 <form
                   onSubmit={handleRecordPaymentSubmit}
-                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#2F8EAC] space-y-3 shadow-md animate-in fade-in"
+                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#0089A8] space-y-3 animate-in fade-in"
                 >
-                  <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center justify-between">
-                    <span>Record Received Payment</span>
+                  <h4 className="font-bold text-sm text-[#111C3A] flex items-center justify-between">
+                    <span>Record Payment</span>
                     <button
                       type="button"
                       onClick={() => setShowPaymentForm(false)}
-                      className="text-slate-400 hover:text-slate-600"
+                      aria-label="Close form" className="text-slate-400 hover:text-slate-600"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -888,7 +510,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Amount Paid (₹) *
                       </label>
                       <input
@@ -897,18 +519,18 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={payAmount}
                         onChange={(e) => setPayAmount(e.target.value)}
                         placeholder="e.g. 2500"
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs font-mono outline-none focus:border-[#2F8EAC]"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Payment Mode
                       </label>
                       <select
                         value={payMethod}
                         onChange={(e) => setPayMethod(e.target.value as any)}
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs outline-none focus:border-[#2F8EAC] bg-white"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8] bg-white"
                       >
                         <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
                         <option value="Cash">Cash</option>
@@ -917,7 +539,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Notes / Reference
                       </label>
                       <input
@@ -925,7 +547,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={payNotes}
                         onChange={(e) => setPayNotes(e.target.value)}
                         placeholder="e.g. GPay ref 948271"
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs outline-none focus:border-[#2F8EAC]"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8]"
                       />
                     </div>
                   </div>
@@ -934,15 +556,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowPaymentForm(false)}
-                      className="px-3 py-1.5 rounded-xl text-xs text-[#586B67] hover:text-[#1E2D2B]"
+                      className="px-3 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A] transition-all"
+                      className="px-4 py-2 rounded-xl bg-[#0089A8] text-white font-semibold text-xs hover:bg-[#00738E] transition-all"
                     >
-                      Confirm Payment Receipt
+                      Save Payment
                     </button>
                   </div>
                 </form>
@@ -952,14 +574,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {showFeeForm && (
                 <form
                   onSubmit={handleAddFeeSubmit}
-                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#1E2D2B] space-y-3 shadow-md animate-in fade-in"
+                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#0089A8] space-y-3 animate-in fade-in"
                 >
-                  <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-[#111C3A] flex items-center justify-between">
                     <span>Add New Dental Treatment Fee</span>
                     <button
                       type="button"
                       onClick={() => setShowFeeForm(false)}
-                      className="text-slate-400 hover:text-slate-600"
+                      aria-label="Close form" className="text-slate-400 hover:text-slate-600"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -967,7 +589,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div className="sm:col-span-2">
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Procedure Name *
                       </label>
                       <input
@@ -976,12 +598,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={feeProcedure}
                         onChange={(e) => setFeeProcedure(e.target.value)}
                         placeholder="e.g. Root Canal Therapy, Porcelain Crown"
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs outline-none focus:border-[#2F8EAC]"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8]"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Tooth (Optional)
                       </label>
                       <input
@@ -989,12 +611,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={feeTooth}
                         onChange={(e) => setFeeTooth(e.target.value)}
                         placeholder="e.g. 16, 46"
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs font-mono outline-none focus:border-[#2F8EAC]"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#586B67] block mb-1">
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Gross Fee (₹) *
                       </label>
                       <input
@@ -1003,7 +625,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={feeAmount}
                         onChange={(e) => setFeeAmount(e.target.value)}
                         placeholder="e.g. 5000"
-                        className="w-full p-2.5 rounded-xl border border-[#E7E9E3] text-xs font-mono outline-none focus:border-[#2F8EAC]"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
                       />
                     </div>
                   </div>
@@ -1012,13 +634,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowFeeForm(false)}
-                      className="px-3 py-1.5 rounded-xl text-xs text-[#586B67] hover:text-[#1E2D2B]"
+                      className="px-3 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#1E2D2B] text-white font-semibold text-xs hover:bg-[#2A3E3B] transition-all"
+                      className="detail-button primary"
                     >
                       Save Fee Item
                     </button>
@@ -1029,29 +651,29 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {/* Transactions Ledger */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Invoices List */}
-                <div className="bg-white p-4 rounded-2xl border border-[#E7E9E3] shadow-card-subtle space-y-3">
-                  <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center justify-between">
-                    <span>Treatment Invoices ({patientFees.length})</span>
-                    <span className="text-[10px] font-mono text-[#586B67]">Billed Items</span>
+                <div className="bg-white p-4 rounded-2xl border border-[#E4E9F0] shadow-card-subtle space-y-3">
+                  <h4 className="font-bold text-sm text-[#111C3A] flex items-center justify-between">
+                    <span>Invoices ({patientFees.length})</span>
+                    <span className="text-[10px] font-mono text-[#64748B]">Billed Items</span>
                   </h4>
 
                   {patientFees.length === 0 ? (
-                    <p className="text-xs text-[#586B67] py-4 text-center">No fees charged to this patient yet.</p>
+                    <p className="text-xs text-[#64748B] py-4 text-center">No invoices yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {patientFees.map((f) => (
                         <div
                           key={f._id}
-                          className="p-3 rounded-xl bg-[#FBF9F1] border border-[#E7E9E3] flex items-center justify-between text-xs"
+                          className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-3 text-xs"
                         >
                           <div>
-                            <div className="font-bold text-[#1E2D2B]">
-                              {f.procedureName} {f.tooth && <span className="text-[#2F8EAC] font-mono">({f.tooth})</span>}
+                            <div className="font-bold text-[#111C3A]">
+                              {f.procedureName} {f.tooth && <span className="text-[#0089A8] font-mono">({f.tooth})</span>}
                             </div>
-                            <div className="text-[10px] text-[#7E9691] font-mono mt-0.5">{f.date}</div>
+                            <div className="text-[10px] text-[#8291A7] font-mono mt-0.5">{f.date}</div>
                           </div>
                           <div className="text-right">
-                            <div className="font-mono font-bold text-[#1E2D2B]">₹{f.netAmount.toLocaleString()}</div>
+                            <div className="font-mono font-bold text-[#111C3A]">₹{f.netAmount.toLocaleString()}</div>
                             <span className={`text-[10px] px-2 py-0.2 rounded font-mono uppercase ${
                               f.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
                             }`}>
@@ -1065,32 +687,32 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 </div>
 
                 {/* Payments List */}
-                <div className="bg-white p-4 rounded-2xl border border-[#E7E9E3] shadow-card-subtle space-y-3">
-                  <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center justify-between">
-                    <span>Payment Receipts ({patientPayments.length})</span>
-                    <span className="text-[10px] font-mono text-[#586B67]">Transactions</span>
+                <div className="bg-white p-4 rounded-2xl border border-[#E4E9F0] shadow-card-subtle space-y-3">
+                  <h4 className="font-bold text-sm text-[#111C3A] flex items-center justify-between">
+                    <span>Payments ({patientPayments.length})</span>
+                    <span className="text-[10px] font-mono text-[#64748B]">Transactions</span>
                   </h4>
 
                   {patientPayments.length === 0 ? (
-                    <p className="text-xs text-[#586B67] py-4 text-center">No payments recorded yet.</p>
+                    <p className="text-xs text-[#64748B] py-4 text-center">No payments yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {patientPayments.map((p) => (
                         <div
                           key={p._id}
-                          className="p-3 rounded-xl bg-[#FBF9F1] border border-[#E7E9E3] flex items-center justify-between text-xs"
+                          className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-3 text-xs"
                         >
                           <div>
-                            <div className="font-bold text-[#1E2D2B]">
-                              {p.receiptNo} • <span className="text-[#2F8EAC]">{p.paymentMethod}</span>
+                            <div className="font-bold text-[#111C3A]">
+                              {p.receiptNo} • <span className="text-[#0089A8]">{p.paymentMethod}</span>
                             </div>
-                            <div className="text-[10px] text-[#7E9691] font-mono mt-0.5">
+                            <div className="text-[10px] text-[#8291A7] font-mono mt-0.5">
                               {p.date} at {p.time}
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="font-mono font-bold text-emerald-700">+₹{p.amount.toLocaleString()}</div>
-                            <span className="text-[10px] text-[#7E9691] font-mono">Verified</span>
+                            <span className="text-[10px] text-[#8291A7] font-mono">Verified</span>
                           </div>
                         </div>
                       ))}
@@ -1107,22 +729,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {/* Top Banner: Header + Book Next Visit Trigger */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-base text-[#1E2D2B] flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-[#2F8EAC]" />
-                    Appointments & Chairside Recall
+                  <h3 className="font-bold text-base text-[#111C3A] flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-[#0089A8]" />
+                    Visits
                   </h3>
-                  <p className="text-xs text-[#586B67]">
-                    Manage upcoming follow-ups or schedule next recall visit in 1 click.
-                  </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setShowRecallForm(!showRecallForm)}
-                  className="px-4 py-2 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all self-start sm:self-auto"
+                  className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all self-start sm:self-auto"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{showRecallForm ? "Close Booking" : "Schedule Follow-up Visit"}</span>
+                  <span>{showRecallForm ? "Cancel" : "Book Visit"}</span>
                 </button>
               </div>
 
@@ -1138,7 +757,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         Follow-Up Confirmed: {recallSuccessApt.date} at {recallSuccessApt.time}
                       </div>
                       <div className="text-[11px] text-emerald-700 font-mono">
-                        {recallSuccessApt.procedure} • 30 mins
+                        {recallSuccessApt.procedure} &middot; {recallSuccessApt.durationMinutes} mins
                       </div>
                     </div>
                   </div>
@@ -1159,24 +778,24 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {showRecallForm && (
                 <form
                   onSubmit={handleConfirmRecall}
-                  className="p-5 rounded-2xl bg-white border border-[#2F8EAC] shadow-card-subtle space-y-4 animate-in fade-in"
+                  className="p-5 rounded-2xl bg-white border border-[#0089A8] shadow-card-subtle space-y-4 animate-in fade-in"
                 >
-                  <div className="flex items-center justify-between pb-2 border-b border-[#E7E9E3]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E4E9F0]">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#2F8EAC]" />
-                      <h4 className="font-bold text-sm text-[#1E2D2B]">
-                        Fast Chairside Recall for {patient.name}
+                      <Sparkles className="w-4 h-4 text-[#0089A8]" />
+                      <h4 className="font-bold text-sm text-[#111C3A]">
+                        Book Visit
                       </h4>
                     </div>
-                    <span className="text-[11px] font-mono text-[#7E9691]">
+                    <span className="text-[11px] font-mono text-[#8291A7]">
                       Phone: {patient.phone}
                     </span>
                   </div>
 
                   {/* 1. Date Fast Presets */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-mono text-[#586B67] uppercase block">
-                      1. Target Date Preset:
+                    <label className="text-[11px] font-mono text-[#64748B] uppercase block">
+                      Date
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {[
@@ -1189,7 +808,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                           key={preset.label}
                           type="button"
                           onClick={() => handleSetRecallOffset(preset.days)}
-                          className="px-3 py-1.5 rounded-xl bg-[#E8F0F1] hover:bg-[#BDDBD1]/50 text-[#1E2D2B] border border-[#C7E7EC] text-xs font-semibold font-mono transition-colors"
+                          className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#BEE3E9]/50 text-[#111C3A] border border-[#D4EDF3] text-xs font-semibold font-mono transition-colors"
                         >
                           {preset.label}
                         </button>
@@ -1200,15 +819,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         required
                         value={recallDate}
                         onChange={(e) => setRecallDate(e.target.value)}
-                        className="p-1.5 px-3 rounded-xl border border-[#E7E9E3] text-xs font-mono outline-none focus:border-[#2F8EAC] bg-[#FBF9F1]"
+                        className="p-1.5 px-3 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
                       />
                     </div>
                   </div>
 
                   {/* 2. Procedure Presets */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-mono text-[#586B67] uppercase block">
-                      2. Follow-Up Procedure Preset:
+                    <label className="text-[11px] font-mono text-[#64748B] uppercase block">
+                      Procedure
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {recallProcedurePresets.map((proc) => (
@@ -1221,8 +840,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                           }}
                           className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
                             recallProcedure === proc.name
-                              ? "bg-[#2F8EAC] text-white border-[#2F8EAC] font-semibold"
-                              : "bg-[#FBF9F1] border-[#E7E9E3] text-[#586B67] hover:bg-[#E8F0F1]"
+                              ? "bg-[#0089A8] text-white border-[#0089A8] font-semibold"
+                              : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
                           }`}
                         >
                           {proc.name} ({proc.duration}m)
@@ -1233,11 +852,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   {/* 3. Visual Slot Grid */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-mono text-[#586B67] uppercase">
-                        3. Pick Operatory Time Slot for {recallDate}:
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-[11px] font-mono text-[#64748B] uppercase">
+                        Time on {recallDate}
                       </label>
-                      <span className="text-[10px] font-mono text-[#7E9691]">
+                      <span className="text-[10px] font-mono text-[#8291A7]">
                         {clinicProfile.dentistName} • Operatory 1
                       </span>
                     </div>
@@ -1269,12 +888,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                             onClick={() => setRecallTime(slot)}
                             className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
                               isSelected
-                                ? "bg-[#2F8EAC] text-white border-[#2F8EAC] font-bold shadow-xs scale-102"
-                                : "bg-[#FBF9F1] hover:bg-[#E8F0F1] border-[#E7E9E3] text-[#1E2D2B]"
+                                ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
+                                : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
                             }`}
                           >
                             <div>{slot}</div>
-                            <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#2F8EAC]"}`}>
+                            <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
                               {isSelected ? "Selected" : "Open"}
                             </span>
                           </button>
@@ -1284,39 +903,39 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
 
                   {/* Submit Bar */}
-                  <div className="flex justify-end gap-2 pt-2 border-t border-[#E7E9E3]">
+                  <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
                     <button
                       type="button"
                       onClick={() => setShowRecallForm(false)}
-                      className="px-3.5 py-1.5 rounded-xl text-xs text-[#586B67] hover:text-[#1E2D2B]"
+                      className="px-3.5 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5"
+                      className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Confirm & Book for {recallDate} at {recallTime}</span>
+                      <span>Book Visit</span>
                     </button>
                   </div>
                 </form>
               )}
 
               {patientAppts.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-white border border-[#E7E9E3] text-center text-xs text-[#586B67] space-y-2">
-                  <Calendar className="w-8 h-8 text-[#7E9691] mx-auto opacity-50" />
-                  <p>No appointments recorded for this patient.</p>
+                <div className="p-8 rounded-2xl bg-white border border-[#E4E9F0] text-center text-xs text-[#64748B] space-y-2">
+                  <Calendar className="w-8 h-8 text-[#8291A7] mx-auto opacity-50" />
+                  <p>No visits yet.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {patientAppts.map((a) => (
                     <div
                       key={a._id}
-                      className="p-4 rounded-2xl bg-white border border-[#E7E9E3] shadow-card-subtle space-y-2.5"
+                      className="p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle space-y-2.5"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#2F8EAC] flex items-center gap-1">
+                        <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
                           {a.date} at {a.time}
                         </span>
@@ -1325,7 +944,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                             a.status === "completed"
                               ? "bg-emerald-100 text-emerald-800"
                               : a.status === "scheduled"
-                              ? "bg-[#E8F0F1] text-[#2F8EAC]"
+                              ? "bg-[#EDF7FA] text-[#0089A8]"
                               : "bg-slate-100 text-slate-700"
                           }`}
                         >
@@ -1334,13 +953,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <h4 className="font-bold text-sm text-[#1E2D2B]">{a.procedure}</h4>
-                        {a.notes && <p className="text-xs text-[#586B67] italic">&quot;{a.notes}&quot;</p>}
+                        <h4 className="font-bold text-sm text-[#111C3A]">{a.procedure}</h4>
+                        {a.notes && <p className="text-xs text-[#64748B] italic">&quot;{a.notes}&quot;</p>}
                       </div>
 
-                      <div className="pt-2 border-t border-[#E7E9E3] flex items-center justify-between text-[11px] font-mono text-[#7E9691]">
+                      <div className="pt-2 border-t border-[#E4E9F0] flex flex-wrap gap-2 items-center justify-between text-[11px] font-mono text-[#8291A7]">
                         <span>Duration: {a.durationMinutes || 30} mins</span>
-                        <span>Chair 1 (Main Operatory)</span>
                       </div>
                     </div>
                   ))}
@@ -1348,24 +966,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               )}
             </div>
           )}
-        </div>
-
-        {/* ================= 4. SLIM CLINICAL FOOTER ================= */}
-        <div className="bg-[#FBF9F1] px-5 sm:px-6 py-2.5 border-t border-[#E7E9E3] flex items-center justify-between text-xs text-[#586B67] shrink-0">
-          <div className="flex items-center gap-2 font-mono">
-            <span>Clinic: <strong className="text-[#1E2D2B]">{clinicProfile.name}</strong></span>
-            <span>•</span>
-            <span>Dentist: <strong className="text-[#1E2D2B]">{clinicProfile.dentistName}</strong></span>
-          </div>
-
-          <button
-            onClick={onBack}
-            className="px-4 py-1.5 rounded-xl bg-[#E8F0F1] hover:bg-[#BDDBD1]/50 text-[#1E2D2B] font-semibold transition-colors border border-[#C7E7EC]"
-          >
-            Back to Patients
-          </button>
-        </div>
       </div>
+
     </div>
   );
 };

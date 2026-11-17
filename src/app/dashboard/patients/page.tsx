@@ -10,12 +10,13 @@ import {
   Calendar,
   X,
   Share2,
+  AlertTriangle,
   Sparkles,
 } from "lucide-react";
 import {
   Patient,
 } from "@/lib/mockData";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useClinic } from "@/context/ClinicContext";
 
 export default function PatientsPage() {
@@ -30,7 +31,6 @@ export default function PatientsPage() {
   } = useClinic();
 
   const [search, setSearch] = useState("");
-  const router = useRouter();
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -109,236 +109,127 @@ export default function PatientsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Title & Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-bold text-2xl sm:text-3xl text-[#1E2D2B] flex items-center gap-2.5 tracking-tight">
-            <Users className="w-6 h-6 text-[#2F8EAC]" />
-            Patient Directory & 360° EHR
-          </h2>
-          <p className="text-xs sm:text-sm text-[#586B67] mt-1">
-            Chairside electronic health records with full clinical notes, allergy alerts, odontogram history, and instant billing.
-          </p>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#E4E9F0] bg-white px-3 focus-within:border-[#0089A8]">
+          <Search className="h-4 w-4 shrink-0 text-[#8291A7]" aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search patients"
+            aria-label="Search patients by name, phone, ID, or allergy"
+            className="h-11 w-full min-w-0 bg-transparent text-sm text-[#111C3A] outline-none placeholder:text-[#8291A7]"
+          />
+          {search && <button onClick={() => setSearch("")} aria-label="Clear search" className="flex shrink-0 items-center justify-center text-[#64748B]"><X size={16} /></button>}
         </div>
-
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="px-4 py-2 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all flex items-center gap-1.5 shadow-xs self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Add New Patient
+        <button onClick={() => setIsAddOpen(true)} className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0089A8] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#00738E] sm:px-4 sm:text-sm">
+          <Plus size={16} />Add Patient
         </button>
       </div>
 
-      {/* Search Input Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] flex items-center gap-3">
-        <Search className="w-5 h-5 text-[#2F8EAC] shrink-0" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by patient name, phone number, ID, or allergy (e.g. 'Rahul', '98201', 'Penicillin')..."
-          className="w-full text-xs sm:text-sm outline-none text-[#1E2D2B] placeholder-[#586B67] bg-transparent font-medium"
-        />
-        {search && (
-          <button onClick={() => setSearch("")} className="text-xs text-[#3D5450] hover:text-[#1E2D2B] font-semibold">
-            Clear
-          </button>
-        )}
-      </div>
-
-      {/* Patients Grid */}
-      {filtered.length === 0 ? (
-        <div className="bg-white p-10 sm:p-14 rounded-2xl border border-[#DCE2DE] text-center space-y-4 max-w-xl mx-auto shadow-sm">
-          <div className="w-14 h-14 rounded-2xl bg-[#E8F0F1] text-[#2F8EAC] flex items-center justify-center mx-auto border border-[#C7E7EC]">
-            <Users className="w-7 h-7" />
-          </div>
+      {loading ? (
+        <p role="status" className="py-8 text-center text-sm text-[#64748B]">Loading patients...</p>
+      ) : filtered.length === 0 ? (
+        <div className="premium-card mx-auto max-w-xl space-y-3 p-6 text-center sm:p-8">
+          <Users className="mx-auto h-8 w-8 text-[#0089A8]" aria-hidden="true" />
+          <h2 className="text-base font-semibold">{patients.length === 0 ? "No patients yet" : "No patients found"}</h2>
+          <p className="text-sm text-[#64748B]">{patients.length === 0 ? "Add your first patient to get started." : "Try a name, phone, ID, or allergy."}</p>
           {patients.length === 0 ? (
-            <>
-              <h3 className="font-bold text-lg text-[#1E2D2B]">
-                Your Patient Directory is Clean & Private
-              </h3>
-              <p className="text-xs sm:text-sm text-[#3D5450] max-w-md mx-auto leading-relaxed">
-                No patient dossiers have been added to your clinic account yet. You can register your first patient right now, or load sample records to explore.
-              </p>
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  onClick={() => setIsAddOpen(true)}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] transition-all text-xs flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Register First Patient</span>
-                </button>
-                <button
-                  onClick={() => loadSampleData()}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white border border-[#2F8EAC] text-[#2F8EAC] hover:bg-[#E8F0F1] font-semibold transition-all text-xs flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Load Sample Records</span>
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h3 className="font-bold text-lg text-[#1E2D2B]">No Patients Found</h3>
-              <p className="text-xs text-[#3D5450]">
-                No records matched &quot;{search}&quot;. Try searching by name, phone number, or allergy.
-              </p>
-              <button
-                onClick={() => setSearch("")}
-                className="text-xs font-semibold text-[#2F8EAC] hover:underline"
-              >
-                Clear search filter
-              </button>
-            </>
-          )}
+            <div className="flex flex-wrap justify-center gap-3 pt-1">
+              <button onClick={() => setIsAddOpen(true)} className="action-primary"><Plus size={16} />Add Patient</button>
+              <button onClick={() => loadSampleData()} className="action-secondary"><Sparkles size={16} />Load Samples</button>
+            </div>
+          ) : <button onClick={() => setSearch("")} className="small-outline">Clear Search</button>}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((patient) => {
-          const balance = getBalance(patient._id);
-
-          return (
-            <div
-              key={patient._id}
-              className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] hover:border-[#2F8EAC]/60 transition-all flex flex-col justify-between group"
-            >
-              <div>
-                {/* Header */}
-                <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#DCE2DE]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#E8F0F1] text-[#2F8EAC] font-bold text-lg flex items-center justify-center shrink-0 border border-[#C7E7EC]">
-                      {patient.name[0]}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-[#1E2D2B] text-base group-hover:text-[#2F8EAC] transition-colors">{patient.name}</h3>
-                      <span className="text-[11px] text-[#3D5450] font-mono font-medium">
-                        {patient.gender}, {patient.age}y • Blood: <strong className="text-[#1E2D2B]">{patient.bloodGroup}</strong>
-                      </span>
-                    </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+          {filtered.map((patient) => {
+            const balance = getBalance(patient._id);
+            const detailsUrl = `/dashboard/patients/${encodeURIComponent(patient._id)}`;
+            return (
+              <article key={patient._id} className="flex min-w-0 flex-col rounded-2xl border border-[#E4E9F0] bg-white p-4">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EDF7FA] text-sm font-semibold text-[#0089A8]" aria-hidden="true">{patient.name[0]}</div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="break-words text-sm font-bold text-[#111C3A]"><Link href={detailsUrl} className="hover:text-[#0089A8]">{patient.name}</Link></h2>
+                    <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
+                      <span>{patient.gender}, {patient.age}y</span><span>Blood: {patient.bloodGroup}</span><span className="break-all text-[#8291A7]">{patient._id}</span>
+                    </p>
                   </div>
-                  <span className="text-[10px] font-mono font-bold text-[#2F8EAC] bg-[#E8F0F1] px-2 py-0.5 rounded border border-[#C7E7EC]">
-                    {patient._id}
-                  </span>
                 </div>
-
-                {/* Contact info */}
-                <div className="mt-3.5 space-y-2 text-xs text-[#3D5450] font-mono">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-[#2F8EAC]" />
-                    <span className="font-bold text-[#1E2D2B]">{patient.phone}</span>
+                <div className="mt-3 space-y-2 text-xs text-[#52627A]">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <a href={`tel:${patient.phone}`} className="inline-flex items-center gap-1.5 font-medium text-[#111C3A]"><Phone size={13} className="shrink-0 text-[#0089A8]" />{patient.phone}</a>
+                    <span className="inline-flex items-center gap-1.5"><Calendar size={13} className="shrink-0" />Last visit: {patient.lastVisit || "New"}</span>
                   </div>
-                  {patient.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-[#3D5450]" />
-                      <span className="truncate">{patient.email}</span>
+                  {(patient.email || (patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None")) && (
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                      {patient.email && <p className="flex min-w-0 flex-[1_1_160px] items-center gap-1.5"><Mail size={13} className="shrink-0" /><span className="break-all">{patient.email}</span></p>}
+                      {patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None" && patient.medicalAlerts.map((alert, i) => (
+                        <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800"><AlertTriangle size={12} className="shrink-0" />{alert}</span>
+                      ))}
                     </div>
                   )}
+                </div>
+                <div className="flex-1" />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] pt-2">
+                  <span className={`text-xs font-semibold ${balance > 0 ? "text-rose-700" : "text-[#0089A8]"}`}>{balance > 0 ? `${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(balance)} due` : "Settled"}</span>
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-3.5 h-3.5 text-[#3D5450]" />
-                    <span>Last visit: <strong className="text-[#1E2D2B]">{patient.lastVisit || "New Registration"}</strong></span>
+                    <a href={getWhatsAppLink(patient)} target="_blank" rel="noopener noreferrer" title="Send WhatsApp message" aria-label={`Message ${patient.name} on WhatsApp`} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#D4EDF3] sm:h-9 sm:w-9 text-[#0089A8] transition-colors hover:bg-[#EDF7FA]"><Share2 size={16} /></a>
+                    <Link href={detailsUrl} aria-label={`View ${patient.name}`} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#0089A8] px-3 sm:min-h-9 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]">View</Link>
                   </div>
                 </div>
-
-                {/* Medical risk tags */}
-                {patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None" && (
-                  <div className="mt-3 pt-3 border-t border-[#DCE2DE] flex flex-wrap gap-1">
-                    {patient.medicalAlerts.map((alert, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-900 border border-rose-300 flex items-center gap-1"
-                      >
-                        ⚠️ {alert}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Balance & Details Action */}
-              <div className="mt-5 pt-3 border-t border-[#DCE2DE] flex items-center justify-between text-xs">
-                <div>
-                  <span className="text-[10px] text-[#3D5450] uppercase font-mono font-bold block">Balance:</span>
-                  <span
-                    className={`font-mono font-bold text-sm ${
-                      balance > 0 ? "text-rose-600" : "text-[#2F8EAC]"
-                    }`}
-                  >
-                    {balance > 0 ? `₹${balance.toLocaleString()} Due` : "Settled"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <a
-                    href={getWhatsAppLink(patient)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Send WhatsApp Message"
-                    className="p-2 rounded-xl border border-[#DCE2DE] hover:bg-[#E8F0F1] hover:text-[#2F8EAC] text-[#3D5450] transition-colors"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                  </a>
-
-                  <button
-                    onClick={() => router.push(`/dashboard/patients/${encodeURIComponent(patient._id)}`)}
-                    className="px-3.5 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] transition-colors shadow-2xs text-xs"
-                  >
-                    Patient Details →
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              </article>
+            );
+          })}
         </div>
       )}
 
-
       {/* Add Patient Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 bg-[#162321]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E7E9E3] text-xs animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E9E3]">
-              <h3 className="font-bold text-base text-[#1E2D2B]">
-                Register New Patient
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
+              <h3 className="font-bold text-base text-[#111C3A]">
+                Add Patient
               </h3>
-              <button onClick={() => setIsAddOpen(false)} className="text-[#7E9691] hover:text-[#1E2D2B]">
+              <button onClick={() => setIsAddOpen(false)} aria-label="Close add patient form" className="text-[#8291A7] hover:text-[#111C3A]">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleAddPatient} className="mt-4 space-y-3">
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Full Name *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Rahul Sharma"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] bg-[#FBF9F1] outline-none focus:border-[#2F8EAC]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#1E2D2B] block mb-1">Age *</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
                   <input
                     type="number"
                     required
                     placeholder="34"
                     value={form.age}
                     onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E7E9E3] bg-[#FBF9F1] outline-none focus:border-[#2F8EAC] font-mono"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#1E2D2B] block mb-1">Gender</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Gender</label>
                   <select
                     value={form.gender}
                     onChange={(e) => setForm({ ...form, gender: e.target.value as "Male" | "Female" | "Other" })}
-                    className="w-full p-2.5 rounded-xl border border-[#E7E9E3] bg-[#FBF9F1] outline-none focus:border-[#2F8EAC]"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -348,41 +239,41 @@ export default function PatientsPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Phone Number *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
                 <input
                   type="tel"
                   required
                   placeholder="+91 98201 44521"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] bg-[#FBF9F1] outline-none focus:border-[#2F8EAC] font-mono"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Medical Alerts / Allergies</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Alerts / Allergies</label>
                 <input
                   type="text"
                   placeholder="e.g. Penicillin Allergy, Diabetic"
                   value={form.medicalAlerts}
                   onChange={(e) => setForm({ ...form, medicalAlerts: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] bg-[#FBF9F1] outline-none focus:border-[#2F8EAC]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                 />
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E7E9E3]">
+              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
                   onClick={() => setIsAddOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#586B67] hover:bg-[#E8F0F1]"
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs"
                 >
-                  Register Patient
+                  Add Patient
                 </button>
               </div>
             </form>
