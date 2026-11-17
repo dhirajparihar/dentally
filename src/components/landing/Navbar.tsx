@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { Sparkles, ArrowRight, Menu, X, Cpu, Users, Calendar, CreditCard, Lock } from "lucide-react";
 
@@ -15,16 +16,21 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo with Bio-Mint Neural Dot */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl bg-[#2F8EAC] flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-none stroke-current stroke-2">
-                <path d="M7 4C5 4 4 6 4 9C4 13 6 17 8 20C9 21.5 10 21.5 10.5 20C11 18.5 11.5 16 12 16C12.5 16 13 18.5 13.5 20C14 21.5 15 21.5 16 20C18 17 20 13 20 9C20 6 19 4 17 4C14.5 4 13.5 6 12 6C10.5 6 9.5 4 7 4Z" />
-              </svg>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
+              <Image
+                src="/logo.png"
+                alt="Dentally Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+                priority
+              />
             </div>
             <div className="flex items-baseline">
               <span className="font-serif font-bold text-2xl tracking-tight text-[#1E2D2B]">
                 Dentally
               </span>
-              <span className="w-2 h-2 rounded-full bg-[#BDDBD1] ml-1" />
+              <span className="w-2 h-2 rounded-full bg-[#0089A8] ml-1" />
             </div>
           </Link>
 

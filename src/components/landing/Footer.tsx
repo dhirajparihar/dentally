@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, ShieldCheck, Heart, Bot } from "lucide-react";
 
 export const Footer: React.FC = () => {
@@ -12,13 +13,17 @@ export const Footer: React.FC = () => {
           {/* Brand info */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#2F8EAC] flex items-center justify-center text-white shadow-xs">
-                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current stroke-2">
-                  <path d="M7 4C5 4 4 6 4 9C4 13 6 17 8 20C9 21.5 10 21.5 10.5 20C11 18.5 11.5 16 12 16C12.5 16 13 18.5 13.5 20C14 21.5 15 21.5 16 20C18 17 20 13 20 9C20 6 19 4 17 4C14.5 4 13.5 6 12 6C10.5 6 9.5 4 7 4Z" />
-                </svg>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                <Image
+                  src="/logo.png"
+                  alt="Dentally Logo"
+                  width={32}
+                  height={32}
+                  className="w-full h-full object-contain"
+                />
               </div>
               <span className="font-serif font-bold text-2xl tracking-tight text-white">
-                Dentally<span className="text-[#BDDBD1]">.</span>
+                Dentally<span className="text-[#0089A8]">.</span>
               </span>
             </div>
             <p className="text-sm text-[#A7BCB7] max-w-sm leading-relaxed">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -28,10 +29,15 @@ function LoginFormContent() {
         
         {/* Logo & Header */}
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-[#2F8EAC] text-white flex items-center justify-center mx-auto shadow-sm">
-            <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-current stroke-2">
-              <path d="M7 4C5 4 4 6 4 9C4 13 6 17 8 20C9 21.5 10 21.5 10.5 20C11 18.5 11.5 16 12 16C12.5 16 13 18.5 13.5 20C14 21.5 15 21.5 16 20C18 17 20 13 20 9C20 6 19 4 17 4C14.5 4 13.5 6 12 6C10.5 6 9.5 4 7 4Z" />
-            </svg>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto overflow-hidden shrink-0">
+            <Image
+              src="/logo.png"
+              alt="Dentally Logo"
+              width={56}
+              height={56}
+              className="w-full h-full object-contain"
+              priority
+            />
           </div>
           <h1 className="font-bold text-2xl text-[#1E2D2B] tracking-tight">
             Dentist Portal Sign In
