@@ -1,22 +1,11 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
-import {
-  Calendar,
-  CreditCard,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Share2,
-  User,
-  ArrowRight,
-  IndianRupee,
-  Plus,
-  Sparkles,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Calendar, CreditCard, CheckCircle2, AlertCircle, User, ArrowRight, IndianRupee, Plus, Sparkles, Phone, RefreshCw } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
+
+const patientUrl = (id: string) => `/dashboard/patients/${encodeURIComponent(id)}`;
+const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
 
 export default function DashboardOverviewPage() {
   const {
@@ -26,10 +15,8 @@ export default function DashboardOverviewPage() {
     payments,
     clinicProfile,
     loading,
-    loadSampleData,
     completeAppointment,
   } = useClinic();
-  const router = useRouter();
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -55,10 +42,13 @@ export default function DashboardOverviewPage() {
   const dueForFollowUp = patients.filter((p) => p.followUpDue);
 
 
-  const openPatientById = (patientId: string) => {
-    const found = patients.find((p) => p._id === patientId);
-    if (found) router.push(`/dashboard/patients/${encodeURIComponent(found._id)}`);
-  };
+
+  const metrics = [
+    { label: "Today's Appointments", value: todayList.length, detail: `${todayList.filter((a) => a.status === "scheduled").length} scheduled / ${todayList.filter((a) => a.status === "completed").length} completed`, icon: Calendar, tone: "blue", href: "/dashboard/appointments" },
+    { label: "Today's Collection", value: money(totalDailyCollection), detail: `UPI ${money(upiToday)} / Cash ${money(cashToday)}`, icon: IndianRupee, tone: "green", href: "/dashboard/fees" },
+    { label: "Unpaid Dues", value: patientsWithPending.length, detail: "Patients with a balance due", icon: AlertCircle, tone: "rose", href: "/dashboard/fees" },
+    { label: "Due for Recall", value: dueForFollowUp.length, detail: "Patients ready for follow-up", icon: RefreshCw, tone: "teal", href: "/dashboard/patients" },
+  ];
 
   if (loading) {
     return (
@@ -85,316 +75,97 @@ export default function DashboardOverviewPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Welcome & Overview Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)]">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#2F8EAC] animate-pulse" />
-            <h2 className="font-bold text-2xl sm:text-3xl text-[#1E2D2B] tracking-tight">
-              Dentist Daily Assistant
-            </h2>
+    <div className="overview space-y-8 sm:space-y-10">
+      <section className="welcome-card">
+        <div className="relative z-10 max-w-2xl">
+          <p className="text-base text-[#52627A] sm:text-lg">Welcome back,</p>
+          <h2 className="mt-1 text-3xl font-bold tracking-tight text-[#111C3A] sm:text-4xl">{clinicProfile.dentistName}</h2>
+          <p className="mt-3 max-w-md text-sm leading-7 text-[#52627A] sm:text-base">Manage your appointments, patients and payments with ease.</p>
+          <div className="mt-6 flex flex-col gap-3 min-[440px]:flex-row">
+            <Link href="/dashboard/appointments" className="action-primary"><Calendar size={19} />Book Appointment</Link>
+            <Link href="/dashboard/fees" className="action-secondary"><IndianRupee size={20} />Record Payment</Link>
           </div>
-          <p className="text-xs sm:text-sm text-[#3D5450] mt-1.5 leading-relaxed">
-            Welcome back, <strong className="text-[#1E2D2B]">{clinicProfile.dentistName}</strong>.
-            Chairside operatory, 360° EHR dossiers, and ChatGPT MCP server online.
-          </p>
         </div>
-
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
-          <Link
-            href="/dashboard/appointments"
-            className="px-4 py-2.5 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all shadow-sm flex items-center gap-2 border border-[#24728A]"
-          >
-            <Calendar className="w-4 h-4 text-[#C7E7EC]" />
-            <span>Book Appointment</span>
-          </Link>
-          <Link
-            href="/dashboard/fees"
-            className="px-4 py-2.5 rounded-xl bg-[#F0F7F5] hover:bg-[#BDDBD1]/50 text-[#1E2D2B] text-xs sm:text-sm font-bold transition-all shadow-2xs flex items-center gap-2 border border-[#BDDBD1]"
-          >
-            <IndianRupee className="w-4 h-4 text-[#2F8EAC]" />
-            <span>Record Payment</span>
-          </Link>
+        <div className="welcome-art" aria-hidden="true">
+          <svg viewBox="0 0 160 160" fill="none" className="h-36 w-36">
+            <path d="M78 37C60 22 40 28 35 47c-7 25 8 42 12 64 3 18 8 24 15 20 8-5 5-34 17-34s10 29 18 34c8 4 13-5 16-23 4-23 18-40 10-61-7-20-29-24-45-10Z" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="m78 37 15 8" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+            <path d="M126 40v30m-15-15h30" stroke="#FAFBFC" strokeWidth="16" strokeLinecap="round" />
+            <path d="M126 40v30m-15-15h30" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+          </svg>
         </div>
-      </div>
+      </section>
 
-      {/* Pristine Clinic Onboarding Card for New Accounts */}
       {!loading && patients.length === 0 && (
-        <div className="bg-gradient-to-r from-[#F0F7F5] via-white to-[#E8F0F1] p-6 sm:p-7 rounded-2xl border-2 border-dashed border-[#2F8EAC]/40 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2F8EAC]/10 text-[#2F8EAC] text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Private Clinic Database Ready</span>
-            </div>
-            <h3 className="text-lg sm:text-xl font-bold text-[#1E2D2B]">
-              Welcome, Dr. {clinicProfile.dentistName}!
-            </h3>
-            <p className="text-xs sm:text-sm text-[#3D5450] leading-relaxed">
-              Your clinic is securely connected to your account (<strong>{clinicProfile.email}</strong>). All patient dossiers, appointments, and fees you create here are 100% private to your email.
-            </p>
+        <section className="premium-card flex flex-col justify-between gap-5 p-6 sm:flex-row sm:items-center">
+          <div><h3 className="font-semibold">Your practice starts here</h3><p className="mt-2 text-sm text-[#64748B]">Add your first patient to start managing care at {clinicProfile.name}.</p></div>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/dashboard/patients" className="action-primary"><Plus size={17} />Add First Patient</Link>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-            <Link
-              href="/dashboard/patients"
-              className="px-4 py-2.5 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all text-center flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add First Patient</span>
-            </Link>
-            <button
-              onClick={() => loadSampleData()}
-              className="px-4 py-2.5 rounded-xl bg-white border border-[#2F8EAC] text-[#2F8EAC] hover:bg-[#E8F0F1] text-xs sm:text-sm font-semibold transition-all text-center flex items-center justify-center gap-2 shadow-2xs"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Load Sample Records</span>
-            </button>
-          </div>
-        </div>
+        </section>
       )}
 
-      {/* KPI Cards: The 4 Core Pillars */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] hover:border-[#2F8EAC]/60 transition-all">
-          <div className="flex items-center justify-between text-[#3D5450] text-[11px] font-mono uppercase tracking-[0.12em] font-bold">
-            <span>Today&apos;s Schedule</span>
-            <div className="w-8 h-8 rounded-xl bg-[#E8F0F1] flex items-center justify-center text-[#2F8EAC] border border-[#C7E7EC]">
-              <Calendar className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight text-[#1E2D2B]">
-            {todayList.length}
-          </div>
-          <span className="text-xs text-[#3D5450] font-medium mt-1 block">
-            <strong className="text-[#1E2D2B]">{todayList.filter((a) => a.status === "scheduled").length}</strong> scheduled, <strong className="text-[#1E2D2B]">{todayList.filter((a) => a.status === "completed").length}</strong> completed
-          </span>
+      <section aria-labelledby="schedule-heading" className="space-y-4">
+        <div className="section-heading">
+          <h2 id="schedule-heading"><Calendar />Today&apos;s Schedule <span className="section-count">{todayList.length}</span></h2>
+          <Link href="/dashboard/appointments">View Full Schedule<ArrowRight size={18} /></Link>
         </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] hover:border-[#2F8EAC]/60 transition-all">
-          <div className="flex items-center justify-between text-[#3D5450] text-[11px] font-mono uppercase tracking-[0.12em] font-bold">
-            <span>Today&apos;s Collection</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center border border-emerald-200">
-              <IndianRupee className="w-4 h-4" />
+        {loading ? <div className="premium-card p-8 text-sm text-[#64748B]" role="status">Loading your schedule...</div> : todayList.length === 0 ? (
+          <div className="premium-card flex flex-col items-center gap-3 p-10 text-center">
+            <div className="metric-icon blue"><Calendar /></div>
+            <h3 className="font-semibold">A little room in your day</h3>
+            <p className="text-sm text-[#64748B]">No appointments booked for today.</p>
+            <Link href="/dashboard/appointments" className="text-sm font-semibold text-[#0089A8]">Book an appointment <span aria-hidden="true">&rarr;</span></Link>
+          </div>
+        ) : <div className="space-y-3">{todayList.map((apt) => (
+          <article key={apt._id} className="schedule-card">
+            <div className="schedule-info min-w-0">
+              <div className="flex flex-wrap items-center gap-3"><span className="time-chip">{apt.time}</span><span className="text-sm text-[#64748B]">({apt.durationMinutes} mins)</span></div>
+              <h3 className="mt-3 text-xl font-bold sm:text-2xl"><Link href={patientUrl(apt.patientId)} className="hover:text-[#0089A8]">{apt.patientName}</Link></h3>
+              <p className="mt-2 text-sm leading-6 text-[#52627A]">{apt.procedure}{apt.notes && <span className="italic"> &middot; {apt.notes}</span>}</p>
             </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight text-[#1E2D2B]">
-            ₹{totalDailyCollection.toLocaleString()}
-          </div>
-          <span className="text-xs text-[#3D5450] font-mono mt-1 block">
-            UPI: ₹{upiToday.toLocaleString()} • Cash: ₹{cashToday.toLocaleString()}
-          </span>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-rose-200 shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] hover:border-rose-400 transition-all">
-          <div className="flex items-center justify-between text-rose-900 text-[11px] font-mono uppercase tracking-[0.12em] font-bold">
-            <span>Unpaid Dues</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
-              <AlertCircle className="w-4 h-4" />
+            <a href={`tel:${apt.patientPhone}`} className="schedule-phone inline-flex items-center gap-2 text-sm font-medium"><Phone size={15} className="shrink-0 text-[#0089A8]" />{apt.patientPhone}</a>
+            <span className={`schedule-status status-pill ${apt.status}`}><CheckCircle2 size={15} />{apt.status}</span>
+            <div className="schedule-actions flex flex-wrap gap-2">
+              <Link href={patientUrl(apt.patientId)} className="small-outline">View Details</Link>
+              {apt.status === "scheduled" && <button onClick={() => completeAppointment(apt._id)} className="small-outline complete-action">Complete</button>}
             </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight text-rose-600">
-            {patientsWithPending.length}
-          </div>
-          <span className="text-xs text-rose-800 font-medium mt-1 block">
-            Patients with balance due
-          </span>
-        </div>
+          </article>
+        ))}</div>}
+      </section>
 
-        <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] hover:border-amber-400 transition-all">
-          <div className="flex items-center justify-between text-amber-900 text-[11px] font-mono uppercase tracking-[0.12em] font-bold">
-            <span>Due for Recall</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200">
-              <Clock className="w-4 h-4" />
+      <section aria-label="Practice overview" className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 xl:grid-cols-4 sm:gap-4">
+        {metrics.map(({ label, value, detail, icon: Icon, tone, href }) => (
+          <Link key={label} href={href} className={`metric-card ${tone}`}>
+            <div className={`metric-icon ${tone}`}><Icon size={23} /></div>
+            <div className="min-w-0"><p className="text-2xl font-bold tracking-tight sm:text-3xl">{loading ? "—" : value}</p><h3 className="mt-1 text-xs font-medium sm:text-sm">{label}</h3><p className="mt-2 text-[11px] leading-5 text-[#64748B]">{detail}</p></div>
+          </Link>
+        ))}
+      </section>
+
+      <section aria-labelledby="followup-heading" className="space-y-4">
+        <div className="section-heading"><h2 id="followup-heading"><RefreshCw />Patients Due for Follow-Up</h2><Link href="/dashboard/patients">View All<ArrowRight size={18} /></Link></div>
+        <div className="premium-card overflow-hidden divide-y divide-[#E4E9F0]">
+          {loading ? <p className="p-6 text-sm text-[#64748B]" role="status">Loading follow-ups...</p> : dueForFollowUp.length === 0 ? <p className="p-8 text-center text-sm text-[#64748B]">You&apos;re all caught up. No patients due for follow-up.</p> : dueForFollowUp.map((patient) => (
+            <div key={patient._id} className="patient-row">
+              <div className="patient-avatar"><User size={22} /></div>
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5 md:flex-row md:items-center md:gap-4"><Link href={patientUrl(patient._id)} className="truncate text-sm font-semibold hover:text-[#0089A8] sm:text-base">{patient.name}</Link><span className="flex items-center gap-2 text-xs text-[#64748B] sm:text-sm"><Calendar size={15} />Due: {patient.followUpDue}</span></div>
+              <Link href={patientUrl(patient._id)} className="view-pill" aria-label={`View ${patient.name}`}>View<ArrowRight size={14} className="hidden sm:block" /></Link>
             </div>
-          </div>
-          <div className="mt-3 text-3xl font-bold tracking-tight text-[#1E2D2B]">
-            {dueForFollowUp.length}
-          </div>
-          <span className="text-xs text-[#3D5450] font-medium mt-1 block">
-            Patients needing checkup
-          </span>
+          ))}
         </div>
-      </div>
+      </section>
 
-      {/* Main Grid: Today's Appointments & Pending Fees / Follow-ups */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left: Today's Appointments List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg text-[#1E2D2B] flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-[#2F8EAC]" />
-              <span>Today&apos;s Appointments</span>
-              <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-[#E8F0F1] text-[#2F8EAC] font-bold">
-                {todayList.length}
-              </span>
-            </h3>
-            <Link
-              href="/dashboard/appointments"
-              className="text-xs font-semibold text-[#2F8EAC] hover:underline flex items-center gap-1"
-            >
-              <span>View Full Schedule</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+      <section aria-labelledby="balances-heading" className="space-y-4">
+        <div className="section-heading"><h2 id="balances-heading"><CreditCard />Outstanding Balances</h2><Link href="/dashboard/fees">View All<ArrowRight size={18} /></Link></div>
+        <div className="premium-card overflow-hidden divide-y divide-[#E4E9F0]">
+          {loading ? <p className="p-6 text-sm text-[#64748B]" role="status">Loading balances...</p> : patientsWithPending.length === 0 ? <p className="p-8 text-center text-sm text-[#64748B]">No outstanding patient balances.</p> : patientsWithPending.map((patient) => (
+            <Link key={patient._id} href={patientUrl(patient._id)} className="patient-row hover:bg-[#F8FAFC]">
+              <div className="patient-avatar"><User size={22} /></div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold sm:text-base">{patient.name}</h3><p className="mt-1 text-xs text-[#64748B]">{patient.phone}</p></div><span className="text-sm font-semibold text-rose-700">{money(patient.balance)}</span><ArrowRight size={17} className="text-[#8291A7]" />
             </Link>
-          </div>
-
-          <div className="space-y-3">
-            {todayList.length === 0 ? (
-              <div className="bg-white p-8 rounded-2xl border border-[#DCE2DE] text-center space-y-2 text-xs text-[#3D5450] shadow-card-subtle">
-                <Calendar className="w-8 h-8 text-[#2F8EAC] mx-auto opacity-60" />
-                <p className="font-bold text-sm text-[#1E2D2B]">No appointments booked for today</p>
-                <p>Use the Quick Action above to book a new patient.</p>
-              </div>
-            ) : (
-              todayList.map((apt) => (
-                <div
-                  key={apt._id}
-                  className="bg-white p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] flex items-start justify-between gap-4 hover:border-[#2F8EAC]/60 transition-all cursor-pointer group"
-                  onClick={() => openPatientById(apt.patientId)}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-mono font-bold text-[#2F8EAC] bg-[#E8F0F1] px-2 py-0.5 rounded-lg border border-[#C7E7EC]">
-                        {apt.time}
-                      </span>
-                      <span className="text-xs font-mono font-medium text-[#3D5450]">
-                        ({apt.durationMinutes} mins)
-                      </span>
-                    </div>
-
-                    <h4 className="font-bold text-[#1E2D2B] text-base mt-1 flex items-center gap-2 group-hover:text-[#2F8EAC] transition-colors">
-                      <span>{apt.patientName}</span>
-                      <span className="text-[10px] font-mono bg-[#E8F0F1] text-[#2F8EAC] px-2 py-0.5 rounded-md font-semibold border border-[#C7E7EC]">
-                        Patient Details
-                      </span>
-                    </h4>
-                    <p className="text-xs text-[#2F8EAC] font-semibold">
-                      {apt.procedure}
-                    </p>
-                    {apt.notes && (
-                      <p className="text-xs text-[#3D5450] italic">&quot;{apt.notes}&quot;</p>
-                    )}
-                    <span className="text-xs text-[#3D5450] font-mono block">
-                      Phone: <strong className="text-[#1E2D2B]">{apt.patientPhone}</strong>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <span
-                      className={`text-[10px] font-mono uppercase font-bold px-2.5 py-1 rounded-full ${
-                        apt.status === "completed"
-                          ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                          : "bg-sky-100 text-sky-900 border border-sky-300"
-                      }`}
-                    >
-                      {apt.status}
-                    </span>
-
-                    {apt.status === "scheduled" && (
-                      <button
-                        onClick={() => completeAppointment(apt._id)}
-                        className="px-3.5 py-1.5 rounded-xl bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A] transition-colors shadow-sm"
-                      >
-                        Complete
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          ))}
         </div>
-
-        {/* Right: Pending Fees & Recall Follow-ups */}
-        <div className="space-y-6">
-          {/* Outstanding Fees Box */}
-          <div className="bg-white p-5 rounded-2xl border border-rose-200 shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3.5">
-            <div className="flex items-center justify-between pb-2 border-b border-rose-100">
-              <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
-                  <AlertCircle className="w-4 h-4" />
-                </div>
-                <span>Unpaid Patient Fees</span>
-              </h4>
-              <Link href="/dashboard/fees" className="text-xs text-[#2F8EAC] font-semibold hover:underline">
-                View All →
-              </Link>
-            </div>
-
-            <div className="space-y-2.5">
-              {patientsWithPending.length === 0 ? (
-                <div className="p-4 text-center text-xs text-[#3D5450]">
-                  No outstanding patient balances.
-                </div>
-              ) : (
-                patientsWithPending.map((p) => (
-                  <div
-                    key={p._id}
-                    onClick={() => openPatientById(p._id)}
-                    className="p-3 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE] flex items-center justify-between text-xs hover:border-[#2F8EAC]/60 cursor-pointer transition-colors group"
-                  >
-                    <div>
-                      <span className="font-bold text-[#1E2D2B] block group-hover:text-[#2F8EAC]">
-                        {p.name}
-                      </span>
-                      <span className="text-[11px] text-[#3D5450] font-mono">{p.phone}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono font-bold text-rose-600 text-sm block">
-                        ₹{p.balance.toLocaleString()}
-                      </span>
-                      <span className="text-[10px] text-[#2F8EAC] font-bold">
-                        Patient Details →
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Follow-up Due Box */}
-          <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3.5">
-            <div className="flex items-center justify-between pb-2 border-b border-amber-100">
-              <h4 className="font-bold text-sm text-[#1E2D2B] flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-amber-50 flex items-center justify-center text-amber-700">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <span>Patients Due for Follow-Up</span>
-              </h4>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              {dueForFollowUp.length === 0 ? (
-                <div className="p-4 text-center text-xs text-[#3D5450]">
-                  No patients due for follow-up.
-                </div>
-              ) : (
-                dueForFollowUp.map((p) => (
-                  <div
-                    key={p._id}
-                    onClick={() => openPatientById(p._id)}
-                    className="p-3 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE] flex items-center justify-between hover:border-[#2F8EAC]/60 cursor-pointer transition-colors group"
-                  >
-                    <div>
-                      <span className="font-bold text-[#1E2D2B] block group-hover:text-[#2F8EAC]">
-                        {p.name}
-                      </span>
-                      <span className="text-[11px] text-[#3D5450] font-mono font-medium">
-                        Due: {p.followUpDue}
-                      </span>
-                    </div>
-                    <span className="px-3 py-1 rounded-lg bg-[#E8F0F1] text-[#2F8EAC] border border-[#C7E7EC] font-bold text-[11px]">
-                      View
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
+      </section>
     </div>
   );
 }

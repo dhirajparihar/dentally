@@ -14,7 +14,7 @@ export default function DashboardLayout({
 
   return (
     <ClinicProvider>
-      <div className="min-h-screen bg-[#FBF9F1] flex flex-col lg:flex-row">
+      <div className="dashboard-shell min-h-screen bg-[#FAFBFC] flex flex-col lg:flex-row">
         {/* Sidebar (Desktop sticky & Mobile drawer) */}
         <Sidebar
           isOpen={mobileSidebarOpen}
@@ -24,7 +24,7 @@ export default function DashboardLayout({
         {/* Main Content Area */}
         <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
           <Header onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          <main className="flex-1 p-4 sm:p-7 xl:p-10 max-w-7xl w-full mx-auto">
             {children}
           </main>
         </div>

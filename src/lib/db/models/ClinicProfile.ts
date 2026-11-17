@@ -43,4 +43,3 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
 export const ClinicProfileModel =
   mongoose.models.ClinicProfile ||
   mongoose.model<IClinicProfile>("ClinicProfile", ClinicProfileSchema);
-

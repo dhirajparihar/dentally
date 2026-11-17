@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -51,4 +52,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default (phase: string): NextConfig => ({
+  ...nextConfig,
+  // Keep production builds from overwriting a running development server.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+});

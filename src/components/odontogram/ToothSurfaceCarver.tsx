@@ -58,7 +58,7 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0F1715]/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div className="mobile-dialog fixed inset-0 bg-[#0F1715]/75 backdrop-blur-md z-50 flex items-center justify-center overflow-y-auto p-4">
       <div className="bg-[#162321] text-slate-100 rounded-3xl border border-[#243532] max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Elite Precision Header */}
         <div className="px-6 py-4 border-b border-[#243532] flex items-center justify-between bg-[#0F1715]">

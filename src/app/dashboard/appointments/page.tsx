@@ -1,33 +1,60 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Calendar,
-  Clock,
   Plus,
   CheckCircle2,
   X,
-  AlertTriangle,
   AlertCircle,
-  CalendarCheck,
-  CalendarX,
   Phone,
   Share2,
   ChevronLeft,
   ChevronRight,
   User,
-  Sparkles,
   ArrowRight,
   Send,
-  SlidersHorizontal,
   Check,
-  Flame,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   Appointment,
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
+
+interface AppointmentActionsProps {
+  appointment: Appointment;
+  reminderUrl: string;
+  careUrl: string;
+  onView: () => void;
+  onReschedule: () => void;
+  onReopen: () => void;
+  onCancel: () => void;
+}
+
+function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, onCancel }: AppointmentActionsProps) {
+  return (
+    <details className="appointment-menu" onToggle={(event) => {
+      if (!event.currentTarget.open) return;
+      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => {
+        if (menu !== event.currentTarget) menu.open = false;
+      });
+    }}>
+      <summary aria-label={`More actions for ${appointment.patientName}`}><MoreHorizontal size={20} /></summary>
+      <div className="appointment-menu-items" role="group" aria-label={`Actions for ${appointment.patientName}`} onClick={(event) => {
+        if ((event.target as Element).closest("button, a")) event.currentTarget.closest("details")?.removeAttribute("open");
+      }}>
+        <button type="button" onClick={onView}><User size={15} />View Patient</button>
+        <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
+        <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
+        {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
+        {(appointment.status === "completed" || appointment.status === "cancelled") && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+        {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
+      </div>
+    </details>
+  );
+}
 
 export default function AppointmentsPage() {
   const {
@@ -51,6 +78,26 @@ export default function AppointmentsPage() {
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
   const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if ((event.target as Element).closest(".appointment-menu")) return;
+      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => { menu.open = false; });
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => {
+        menu.open = false;
+        menu.querySelector<HTMLElement>("summary")?.focus();
+      });
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   // Quick procedure templates for single dentist (Auto-sets procedure and duration)
   const procedurePresets = [
@@ -97,10 +144,16 @@ export default function AppointmentsPage() {
     "06:30 PM",
   ];
 
+  const timeInMinutes = (time: string) => {
+    const [clock, period] = time.split(" ");
+    const [hours, minutes] = clock.split(":").map(Number);
+    return (hours % 12 + (period === "PM" ? 12 : 0)) * 60 + minutes;
+  };
+
   // Filtered by selected date for single dentist timeline
   const dayAppointments = appointments
     .filter((a) => a.date === selectedDate)
-    .sort((a, b) => a.time.localeCompare(b.time));
+    .sort((a, b) => timeInMinutes(a.time) - timeInMinutes(b.time));
 
   // Filtered for list view
   const listAppointments = appointments.filter((a) => {
@@ -121,6 +174,9 @@ export default function AppointmentsPage() {
   const handleMarkStatus = (id: string, newStatus: "scheduled" | "completed" | "missed" | "cancelled") => {
     if (newStatus === "completed") {
       completeAppointment(id);
+    } else if (newStatus === "scheduled") {
+      const appointment = appointments.find((entry) => entry._id === id);
+      if (appointment) bookAppointment({ ...appointment, status: "scheduled" });
     } else if (newStatus === "cancelled") {
       cancelAppointment(id);
     }
@@ -206,588 +262,105 @@ export default function AppointmentsPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-20 bg-white rounded-2xl border border-[#DCE2DE]" />
-        <div className="h-32 bg-white rounded-2xl border border-[#DCE2DE]" />
-        <div className="h-96 bg-white rounded-2xl border border-[#DCE2DE]" />
-      </div>
-    );
-  }
+  const availableSlots = workingHours.filter((slot) => !dayAppointments.some((appointment) => appointment.time === slot && appointment.status !== "cancelled"));
+  const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
+  const openBooking = (time?: string) => {
+    setForm((previous) => ({ ...previous, date: selectedDate, ...(time ? { time } : {}) }));
+    setIsBookModalOpen(true);
+  };
+  const selectedDateLabel = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div className="space-y-6">
-      
-      {/* ================= SINGLE DENTIST HEADER ================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#2F8EAC] animate-pulse" />
-            <h2 className="font-bold text-2xl sm:text-3xl text-[#1E2D2B] tracking-tight">
-              {clinicProfile.dentistName}&apos;s Chair Schedule
-            </h2>
-          </div>
-          <p className="text-xs sm:text-sm text-[#586B67] mt-1">
-            Solo practice operatory calendar • Zero double bookings • 1-click WhatsApp reminders & chairside EHR.
-          </p>
+    <div className="appointments-workspace space-y-5">
+      <section className="appointment-toolbar" aria-label="Appointment controls">
+        <div className="appointment-date-controls">
+          <button type="button" onClick={() => shiftDate(-1)} className="calendar-icon-button" aria-label="Previous day"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])} className={`calendar-today ${isToday ? "selected" : ""}`}>Today</button>
+          <button type="button" onClick={() => shiftDate(1)} className="calendar-icon-button" aria-label="Next day"><ChevronRight size={18} /></button>
         </div>
-
-        {/* View Switcher & Book Action */}
-        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
-          <div className="bg-white p-1 rounded-xl border border-[#E7E9E3] flex items-center shadow-2xs">
-            <button
-              onClick={() => setViewMode("timeline")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                viewMode === "timeline"
-                  ? "bg-[#2F8EAC] text-white shadow-2xs"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              Day Stream
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                viewMode === "list"
-                  ? "bg-[#2F8EAC] text-white shadow-2xs"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              All Bookings
-            </button>
-          </div>
-
-          <button
-            onClick={() => {
-              setForm((prev) => ({ ...prev, date: selectedDate }));
-              setIsBookModalOpen(true);
-            }}
-            className="px-4 py-2 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all flex items-center gap-1.5 shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Book Patient</span>
-          </button>
+        <p className="appointment-selected-date"><Calendar size={17} aria-hidden="true" /><time dateTime={selectedDate}>{selectedDateLabel}</time></p>
+        <div className="appointment-view-toggle" role="group" aria-label="Appointment view">
+          <button type="button" aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>Day</button>
+          <button type="button" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>All Bookings</button>
         </div>
-      </div>
+        <button type="button" onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>
+      </section>
 
-      {/* ================= DATE NAVIGATOR BAR ================= */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E7E9E3] shadow-card-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Previous / Today / Next Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => shiftDate(-1)}
-            className="p-2 rounded-xl border border-[#E7E9E3] hover:bg-[#E8F0F1] text-[#586B67] transition-colors"
-            title="Previous Day"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold font-mono transition-all border ${
-              isToday
-                ? "bg-[#E8F0F1] border-[#C7E7EC] text-[#2F8EAC]"
-                : "border-[#E7E9E3] text-[#586B67] hover:bg-slate-50"
-            }`}
-          >
-            Today
-          </button>
-
-          <button
-            onClick={() => shiftDate(1)}
-            className="p-2 rounded-xl border border-[#E7E9E3] hover:bg-[#E8F0F1] text-[#586B67] transition-colors"
-            title="Next Day"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-
-          <div className="ml-2">
-            <span className="font-bold text-base sm:text-lg text-[#1E2D2B]">
-              {new Date(selectedDate).toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-          </div>
-        </div>
-
-        {/* Schedule Summary Stat Chips for Today */}
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="px-3 py-1 rounded-xl bg-[#FBF9F1] border border-[#E7E9E3] text-[#1E2D2B]">
-            <strong>{dayAppointments.length}</strong> Patients on Schedule
-          </span>
-          <span className="px-3 py-1 rounded-xl bg-[#E8F0F1] border border-[#C7E7EC] text-[#2F8EAC] hidden sm:inline">
-            <strong>{dayAppointments.filter((a) => a.status === "completed").length}</strong> Completed
-          </span>
-        </div>
-      </div>
-
-      {/* ================= BOOKING SUCCESS WHATSAPP BANNER ================= */}
       {bookedSuccessApt && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="font-bold">
-                Appointment Booked: {bookedSuccessApt.patientName} on {bookedSuccessApt.date} at {bookedSuccessApt.time}
-              </div>
-              <div className="text-[11px] text-emerald-700 font-mono">
-                {bookedSuccessApt.procedure} • {bookedSuccessApt.patientPhone}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <a
-              href={getBookingConfirmationWhatsAppUrl(bookedSuccessApt)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold flex items-center gap-1.5 transition-all shadow-xs"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>Send WhatsApp Slip</span>
-            </a>
-            <button
-              onClick={() => setBookedSuccessApt(null)}
-              className="p-1.5 rounded-xl hover:bg-emerald-100 text-emerald-700"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="appointment-success" role="status">
+          <CheckCircle2 size={19} className="shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-xs leading-5"><strong>{bookedSuccessApt.patientName}</strong> booked for {bookedSuccessApt.date} at {bookedSuccessApt.time}<span className="block text-[#52627A]">{bookedSuccessApt.procedure} &middot; {bookedSuccessApt.patientPhone}</span></p>
+          <a href={getBookingConfirmationWhatsAppUrl(bookedSuccessApt)} target="_blank" rel="noopener noreferrer" className="appointment-text-action"><Share2 size={15} />Send Confirmation</a>
+          <button type="button" onClick={() => setBookedSuccessApt(null)} className="calendar-icon-button" aria-label="Dismiss booking confirmation"><X size={17} /></button>
         </div>
       )}
 
-      {/* ================= INTERACTIVE OPERATORY QUICK SLOTS BAR ================= */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#DCE2DE] shadow-[0_2px_8px_-2px_rgba(30,45,43,0.06)] space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-[#DCE2DE]">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <h4 className="font-bold text-xs sm:text-sm text-[#1E2D2B]">
-              Chair 1 Operatory Availability ({selectedDate})
-            </h4>
+      {viewMode === "timeline" && (
+        <section className="appointment-slots" aria-labelledby="slots-heading">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="slots-heading" className="text-sm font-semibold">Available Slots <span className="font-normal text-[#64748B]">&middot; Chair 1</span></h2>
+            <span className="text-xs text-[#64748B]">{loading ? "Loading..." : `${availableSlots.length} available`}</span>
           </div>
-          <span className="text-[11px] font-mono font-medium text-[#3D5450] hidden sm:inline">
-            Click any open slot to instant-book patient
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-          {workingHours.map((slot) => {
-            const bookedApt = dayAppointments.find((a) => a.time === slot && a.status !== "cancelled");
-            if (bookedApt) {
-              return (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => handleOpenPatientDossier(bookedApt.patientId, bookedApt.patientName)}
-                  title={`Booked by ${bookedApt.patientName} (${bookedApt.procedure}). Tap to open patient details.`}
-                  className="px-3 py-2 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE] text-xs font-mono text-[#3D5450] whitespace-nowrap flex items-center gap-2 shrink-0 hover:border-[#2F8EAC] transition-colors shadow-2xs group"
-                >
-                  <span className="w-2 h-2 rounded-full bg-slate-400 group-hover:bg-[#2F8EAC]" />
-                  <span className="font-bold text-[#1E2D2B]">{slot}</span>
-                  <span className="truncate max-w-[90px] text-[#2F8EAC] font-sans font-semibold">({bookedApt.patientName.split(" ")[0]})</span>
-                </button>
-              );
-            }
-
-            return (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => {
-                  setForm((prev) => ({
-                    ...prev,
-                    date: selectedDate,
-                    time: slot,
-                  }));
-                  setIsBookModalOpen(true);
-                }}
-                title={`Slot ${slot} is open. Tap to book.`}
-                className="px-3 py-2 rounded-xl bg-[#E8F4F8] hover:bg-[#2F8EAC] hover:text-white border border-[#C7E7EC] text-xs font-mono font-bold text-[#24728A] whitespace-nowrap flex items-center gap-1.5 shrink-0 transition-all shadow-2xs hover:scale-105 group"
-              >
-                <Plus className="w-3.5 h-3.5 group-hover:text-white" />
-                <span>{slot}</span>
-                <span className="text-[10px] font-normal group-hover:text-white/90">Open</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ================= VIEW 1: THE DENTIST'S DAY STREAM ================= */}
-      {viewMode === "timeline" ? (
-        <div className="space-y-4">
-          
-          {dayAppointments.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-[#E7E9E3] p-10 text-center space-y-4 shadow-card-subtle">
-              <div className="w-14 h-14 rounded-2xl bg-[#E8F0F1] text-[#2F8EAC] flex items-center justify-center mx-auto border border-[#C7E7EC]">
-                <Calendar className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="font-bold text-xl text-[#1E2D2B]">
-                  No Patients Scheduled for this Date
-                </h3>
-                <p className="text-xs sm:text-sm text-[#586B67] max-w-md mx-auto mt-1">
-                  {clinicProfile.dentistName}&apos;s chair is currently open all day. Tap below to schedule a walk-in, recall visit, or treatment session.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setForm((prev) => ({ ...prev, date: selectedDate }));
-                  setIsBookModalOpen(true);
-                }}
-                className="px-5 py-2.5 rounded-xl bg-[#2F8EAC] text-white text-xs sm:text-sm font-semibold hover:bg-[#24728A] transition-all shadow-xs inline-flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                Book Patient for {selectedDate}
-              </button>
-            </div>
-          ) : (
-            <div className="relative pl-4 sm:pl-8 space-y-6">
-              {/* Vertical Chronological Spine */}
-              <div className="absolute top-4 bottom-4 left-6 sm:left-10 w-0.5 bg-[#E7E9E3]" />
-
-              {dayAppointments.map((apt, index) => {
-                const isCompleted = apt.status === "completed";
-                const isMissed = apt.status === "missed";
-                const isCancelled = apt.status === "cancelled";
-
-                return (
-                  <div key={apt._id} className="relative flex items-start gap-4 sm:gap-6 group">
-                    {/* Time Bubble & Spine Indicator */}
-                    <div className="relative z-10 flex flex-col items-center">
-                      <div
-                        className={`w-10 h-10 rounded-2xl flex items-center justify-center font-mono text-xs font-bold shadow-2xs border ${
-                          isCompleted
-                            ? "bg-[#E8F0F1] text-[#2F8EAC] border-[#BDDBD1]"
-                            : isCancelled
-                            ? "bg-slate-100 text-slate-400 border-slate-200"
-                            : isMissed
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-[#2F8EAC] text-white border-[#24728A]"
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
-                      <span className="font-mono text-[11px] font-bold text-[#1E2D2B] mt-1 whitespace-nowrap">
-                        {apt.time}
-                      </span>
-                      <span className="font-mono text-[10px] text-[#7E9691]">
-                        {apt.durationMinutes}m
-                      </span>
-                    </div>
-
-                    {/* Patient Appointment Card */}
-                    <div
-                      className={`flex-1 rounded-2xl border p-5 transition-all shadow-card-subtle ${
-                        isCompleted
-                          ? "bg-white/80 border-[#E7E9E3] opacity-80"
-                          : isCancelled
-                          ? "bg-slate-50/70 border-slate-200 opacity-70"
-                          : isMissed
-                          ? "bg-rose-50/40 border-rose-200"
-                          : "bg-white border-[#E7E9E3] hover:border-[#2F8EAC]/60"
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        {/* Patient & Treatment Details */}
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3
-                              onClick={() => handleOpenPatientDossier(apt.patientId, apt.patientName)}
-                              className="font-bold text-lg text-[#1E2D2B] hover:text-[#2F8EAC] transition-colors cursor-pointer flex items-center gap-1.5"
-                              title="Click to view full patient details"
-                            >
-                              <span className={isCancelled ? "line-through text-slate-500" : ""}>{apt.patientName}</span>
-                              <span className="text-[10px] font-mono font-normal bg-[#E8F0F1] text-[#2F8EAC] px-2 py-0.5 rounded-md border border-[#C7E7EC]">
-                                View Patient →
-                              </span>
-                            </h3>
-
-                            {/* Status Pill */}
-                            <span
-                              className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${
-                                isCompleted
-                                  ? "bg-[#E8F0F1] text-[#2F8EAC] border border-[#BDDBD1]"
-                                  : isCancelled
-                                  ? "bg-slate-100 text-slate-600 border border-slate-200"
-                                  : isMissed
-                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                  : "bg-[#BDDBD1]/30 text-[#1E2D2B] border border-[#BDDBD1]"
-                              }`}
-                            >
-                              {apt.status}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs text-[#2F8EAC] font-semibold">
-                            <span>{apt.procedure}</span>
-                          </div>
-
-                          {apt.notes && (
-                            <p className="text-xs text-[#586B67] italic mt-1 font-sans">
-                              &ldquo;{apt.notes}&rdquo;
-                            </p>
-                          )}
-
-                          <div className="flex items-center gap-3 text-xs text-[#586B67] font-mono pt-1">
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3.5 h-3.5 text-[#7E9691]" />
-                              {apt.patientPhone}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Direct Chairside Actions */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E7E9E3]">
-                          {/* Send WhatsApp Reminder or Post-Op */}
-                          {isCompleted ? (
-                            <a
-                              href={getWhatsAppPostOpUrl(apt)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 rounded-xl bg-[#E8F0F1] hover:bg-[#BDDBD1]/40 text-[#2F8EAC] text-xs font-semibold flex items-center gap-1 border border-[#C7E7EC] transition-colors"
-                              title="Send post-procedure care instructions via WhatsApp"
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-[#2F8EAC]" />
-                              <span>WhatsApp Post-Op Care</span>
-                            </a>
-                          ) : (
-                            <a
-                              href={getWhatsAppReminderUrl(apt)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-[#586B67] text-xs font-semibold flex items-center gap-1 border border-[#E7E9E3] transition-colors"
-                              title="Send appointment reminder on WhatsApp"
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-[#2F8EAC]" />
-                              <span>WhatsApp Reminder</span>
-                            </a>
-                          )}
-
-                          {/* 1-Tap Chairside Status Transitions */}
-                          {!isCompleted && !isMissed && !isCancelled && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleMarkStatus(apt._id, "completed")}
-                                className="px-3 py-1.5 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Complete Visit</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setRescheduleApt(apt);
-                                  setRescheduleData({ date: apt.date, time: apt.time, reason: "" });
-                                }}
-                                className="px-2.5 py-1.5 rounded-xl text-xs text-[#586B67] hover:bg-slate-100 font-semibold"
-                              >
-                                Reschedule
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  if (confirm(`Cancel appointment for ${apt.patientName}?`)) {
-                                    handleMarkStatus(apt._id, "cancelled");
-                                  }
-                                }}
-                                className="px-2.5 py-1.5 rounded-xl text-xs text-rose-600 hover:bg-rose-50 font-semibold transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-
-                          {(isCompleted || isCancelled) && (
-                            <button
-                              onClick={() => handleMarkStatus(apt._id, "scheduled")}
-                              className="text-[11px] font-mono text-[#7E9691] hover:underline px-2"
-                            >
-                              Reopen
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* End of Day Chair Indicator */}
-              <div className="pt-2 text-center">
-                <button
-                  onClick={() => {
-                    setForm((prev) => ({ ...prev, date: selectedDate }));
-                    setIsBookModalOpen(true);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-white border border-[#E7E9E3] hover:border-[#2F8EAC] text-xs font-mono text-[#586B67] hover:text-[#2F8EAC] transition-all shadow-2xs inline-flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Another Patient for {selectedDate}</span>
-                </button>
-              </div>
+          {loading ? <p role="status" className="text-xs text-[#64748B]">Loading slots...</p> : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
+            <div className="appointment-slot-list" role="group" aria-label={`Available slots on ${selectedDateLabel}`}>
+              {availableSlots.map((slot) => <button key={slot} type="button" onClick={() => openBooking(slot)} className="appointment-time-chip" aria-label={`Book ${slot} on ${selectedDateLabel}`}><Plus size={14} aria-hidden="true" />{slot}</button>)}
             </div>
           )}
+        </section>
+      )}
+
+      <section aria-labelledby="appointments-list-heading" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="appointments-list-heading" className="text-sm font-semibold">{viewMode === "list" ? "All Bookings" : isToday ? "Today's Appointments" : "Appointments"} <span className="ml-1 text-xs font-normal text-[#64748B]">({visibleAppointments.length})</span></h2>
+          {viewMode === "timeline" && <p className="text-xs text-[#64748B]">{dayAppointments.filter((appointment) => appointment.status === "scheduled").length} scheduled &middot; {dayAppointments.filter((appointment) => appointment.status === "completed").length} completed</p>}
+          {viewMode === "list" && (
+            <select aria-label="Filter appointments by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="appointment-status-filter">
+              {(["all", "scheduled", "completed", "missed", "cancelled"] as const).map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.charAt(0).toUpperCase() + status.slice(1)} ({status === "all" ? appointments.length : appointments.filter((appointment) => appointment.status === status).length})</option>)}
+            </select>
+          )}
         </div>
-      ) : (
-        /* ================= VIEW 2: COMPLETE BOOKINGS LIST ================= */
-        <div className="space-y-4">
-          {/* Status Filters */}
-          <div className="flex items-center gap-2 border-b border-[#E7E9E3] pb-2 text-xs font-semibold overflow-x-auto">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                statusFilter === "all"
-                  ? "bg-[#2F8EAC] text-white"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              All ({appointments.length})
-            </button>
-            <button
-              onClick={() => setStatusFilter("scheduled")}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                statusFilter === "scheduled"
-                  ? "bg-[#2F8EAC] text-white"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              Scheduled ({appointments.filter((a) => a.status === "scheduled").length})
-            </button>
-            <button
-              onClick={() => setStatusFilter("completed")}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                statusFilter === "completed"
-                  ? "bg-[#2F8EAC] text-white"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              Completed ({appointments.filter((a) => a.status === "completed").length})
-            </button>
-            <button
-              onClick={() => setStatusFilter("missed")}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                statusFilter === "missed"
-                  ? "bg-[#2F8EAC] text-white"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              Missed ({appointments.filter((a) => a.status === "missed").length})
-            </button>
-            <button
-              onClick={() => setStatusFilter("cancelled")}
-              className={`px-3 py-1.5 rounded-xl transition-all ${
-                statusFilter === "cancelled"
-                  ? "bg-[#2F8EAC] text-white"
-                  : "text-[#586B67] hover:text-[#1E2D2B]"
-              }`}
-            >
-              Cancelled ({appointments.filter((a) => a.status === "cancelled").length})
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {listAppointments.map((apt) => (
-              <div
-                key={apt._id}
-                className="bg-white p-5 rounded-2xl border border-[#E7E9E3] shadow-card-subtle flex flex-col justify-between space-y-3"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-[#2F8EAC]">
-                      {apt.date} • {apt.time}
-                    </span>
-                    <span
-                      className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${
-                        apt.status === "completed"
-                          ? "bg-[#E8F0F1] text-[#2F8EAC]"
-                          : apt.status === "cancelled"
-                          ? "bg-slate-100 text-slate-500"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {apt.status}
-                    </span>
+        {loading ? <p role="status" className="appointment-empty">Loading appointments...</p> : visibleAppointments.length === 0 ? (
+          <div className="appointment-empty"><Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" /><p className="text-sm font-medium">No appointments {viewMode === "timeline" ? "on this date" : "found"}.</p><p className="mt-1 text-xs text-[#64748B]">{viewMode === "timeline" ? "Choose a time slot to book." : "Try another status filter."}</p></div>
+        ) : (
+          <div className={viewMode === "list" ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "appointment-timeline space-y-3"}>
+            {visibleAppointments.map((appointment) => (
+              <article key={appointment._id} className="appointment-card">
+                <div className="appointment-card-body">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="appointment-card-time">{appointment.time}</span>
+                    <span className="text-xs text-[#64748B]">{appointment.durationMinutes} min{viewMode === "list" && <> &middot; {appointment.date}</>}</span>
                   </div>
-
-                  <h4
-                    onClick={() => handleOpenPatientDossier(apt.patientId, apt.patientName)}
-                    className="font-bold text-base text-[#1E2D2B] mt-1.5 hover:text-[#2F8EAC] cursor-pointer"
-                  >
-                    <span className={apt.status === "cancelled" ? "line-through text-slate-400" : ""}>{apt.patientName}</span>
-                  </h4>
-                  <p className="text-xs font-semibold text-[#586B67]">{apt.procedure}</p>
-                  <p className="text-[11px] font-mono text-[#7E9691] mt-1">{apt.patientPhone}</p>
+                  <h3 className="mt-2 break-words text-base font-bold"><button type="button" onClick={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} className="text-left hover:text-[#0089A8]">{appointment.patientName}</button></h3>
+                  <p className="mt-1 text-sm font-medium text-[#007F96]">{appointment.procedure}</p>
+                  {appointment.notes && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#64748B]">{appointment.notes}</p>}
+                  <a href={`tel:${appointment.patientPhone}`} className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</a>
                 </div>
-
-                <div className="pt-2 border-t border-[#E7E9E3] flex items-center justify-between text-xs">
-                  <a
-                    href={getWhatsAppReminderUrl(apt)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#2F8EAC] font-semibold hover:underline flex items-center gap-1"
-                  >
-                    <Share2 className="w-3.5 h-3.5" /> WhatsApp
-                  </a>
-
-                  {apt.status === "scheduled" && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleMarkStatus(apt._id, "completed")}
-                        className="px-3 py-1 rounded-lg bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A]"
-                      >
-                        Complete
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Cancel appointment for ${apt.patientName}?`)) {
-                            handleMarkStatus(apt._id, "cancelled");
-                          }
-                        }}
-                        className="px-2.5 py-1 rounded-lg text-rose-600 hover:bg-rose-50 font-semibold text-xs border border-rose-200 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-
-                  {apt.status === "cancelled" && (
-                    <button
-                      onClick={() => handleMarkStatus(apt._id, "scheduled")}
-                      className="text-xs font-mono text-[#7E9691] hover:underline"
-                    >
-                      Reopen
-                    </button>
-                  )}
+                <div className="appointment-card-controls">
+                  <span className={`appointment-status ${appointment.status}`}>{appointment.status === "completed" && <Check size={13} aria-hidden="true" />}{appointment.status}</span>
+                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} />
+                  {appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
                 </div>
-              </div>
+              </article>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
       {/* ================= SMART BOOKING MODAL FOR SINGLE DENTIST ================= */}
       {isBookModalOpen && (
-        <div className="fixed inset-0 bg-[#162321]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E7E9E3] text-xs my-auto animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E9E3]">
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs my-auto animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
-                <h3 className="font-bold text-lg text-[#1E2D2B]">
-                  Book Patient into {clinicProfile.dentistName}&apos;s Chair
+                <h3 className="font-bold text-lg text-[#111C3A]">
+                  Book Appointment
                 </h3>
-                <p className="text-[11px] text-[#586B67] mt-0.5">
-                  Single operatory schedule • Avoids time overlaps automatically
-                </p>
+
               </div>
               <button
                 onClick={() => setIsBookModalOpen(false)}
-                className="p-1 rounded-lg text-[#7E9691] hover:text-[#1E2D2B]"
+                aria-label="Close booking form"
+                className="p-1 rounded-lg text-[#8291A7] hover:text-[#111C3A]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -797,8 +370,8 @@ export default function AppointmentsPage() {
               
               {/* Quick Procedure Template Chips */}
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1.5">
-                  1-Tap Procedure Preset (Auto-sets duration):
+                <label className="font-semibold text-[#111C3A] block mb-1.5">
+                  Treatment Presets
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {procedurePresets.map((preset, idx) => (
@@ -814,8 +387,8 @@ export default function AppointmentsPage() {
                       }}
                       className={`text-[11px] px-2.5 py-1 rounded-xl border transition-all text-left ${
                         form.procedure === preset.name
-                          ? "bg-[#2F8EAC] text-white border-[#2F8EAC] font-semibold"
-                          : "bg-[#FBF9F1] border-[#E7E9E3] text-[#586B67] hover:bg-[#E8F0F1]"
+                          ? "bg-[#0089A8] text-white border-[#0089A8] font-semibold"
+                          : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
                       }`}
                     >
                       {preset.name} ({preset.duration}m)
@@ -825,7 +398,7 @@ export default function AppointmentsPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Patient Full Name *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Patient Name *</label>
                 <input
                   type="text"
                   required
@@ -841,7 +414,7 @@ export default function AppointmentsPage() {
                       ...(matched ? { patientPhone: matched.phone } : {}),
                     }));
                   }}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none focus:border-[#2F8EAC] bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
                 />
                 <datalist id="registered-patients">
                   {patients.map((p) => (
@@ -853,37 +426,37 @@ export default function AppointmentsPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Patient WhatsApp Phone *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
                 <input
                   type="tel"
                   required
                   placeholder="+91 98201 44521"
                   value={form.patientPhone}
                   onChange={(e) => setForm({ ...form, patientPhone: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none focus:border-[#2F8EAC] font-mono bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#1E2D2B] block mb-1">Date *</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Date *</label>
                   <input
                     type="date"
                     required
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none focus:border-[#2F8EAC] font-mono bg-[#FBF9F1]"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-[#1E2D2B] block mb-1">Duration (Min)</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Duration (Min)</label>
                   <input
                     type="number"
                     step={15}
                     value={form.durationMinutes}
                     onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
-                    className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none focus:border-[#2F8EAC] font-mono bg-[#FBF9F1]"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
                   />
                 </div>
               </div>
@@ -891,11 +464,11 @@ export default function AppointmentsPage() {
               {/* Visual Operatory Time Slot Selection Chips */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[#1E2D2B] block text-xs">
+                  <label className="font-semibold text-[#111C3A] block text-xs">
                     Select Available Time Slot for {form.date}:
                   </label>
-                  <span className="text-[11px] font-mono text-[#7E9691]">
-                    Selected: <strong className="text-[#2F8EAC]">{form.time}</strong>
+                  <span className="text-[11px] font-mono text-[#8291A7]">
+                    Selected: <strong className="text-[#0089A8]">{form.time}</strong>
                   </span>
                 </div>
 
@@ -926,12 +499,12 @@ export default function AppointmentsPage() {
                         onClick={() => setForm({ ...form, time: hour })}
                         className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
                           isSelected
-                            ? "bg-[#2F8EAC] text-white border-[#2F8EAC] font-bold shadow-xs scale-102"
-                            : "bg-[#FBF9F1] hover:bg-[#E8F0F1] border-[#E7E9E3] text-[#1E2D2B]"
+                            ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
+                            : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
                         }`}
                       >
                         <div>{hour}</div>
-                        <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#2F8EAC]"}`}>
+                        <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
                           {isSelected ? "Selected" : "Free"}
                         </span>
                       </button>
@@ -958,29 +531,29 @@ export default function AppointmentsPage() {
               })()}
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Chairside Notes (Optional)</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Notes (Optional)</label>
                 <input
                   type="text"
                   placeholder="e.g. Advised soft diet, bring previous X-rays"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none focus:border-[#2F8EAC] bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
                 />
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E7E9E3]">
+              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
                   onClick={() => setIsBookModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#586B67] hover:bg-slate-100 font-semibold"
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] transition-colors shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs"
                 >
-                  Lock Appointment Slot
+                  Confirm Booking
                 </button>
               </div>
             </form>
@@ -990,37 +563,37 @@ export default function AppointmentsPage() {
 
       {/* ================= RESCHEDULE MODAL ================= */}
       {rescheduleApt && (
-        <div className="fixed inset-0 bg-[#162321]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E7E9E3] text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E7E9E3]">
-              <h3 className="font-bold text-base text-[#1E2D2B]">Reschedule Patient</h3>
-              <button onClick={() => setRescheduleApt(null)} className="text-[#7E9691] hover:text-[#1E2D2B]">
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
+              <h3 className="font-bold text-base text-[#111C3A]">Reschedule Appointment</h3>
+              <button onClick={() => setRescheduleApt(null)} aria-label="Close reschedule form" className="text-[#8291A7] hover:text-[#111C3A]">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-[#586B67] my-3">
-              Rescheduling appointment for: <strong className="text-[#1E2D2B]">{rescheduleApt.patientName}</strong>
+            <p className="text-[#64748B] my-3">
+              Rescheduling appointment for: <strong className="text-[#111C3A]">{rescheduleApt.patientName}</strong>
             </p>
 
             <form onSubmit={handleRescheduleSubmit} className="space-y-3">
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">New Date *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">New Date *</label>
                 <input
                   type="date"
                   required
                   value={rescheduleData.date}
                   onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none font-mono bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">New Time *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">New Time *</label>
                 <select
                   value={rescheduleData.time}
                   onChange={(e) => setRescheduleData({ ...rescheduleData, time: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none font-mono bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
                 >
                   {workingHours.map((h) => (
                     <option key={h} value={h}>
@@ -1031,27 +604,27 @@ export default function AppointmentsPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-[#1E2D2B] block mb-1">Reason for Rescheduling</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Reason for Rescheduling</label>
                 <input
                   type="text"
                   placeholder="e.g. Patient requested morning slot"
                   value={rescheduleData.reason}
                   onChange={(e) => setRescheduleData({ ...rescheduleData, reason: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E7E9E3] outline-none bg-[#FBF9F1]"
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none bg-[#FAFBFC]"
                 />
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E7E9E3]">
+              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
                   onClick={() => setRescheduleApt(null)}
-                  className="px-3.5 py-1.5 rounded-xl text-[#586B67] hover:bg-slate-100 font-semibold"
+                  className="px-3.5 py-1.5 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A]"
+                  className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E]"
                 >
                   Confirm Reschedule
                 </button>
