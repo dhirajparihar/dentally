@@ -314,13 +314,15 @@ export async function rescheduleAppointment(
   try {
     const conn = await ensureDbInitialized(email);
     if (conn) {
-      const apt = mem.appointments.find((a) => a._id === appointmentId);
-      if (apt) {
-        await AppointmentModel.updateOne(
-          { _id: appointmentId, dentistEmail: email },
-          { date, time, notes: apt.notes }
-        );
-      }
+      const existing = await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email });
+      const finalNotes = existing
+        ? `${existing.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim()
+        : `[Rescheduled: ${reason || "Patient request"}]`;
+
+      await AppointmentModel.updateOne(
+        { _id: appointmentId, dentistEmail: email },
+        { date, time, notes: finalNotes }
+      );
     }
   } catch (err) {
     console.error("Error rescheduling appointment in MongoDB:", err);

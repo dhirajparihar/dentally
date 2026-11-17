@@ -48,7 +48,16 @@ export function verifyDoctorMcpToken(token?: string | null): { email: string; is
     const parts = cleanToken.split("_");
     if (parts.length === 2) {
       const [encodedEmail, signature] = parts;
+      if (!encodedEmail || !signature) {
+        return { email: DEFAULT_DEMO_EMAIL, isValid: false };
+      }
+
       const decodedEmail = Buffer.from(encodedEmail, "base64url").toString("utf8").toLowerCase().trim();
+
+      // Basic RFC email validation check to avoid invalid injection payloads
+      if (!decodedEmail.includes("@") || !decodedEmail.includes(".") || decodedEmail.length > 120) {
+        return { email: DEFAULT_DEMO_EMAIL, isValid: false };
+      }
 
       const expectedSignature = crypto
         .createHmac("sha256", SECRET)
@@ -56,12 +65,16 @@ export function verifyDoctorMcpToken(token?: string | null): { email: string; is
         .digest("hex")
         .slice(0, 24);
 
-      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+      const sigBuf = Buffer.from(signature, "utf8");
+      const expectedBuf = Buffer.from(expectedSignature, "utf8");
+
+      // Length check protects against RangeError in timingSafeEqual
+      if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
         return { email: decodedEmail, isValid: true };
       }
     }
   } catch (err) {
-    // Malformed token
+    // Malformed token safely ignored
   }
 
   return { email: DEFAULT_DEMO_EMAIL, isValid: false };

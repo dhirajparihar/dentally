@@ -34,9 +34,26 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const searchParams = request.nextUrl.searchParams;
-    const requestedEmail = searchParams.get("email") || session?.user?.email || DEFAULT_DEMO_EMAIL;
+    const requestedEmail = searchParams.get("email");
 
-    const state = await getClinicData(requestedEmail);
+    // Secure Authorization:
+    // If user has an active session, lock strictly to their authenticated email.
+    // Prevent IDOR (insecure direct object reference) where Doctor A queries Doctor B's email.
+    let targetEmail: string;
+    if (session?.user?.email) {
+      targetEmail = session.user.email.toLowerCase().trim();
+      if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
+        return NextResponse.json(
+          { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    } else {
+      // Unauthenticated callers may only access the public demo account
+      targetEmail = DEFAULT_DEMO_EMAIL;
+    }
+
+    const state = await getClinicData(targetEmail);
     return NextResponse.json(state, {
       status: 200,
       headers: {
@@ -59,9 +76,20 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const body = await request.json();
-    const { action, data, appointmentId, date, time, reason, dentistEmail } = body;
+    const { action, data, appointmentId, date, time, reason } = body;
 
-    const email = (dentistEmail || session?.user?.email || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+    // Secure Authorization:
+    // Enforce mutations to the authenticated user's email only.
+    let email: string;
+    if (session?.user?.email) {
+      email = session.user.email.toLowerCase().trim();
+    } else {
+      // Reject unauthenticated modifications to private records
+      return NextResponse.json(
+        { error: "Unauthorized: Please sign in with Google to modify clinic records." },
+        { status: 401, headers: corsHeaders }
+      );
+    }
     const doctorName = session?.user?.name || "Doctor";
 
     switch (action) {

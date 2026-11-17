@@ -87,10 +87,47 @@ function calculatePatientBalance(patientId: string) {
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
   const email = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
   const fresh = await getClinicData(email);
-  patientsState = fresh.patients;
-  appointmentsState = fresh.appointments;
-  feesState = fresh.fees;
-  paymentsState = fresh.payments;
+
+  // Request-scoped state (strictly isolated per execution to prevent multi-tenant race conditions)
+  const patientsState: Patient[] = [...fresh.patients];
+  const appointmentsState: Appointment[] = [...fresh.appointments];
+  const feesState: FeeItem[] = [...fresh.fees];
+  const paymentsState: PaymentTransaction[] = [...fresh.payments];
+
+  // Helper to find patient by query (ID, phone or name) scoped to current doctor
+  const findPatientHelper = (query: string): Patient | undefined => {
+    if (!query) return undefined;
+    const q = query.toLowerCase().trim();
+    return patientsState.find(
+      (p) =>
+        p._id.toLowerCase() === q ||
+        p.phone.replace(/\s+/g, "").includes(q.replace(/\s+/g, "")) ||
+        p.name.toLowerCase().includes(q)
+    );
+  };
+
+  // Helper to calculate patient balance scoped to current doctor
+  const calculatePatientBalance = (patientId: string) => {
+    const patientFees = feesState.filter((f) => f.patientId === patientId);
+    const patientPayments = paymentsState.filter((p) => p.patientId === patientId && !p.isRefund);
+    const patientRefunds = paymentsState.filter((p) => p.patientId === patientId && p.isRefund);
+
+    const totalGross = patientFees.reduce((sum, f) => sum + f.amount, 0);
+    const totalDiscount = patientFees.reduce((sum, f) => sum + (f.discount || 0), 0);
+    const totalBilled = patientFees.reduce((sum, f) => sum + f.netAmount, 0);
+    const totalPaid = patientPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalRefunded = patientRefunds.reduce((sum, p) => sum + p.amount, 0);
+    const netPaid = totalPaid - totalRefunded;
+    const outstandingBalance = Math.max(0, totalBilled - netPaid);
+
+    return {
+      totalGross,
+      totalDiscount,
+      totalBilled,
+      totalPaid: netPaid,
+      outstandingBalance,
+    };
+  };
 
   const todayStr = new Date().toISOString().split("T")[0];
 

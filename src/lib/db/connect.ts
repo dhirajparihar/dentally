@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI || "";
-
 let cached = (global as any).mongoose;
 
 if (!cached) {
@@ -9,7 +7,8 @@ if (!cached) {
 }
 
 export async function connectDB() {
-  if (!MONGODB_URI) {
+  const uri = process.env.MONGODB_URI?.trim();
+  if (!uri) {
     // If MongoDB URI is not provided in env, gracefully inform caller
     return null;
   }
@@ -23,7 +22,7 @@ export async function connectDB() {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
+    cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
       return mongooseInstance;
     });
   }
