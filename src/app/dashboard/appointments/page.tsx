@@ -25,25 +25,19 @@ import {
 } from "lucide-react";
 import {
   Appointment,
-  Patient,
 } from "@/lib/mockData";
-import { Patient360DossierModal } from "@/components/dashboard/Patient360DossierModal";
+import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 
 export default function AppointmentsPage() {
   const {
     appointments,
     patients,
-    fees,
-    payments,
     clinicProfile,
     loading,
     bookAppointment,
     completeAppointment,
     rescheduleAppointment,
-    updatePatient,
-    recordPayment,
-    addFee,
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
@@ -54,7 +48,7 @@ export default function AppointmentsPage() {
   // Modals
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
-  const [selectedPatientForDossier, setSelectedPatientForDossier] = useState<Patient | null>(null);
+  const router = useRouter();
   const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
 
   // Quick procedure templates for single dentist (Auto-sets procedure and duration)
@@ -132,25 +126,7 @@ export default function AppointmentsPage() {
   // Open Dossier for Patient
   const handleOpenPatientDossier = (patientId: string, patientName: string) => {
     const found = patients.find((p) => p._id === patientId || p.name === patientName);
-    if (found) {
-      setSelectedPatientForDossier(found);
-    } else {
-      // Create provisional patient if booking was manual
-      const prov: Patient = {
-        _id: patientId || `pat_${Date.now()}`,
-        name: patientName,
-        age: 30,
-        gender: "Male",
-        phone: "+91 98200 00000",
-        email: "",
-        bloodGroup: "O+",
-        medicalAlerts: ["None"],
-        registeredDate: selectedDate,
-        notes: [],
-        history: [],
-      };
-      setSelectedPatientForDossier(prov);
-    }
+    router.push(`/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`);
   };
 
   // Booking submit
@@ -406,7 +382,7 @@ export default function AppointmentsPage() {
                   key={slot}
                   type="button"
                   onClick={() => handleOpenPatientDossier(bookedApt.patientId, bookedApt.patientName)}
-                  title={`Booked by ${bookedApt.patientName} (${bookedApt.procedure}). Tap to open 360° dossier.`}
+                  title={`Booked by ${bookedApt.patientName} (${bookedApt.procedure}). Tap to open patient details.`}
                   className="px-3 py-2 rounded-xl bg-[#F8FAF9] border border-[#DCE2DE] text-xs font-mono text-[#3D5450] whitespace-nowrap flex items-center gap-2 shrink-0 hover:border-[#2F8EAC] transition-colors shadow-2xs group"
                 >
                   <span className="w-2 h-2 rounded-full bg-slate-400 group-hover:bg-[#2F8EAC]" />
@@ -517,11 +493,11 @@ export default function AppointmentsPage() {
                             <h3
                               onClick={() => handleOpenPatientDossier(apt.patientId, apt.patientName)}
                               className="font-bold text-lg text-[#1E2D2B] hover:text-[#2F8EAC] transition-colors cursor-pointer flex items-center gap-1.5"
-                              title="Click to view full 360° patient dossier"
+                              title="Click to view full patient details"
                             >
                               {apt.patientName}
                               <span className="text-[10px] font-mono font-normal bg-[#E8F0F1] text-[#2F8EAC] px-2 py-0.5 rounded-md border border-[#C7E7EC]">
-                                View 360° EHR →
+                                View Patient →
                               </span>
                             </h3>
 
@@ -1031,23 +1007,6 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {/* ================= 360° PATIENT DOSSIER MODAL ================= */}
-      {selectedPatientForDossier && (
-        <Patient360DossierModal
-          patient={selectedPatientForDossier}
-          onClose={() => setSelectedPatientForDossier(null)}
-          onUpdatePatient={(upd) => {
-            updatePatient(upd);
-            setSelectedPatientForDossier(upd);
-          }}
-          fees={fees}
-          payments={payments}
-          appointments={appointments}
-          onAddPayment={recordPayment}
-          onAddFee={addFee}
-          onBookAppointment={bookAppointment}
-        />
-      )}
     </div>
   );
 }

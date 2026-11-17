@@ -27,7 +27,7 @@ import {
   Patient,
   initialPatients,
 } from "@/lib/mockData";
-import { Patient360DossierModal } from "@/components/dashboard/Patient360DossierModal";
+import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 
 export default function FeesPage() {
@@ -35,13 +35,10 @@ export default function FeesPage() {
     fees,
     payments,
     patients,
-    appointments,
     clinicProfile,
     loading,
     addFee,
     recordPayment,
-    updatePatient,
-    bookAppointment,
   } = useClinic();
 
   const [activeTab, setActiveTab] = useState<"dues" | "fees" | "payments">("dues");
@@ -51,7 +48,7 @@ export default function FeesPage() {
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
   const [qrModalData, setQrModalData] = useState<{ patientName: string; amount: number; procedure?: string } | null>(null);
-  const [selectedPatientForDossier, setSelectedPatientForDossier] = useState<Patient | null>(null);
+  const router = useRouter();
 
   // Common Procedure Pricing Presets for Dr. Ananya's Practice
   const procedurePresets = [
@@ -114,9 +111,9 @@ export default function FeesPage() {
   // Total pending across clinic
   const totalPendingClinic = unpaidDuesList.reduce((s, l) => s + l.outstanding, 0);
 
-  // Open 360° Dossier
+  // Open Patient Details
   const handleOpenDossier = (patient: Patient) => {
-    setSelectedPatientForDossier(patient);
+    router.push(`/dashboard/patients/${encodeURIComponent(patient._id)}`);
   };
 
   // Quick WhatsApp Bill link generator
@@ -995,23 +992,6 @@ export default function FeesPage() {
         </div>
       )}
 
-      {/* ================= 360° PATIENT DOSSIER MODAL ================= */}
-      {selectedPatientForDossier && (
-        <Patient360DossierModal
-          patient={selectedPatientForDossier}
-          onClose={() => setSelectedPatientForDossier(null)}
-          onUpdatePatient={(upd) => {
-            updatePatient(upd);
-            setSelectedPatientForDossier(upd);
-          }}
-          fees={fees}
-          payments={payments}
-          appointments={appointments}
-          onAddPayment={recordPayment}
-          onAddFee={addFee}
-          onBookAppointment={bookAppointment}
-        />
-      )}
     </div>
   );
 }

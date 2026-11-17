@@ -15,7 +15,7 @@ import {
 import {
   Patient,
 } from "@/lib/mockData";
-import { Patient360DossierModal } from "@/components/dashboard/Patient360DossierModal";
+import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 
 export default function PatientsPage() {
@@ -23,19 +23,14 @@ export default function PatientsPage() {
     patients,
     fees,
     payments,
-    appointments,
     clinicProfile,
     loading,
     loadSampleData,
     addPatient,
-    updatePatient,
-    recordPayment,
-    addFee,
-    bookAppointment,
   } = useClinic();
 
   const [search, setSearch] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const router = useRouter();
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -91,10 +86,6 @@ export default function PatientsPage() {
     });
   };
 
-  const handleUpdatePatient = (updated: Patient) => {
-    updatePatient(updated);
-    setSelectedPatient(updated);
-  };
 
   // Helper to calculate balance
   const getBalance = (patientId: string) => {
@@ -307,10 +298,10 @@ export default function PatientsPage() {
                   </a>
 
                   <button
-                    onClick={() => setSelectedPatient(patient)}
+                    onClick={() => router.push(`/dashboard/patients/${encodeURIComponent(patient._id)}`)}
                     className="px-3.5 py-2 rounded-xl bg-[#2F8EAC] text-white font-semibold hover:bg-[#24728A] transition-colors shadow-2xs text-xs"
                   >
-                    360° Dossier →
+                    Patient Details →
                   </button>
                 </div>
               </div>
@@ -320,20 +311,6 @@ export default function PatientsPage() {
         </div>
       )}
 
-      {/* 360° Dossier Panoramic Modal */}
-      {selectedPatient && (
-        <Patient360DossierModal
-          patient={selectedPatient}
-          onClose={() => setSelectedPatient(null)}
-          onUpdatePatient={handleUpdatePatient}
-          fees={fees}
-          payments={payments}
-          appointments={appointments}
-          onAddPayment={recordPayment}
-          onAddFee={addFee}
-          onBookAppointment={bookAppointment}
-        />
-      )}
 
       {/* Add Patient Modal */}
       {isAddOpen && (
