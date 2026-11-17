@@ -70,7 +70,6 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async () => {
     try {
-      setIsSyncing(true);
       const res = await fetch("/api/clinic", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
@@ -91,19 +90,27 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
     } catch (err) {
-      console.warn("Clinic sync error:", err);
+      console.warn("Clinic fetch error:", err);
     } finally {
       setLoading(false);
-      setIsSyncing(false);
     }
   }, [session?.user?.name, userEmail]);
 
-  // Sync when NextAuth finishes resolving the session (avoids flashing while loading)
+  // Initial load when session resolves + revalidate on tab focus (NOT a blind 15s timer)
   useEffect(() => {
     if (status === "loading") return;
     refreshClinic();
-    const interval = setInterval(refreshClinic, 15000);
-    return () => clearInterval(interval);
+
+    // Silently refresh ONLY when the doctor returns to this browser tab from ChatGPT
+    const onFocus = () => {
+      // Don't revalidate if user is actively typing in an input
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      refreshClinic();
+    };
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [status, refreshClinic]);
 
   // Generic helper to post mutations scoped to current doctor
