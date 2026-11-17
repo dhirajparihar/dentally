@@ -37,13 +37,14 @@ export default function AppointmentsPage() {
     loading,
     bookAppointment,
     completeAppointment,
+    cancelAppointment,
     rescheduleAppointment,
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
-  const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
 
   // Modals
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -120,6 +121,8 @@ export default function AppointmentsPage() {
   const handleMarkStatus = (id: string, newStatus: "scheduled" | "completed" | "missed" | "cancelled") => {
     if (newStatus === "completed") {
       completeAppointment(id);
+    } else if (newStatus === "cancelled") {
+      cancelAppointment(id);
     }
   };
 
@@ -452,6 +455,7 @@ export default function AppointmentsPage() {
               {dayAppointments.map((apt, index) => {
                 const isCompleted = apt.status === "completed";
                 const isMissed = apt.status === "missed";
+                const isCancelled = apt.status === "cancelled";
 
                 return (
                   <div key={apt._id} className="relative flex items-start gap-4 sm:gap-6 group">
@@ -461,6 +465,8 @@ export default function AppointmentsPage() {
                         className={`w-10 h-10 rounded-2xl flex items-center justify-center font-mono text-xs font-bold shadow-2xs border ${
                           isCompleted
                             ? "bg-[#E8F0F1] text-[#2F8EAC] border-[#BDDBD1]"
+                            : isCancelled
+                            ? "bg-slate-100 text-slate-400 border-slate-200"
                             : isMissed
                             ? "bg-rose-50 text-rose-700 border-rose-200"
                             : "bg-[#2F8EAC] text-white border-[#24728A]"
@@ -481,6 +487,8 @@ export default function AppointmentsPage() {
                       className={`flex-1 rounded-2xl border p-5 transition-all shadow-card-subtle ${
                         isCompleted
                           ? "bg-white/80 border-[#E7E9E3] opacity-80"
+                          : isCancelled
+                          ? "bg-slate-50/70 border-slate-200 opacity-70"
                           : isMissed
                           ? "bg-rose-50/40 border-rose-200"
                           : "bg-white border-[#E7E9E3] hover:border-[#2F8EAC]/60"
@@ -495,7 +503,7 @@ export default function AppointmentsPage() {
                               className="font-bold text-lg text-[#1E2D2B] hover:text-[#2F8EAC] transition-colors cursor-pointer flex items-center gap-1.5"
                               title="Click to view full patient details"
                             >
-                              {apt.patientName}
+                              <span className={isCancelled ? "line-through text-slate-500" : ""}>{apt.patientName}</span>
                               <span className="text-[10px] font-mono font-normal bg-[#E8F0F1] text-[#2F8EAC] px-2 py-0.5 rounded-md border border-[#C7E7EC]">
                                 View Patient →
                               </span>
@@ -506,6 +514,8 @@ export default function AppointmentsPage() {
                               className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${
                                 isCompleted
                                   ? "bg-[#E8F0F1] text-[#2F8EAC] border border-[#BDDBD1]"
+                                  : isCancelled
+                                  ? "bg-slate-100 text-slate-600 border border-slate-200"
                                   : isMissed
                                   ? "bg-rose-100 text-rose-800 border border-rose-200"
                                   : "bg-[#BDDBD1]/30 text-[#1E2D2B] border border-[#BDDBD1]"
@@ -561,7 +571,7 @@ export default function AppointmentsPage() {
                           )}
 
                           {/* 1-Tap Chairside Status Transitions */}
-                          {!isCompleted && !isMissed && (
+                          {!isCompleted && !isMissed && !isCancelled && (
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => handleMarkStatus(apt._id, "completed")}
@@ -580,10 +590,21 @@ export default function AppointmentsPage() {
                               >
                                 Reschedule
                               </button>
+
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Cancel appointment for ${apt.patientName}?`)) {
+                                    handleMarkStatus(apt._id, "cancelled");
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl text-xs text-rose-600 hover:bg-rose-50 font-semibold transition-colors"
+                              >
+                                Cancel
+                              </button>
                             </div>
                           )}
 
-                          {isCompleted && (
+                          {(isCompleted || isCancelled) && (
                             <button
                               onClick={() => handleMarkStatus(apt._id, "scheduled")}
                               className="text-[11px] font-mono text-[#7E9691] hover:underline px-2"
@@ -659,6 +680,16 @@ export default function AppointmentsPage() {
             >
               Missed ({appointments.filter((a) => a.status === "missed").length})
             </button>
+            <button
+              onClick={() => setStatusFilter("cancelled")}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                statusFilter === "cancelled"
+                  ? "bg-[#2F8EAC] text-white"
+                  : "text-[#586B67] hover:text-[#1E2D2B]"
+              }`}
+            >
+              Cancelled ({appointments.filter((a) => a.status === "cancelled").length})
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -676,6 +707,8 @@ export default function AppointmentsPage() {
                       className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${
                         apt.status === "completed"
                           ? "bg-[#E8F0F1] text-[#2F8EAC]"
+                          : apt.status === "cancelled"
+                          ? "bg-slate-100 text-slate-500"
                           : "bg-slate-100 text-slate-700"
                       }`}
                     >
@@ -687,7 +720,7 @@ export default function AppointmentsPage() {
                     onClick={() => handleOpenPatientDossier(apt.patientId, apt.patientName)}
                     className="font-bold text-base text-[#1E2D2B] mt-1.5 hover:text-[#2F8EAC] cursor-pointer"
                   >
-                    {apt.patientName}
+                    <span className={apt.status === "cancelled" ? "line-through text-slate-400" : ""}>{apt.patientName}</span>
                   </h4>
                   <p className="text-xs font-semibold text-[#586B67]">{apt.procedure}</p>
                   <p className="text-[11px] font-mono text-[#7E9691] mt-1">{apt.patientPhone}</p>
@@ -704,11 +737,32 @@ export default function AppointmentsPage() {
                   </a>
 
                   {apt.status === "scheduled" && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleMarkStatus(apt._id, "completed")}
+                        className="px-3 py-1 rounded-lg bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A]"
+                      >
+                        Complete
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Cancel appointment for ${apt.patientName}?`)) {
+                            handleMarkStatus(apt._id, "cancelled");
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-rose-600 hover:bg-rose-50 font-semibold text-xs border border-rose-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {apt.status === "cancelled" && (
                     <button
-                      onClick={() => handleMarkStatus(apt._id, "completed")}
-                      className="px-3 py-1 rounded-lg bg-[#2F8EAC] text-white font-semibold text-xs hover:bg-[#24728A]"
+                      onClick={() => handleMarkStatus(apt._id, "scheduled")}
+                      className="text-xs font-mono text-[#7E9691] hover:underline"
                     >
-                      Complete
+                      Reopen
                     </button>
                   )}
                 </div>
