@@ -19,14 +19,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
     appointments: "Appointments",
     fees: "Fees & Collections",
     mcp: "ChatGPT MCP Hub",
+    settings: "Clinic Settings",
   };
   const pageTitle = title ?? sectionTitles[pathname.split("/")[2]] ?? "Dashboard";
   const { isSyncing, clinicProfile } = useClinic();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const userName = session?.user?.name || clinicProfile.dentistName;
-  const userEmail = session?.user?.email || clinicProfile.email;
+  const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
+  const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
   const userImage = session?.user?.image;
   const initials = userName
     .split(" ")

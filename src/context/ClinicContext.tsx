@@ -8,6 +8,7 @@ import {
   FeeItem,
   PaymentTransaction,
   clinicProfile as defaultClinicProfile,
+  ClinicProfile,
   initialPatients,
   initialAppointments,
   initialFees,
@@ -19,7 +20,7 @@ export interface ClinicContextType {
   appointments: Appointment[];
   fees: FeeItem[];
   payments: PaymentTransaction[];
-  clinicProfile: typeof defaultClinicProfile;
+  clinicProfile: ClinicProfile;
   loading: boolean;
   isSyncing: boolean;
   userEmail: string;
@@ -29,57 +30,75 @@ export interface ClinicContextType {
   updatePatient: (patient: Patient) => Promise<void>;
   bookAppointment: (appointment: Appointment) => Promise<void>;
   completeAppointment: (appointmentId: string) => Promise<void>;
+  cancelAppointment: (appointmentId: string, reason?: string) => Promise<void>;
   rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<void>;
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
+  updateClinicProfile: (profile: Partial<ClinicProfile>) => Promise<void>;
 }
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { data: session, status } = useSession();
-  const userEmail = (session?.user?.email || "dr.ananya@dentally.app").toLowerCase().trim();
-  const isDemoUser = userEmail === "dr.ananya@dentally.app";
+  const userEmail = (session?.user?.email || "").toLowerCase().trim();
 
-  const [patients, setPatients] = useState<Patient[]>(() => (isDemoUser ? initialPatients : []));
-  const [appointments, setAppointments] = useState<Appointment[]>(() => (isDemoUser ? initialAppointments : []));
-  const [fees, setFees] = useState<FeeItem[]>(() => (isDemoUser ? initialFees : []));
-  const [payments, setPayments] = useState<PaymentTransaction[]>(() => (isDemoUser ? initialPayments : []));
+  // Always initialize with empty clean state - NEVER flash demo data while loading
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [fees, setFees] = useState<FeeItem[]>([]);
+  const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [clinicProfile, setClinicProfile] = useState<ClinicProfile>(() => ({
+    ...defaultClinicProfile,
+    dentistName: "Doctor",
+    email: userEmail,
+  }));
 
-  // Dynamically tailor clinic profile to the logged-in doctor
-  const clinicProfile = useMemo(() => {
-    if (!session?.user) return defaultClinicProfile;
-    return {
-      ...defaultClinicProfile,
-      dentistName: session.user.name || "Dr. Dentist",
-      email: session.user.email || defaultClinicProfile.email,
-    };
+  // Keep clinicProfile synced with authenticated session
+  useEffect(() => {
+    if (session?.user) {
+      setClinicProfile((prev) => ({
+        ...prev,
+        dentistName: prev.dentistName && prev.dentistName !== "Doctor" ? prev.dentistName : (session.user?.name || "Doctor"),
+        email: session.user?.email || prev.email,
+      }));
+    }
   }, [session?.user]);
 
   // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async () => {
     try {
       setIsSyncing(true);
-      const url = `/api/clinic?email=${encodeURIComponent(userEmail)}`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch("/api/clinic", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setPatients(data.patients || []);
         setAppointments(data.appointments || []);
         setFees(data.fees || []);
         setPayments(data.payments || []);
+        if (data.clinicProfile) {
+          setClinicProfile((prev) => ({
+            ...prev,
+            ...data.clinicProfile,
+            dentistName:
+              data.clinicProfile.dentistName && data.clinicProfile.dentistName !== "Doctor"
+                ? data.clinicProfile.dentistName
+                : (session?.user?.name || prev.dentistName || "Doctor"),
+            email: userEmail || data.clinicProfile.email,
+          }));
+        }
       }
     } catch (err) {
-      console.warn("Clinic sync fallback to local state:", err);
+      console.warn("Clinic sync error:", err);
     } finally {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [userEmail]);
+  }, [session?.user?.name, userEmail]);
 
-  // Sync on session change and periodically poll every 15s for external MCP agent mutations
+  // Sync when NextAuth finishes resolving the session (avoids flashing while loading)
   useEffect(() => {
     if (status === "loading") return;
     refreshClinic();
@@ -139,6 +158,21 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "complete_appointment", appointmentId });
   };
 
+  const cancelAppointment = async (appointmentId: string, reason?: string) => {
+    setAppointments((prev) =>
+      prev.map((a) =>
+        a._id === appointmentId
+          ? {
+              ...a,
+              status: "cancelled" as const,
+              notes: `${a.notes || ""} [Cancelled: ${reason || "Patient request"}]`.trim(),
+            }
+          : a
+      )
+    );
+    await postMutation({ action: "cancel_appointment", appointmentId, reason });
+  };
+
   const rescheduleAppointment = async (
     appointmentId: string,
     date: string,
@@ -172,6 +206,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "record_payment", data: scoped });
   };
 
+  const updateClinicProfile = async (profileData: Partial<ClinicProfile>) => {
+    setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail }));
+    await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
+  };
+
   return (
     <ClinicContext.Provider
       value={{
@@ -189,9 +228,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updatePatient,
         bookAppointment,
         completeAppointment,
+        cancelAppointment,
         rescheduleAppointment,
         addFee,
         recordPayment,
+        updateClinicProfile,
       }}
     >
       {children}

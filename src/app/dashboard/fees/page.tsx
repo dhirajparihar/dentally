@@ -44,7 +44,7 @@ export default function FeesPage() {
   const [qrModalData, setQrModalData] = useState<{ patientName: string; amount: number; procedure?: string } | null>(null);
   const router = useRouter();
 
-  // Common Procedure Pricing Presets for Dr. Ananya's Practice
+  // Common Procedure Pricing Presets
   const procedurePresets = [
     { name: "Consultation & Diagnostic X-Ray", price: 500 },
     { name: "Composite Restoration / Filling", price: 1500 },
@@ -114,7 +114,8 @@ export default function FeesPage() {
   const getWhatsAppBillUrl = (patient: Patient, outstanding: number, procedure?: string) => {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const msg = `Hello ${patient.name}, greeting from ${clinicProfile.name}.\n\nYour itemized account statement for recent treatment (${procedure || "Dental Procedure"}):\nOutstanding balance due: ₹${outstanding.toLocaleString()}.\n\nYou can pay directly via UPI to: ${clinicProfile.dentistName.toLowerCase().replace(/[^a-z]/g, "")}@upi, or scan our QR code on your next visit.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
+    const doctorUpi = clinicProfile.upiId || `${clinicProfile.dentistName.toLowerCase().replace(/[^a-z]/g, "")}@upi`;
+    const msg = `Hello ${patient.name}, greeting from ${clinicProfile.name}.\n\nYour itemized account statement for recent treatment (${procedure || "Dental Procedure"}):\nOutstanding balance due: ₹${outstanding.toLocaleString()}.\n\nYou can pay directly via UPI to: ${doctorUpi}, or scan our QR code on your next visit.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -509,39 +510,22 @@ export default function FeesPage() {
             {/* Generated Visual QR Graphic */}
             <div className="p-4 bg-[#FAFBFC] rounded-2xl border border-[#E4E9F0] inline-block shadow-inner mx-auto">
               <div className="w-44 h-44 bg-white rounded-xl border border-slate-300 p-2 flex flex-col items-center justify-center relative overflow-hidden">
-                {/* SVG QR Code Simulation */}
-                <svg viewBox="0 0 100 100" className="w-full h-full fill-[#111C3A]">
-                  <rect x="10" y="10" width="25" height="25" fill="#111C3A" />
-                  <rect x="14" y="14" width="17" height="17" fill="#FFFFFF" />
-                  <rect x="18" y="18" width="9" height="9" fill="#111C3A" />
-
-                  <rect x="65" y="10" width="25" height="25" fill="#111C3A" />
-                  <rect x="69" y="14" width="17" height="17" fill="#FFFFFF" />
-                  <rect x="73" y="18" width="9" height="9" fill="#111C3A" />
-
-                  <rect x="10" y="65" width="25" height="25" fill="#111C3A" />
-                  <rect x="14" y="69" width="17" height="17" fill="#FFFFFF" />
-                  <rect x="18" y="73" width="9" height="9" fill="#111C3A" />
-
-                  <rect x="42" y="15" width="6" height="10" />
-                  <rect x="52" y="20" width="8" height="6" />
-                  <rect x="42" y="32" width="16" height="6" />
-                  <rect x="20" y="42" width="8" height="15" />
-                  <rect x="35" y="45" width="12" height="12" />
-                  <rect x="55" y="42" width="10" height="8" />
-                  <rect x="70" y="45" width="15" height="6" />
-                  <rect x="42" y="65" width="8" height="20" />
-                  <rect x="55" y="70" width="15" height="8" />
-                  <rect x="75" y="65" width="10" height="20" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-8 h-8 rounded-lg bg-white shadow-xs border border-slate-300 flex items-center justify-center font-bold text-[#0089A8] text-xs">
-                    ₹
-                  </div>
-                </div>
+                {/* Real Dynamic UPI QR Code */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    `upi://pay?pa=${clinicProfile.upiId || "dentally@upi"}&pn=${encodeURIComponent(
+                      clinicProfile.name
+                    )}&am=${qrModalData.amount}&cu=INR`
+                  )}`}
+                  alt="UPI QR Code"
+                  width={160}
+                  height={160}
+                  className="rounded-lg"
+                />
               </div>
-              <div className="mt-2 text-[11px] font-mono text-[#64748B]">
-                Accepted on GPay • PhonePe • Paytm
+              <div className="mt-2 text-[11px] font-mono text-[#586B67]">
+                Scan with GPay • PhonePe • Paytm
               </div>
             </div>
 
@@ -550,8 +534,8 @@ export default function FeesPage() {
               <div className="text-2xl font-bold tracking-tight text-[#111C3A]">
                 ₹{qrModalData.amount.toLocaleString()}
               </div>
-              <span className="text-[10px] font-mono text-[#8291A7] block">
-                UPI ID: {clinicProfile.dentistName.toLowerCase().replace(/[^a-z]/g, "")}@upi
+              <span className="text-[10px] font-mono text-[#7E9691] block">
+                UPI ID: {clinicProfile.upiId || "dentally@upi"}
               </span>
             </div>
 

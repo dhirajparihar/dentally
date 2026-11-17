@@ -6,6 +6,7 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
+  saveClinicProfile,
 } from "@/lib/db/repository";
 import {
   initialPatients,
@@ -13,6 +14,7 @@ import {
   initialFees,
   initialPayments,
   clinicProfile,
+  ClinicProfile,
   Patient,
   Appointment,
   FeeItem,
@@ -84,12 +86,53 @@ function calculatePatientBalance(patientId: string) {
 }
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
-  const email = (dentistEmail || "dr.ananya@dentally.app").toLowerCase().trim();
+  if (!dentistEmail) {
+    throw new Error("Unauthorized: Dentist email is required to execute MCP tools");
+  }
+  const email = dentistEmail.toLowerCase().trim();
   const fresh = await getClinicData(email);
-  patientsState = fresh.patients;
-  appointmentsState = fresh.appointments;
-  feesState = fresh.fees;
-  paymentsState = fresh.payments;
+
+  // Request-scoped state (strictly isolated per execution to prevent multi-tenant race conditions)
+  const patientsState: Patient[] = [...fresh.patients];
+  const appointmentsState: Appointment[] = [...fresh.appointments];
+  const feesState: FeeItem[] = [...fresh.fees];
+  const paymentsState: PaymentTransaction[] = [...fresh.payments];
+  const clinicProfile = fresh.clinicProfile;
+
+  // Helper to find patient by query (ID, phone or name) scoped to current doctor
+  const findPatientHelper = (query: string): Patient | undefined => {
+    if (!query) return undefined;
+    const q = query.toLowerCase().trim();
+    return patientsState.find(
+      (p) =>
+        p._id.toLowerCase() === q ||
+        p.phone.replace(/\s+/g, "").includes(q.replace(/\s+/g, "")) ||
+        p.name.toLowerCase().includes(q)
+    );
+  };
+
+  // Helper to calculate patient balance scoped to current doctor
+  const calculatePatientBalance = (patientId: string) => {
+    const patientFees = feesState.filter((f) => f.patientId === patientId);
+    const patientPayments = paymentsState.filter((p) => p.patientId === patientId && !p.isRefund);
+    const patientRefunds = paymentsState.filter((p) => p.patientId === patientId && p.isRefund);
+
+    const totalGross = patientFees.reduce((sum, f) => sum + f.amount, 0);
+    const totalDiscount = patientFees.reduce((sum, f) => sum + (f.discount || 0), 0);
+    const totalBilled = patientFees.reduce((sum, f) => sum + f.netAmount, 0);
+    const totalPaid = patientPayments.reduce((sum, p) => sum + p.amount, 0);
+    const totalRefunded = patientRefunds.reduce((sum, p) => sum + p.amount, 0);
+    const netPaid = totalPaid - totalRefunded;
+    const outstandingBalance = Math.max(0, totalBilled - netPaid);
+
+    return {
+      totalGross,
+      totalDiscount,
+      totalBilled,
+      totalPaid: netPaid,
+      outstandingBalance,
+    };
+  };
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -445,6 +488,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
 
       apt.status = "completed";
       if (args.notes) apt.notes = `${apt.notes || ""} [Completed: ${args.notes}]`.trim();
+      await updateAppointmentStatus(apt._id, "completed", email);
 
       // Update patient last visit
       const patient = findPatientHelper(apt.patientId);
@@ -456,6 +500,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
           doctor: clinicProfile.dentistName,
           notes: args.notes || "Completed as scheduled.",
         });
+        await savePatient(patient, email);
       }
 
       return {
@@ -868,6 +913,43 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
         missedAppointments: missed,
         totalMonthlyRevenueINR: totalCollection,
         totalActivePatients: patientsState.length,
+      };
+    }
+
+    case "get_clinic_profile": {
+      return {
+        success: true,
+        clinicProfile,
+        message: `Current clinic settings for ${clinicProfile.name}`,
+      };
+    }
+
+    case "update_clinic_profile": {
+      const allowedKeys = [
+        "name",
+        "dentistName",
+        "qualification",
+        "regNo",
+        "phone",
+        "address",
+        "upiId",
+        "slotDuration",
+        "workingHoursStart",
+        "workingHoursEnd",
+        "receiptFooter",
+      ];
+      const updates: Partial<ClinicProfile> = {};
+      for (const key of allowedKeys) {
+        if (args[key] !== undefined) {
+          (updates as any)[key] = args[key];
+        }
+      }
+
+      const updated = await saveClinicProfile(updates, email);
+      return {
+        success: true,
+        message: `Clinic profile updated successfully for ${updated.name}.`,
+        clinicProfile: updated,
       };
     }
 

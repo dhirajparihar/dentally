@@ -1,7 +1,5 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { clinicProfile } from "@/lib/mockData";
 
 const allowedEmails = (process.env.ALLOWED_DENTIST_EMAILS || "")
   .split(",")
@@ -15,7 +13,6 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
-    // 1. Google OAuth Provider (Active whenever credentials are provided)
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           GoogleProvider({
@@ -31,29 +28,9 @@ export const authOptions: NextAuthOptions = {
           }),
         ]
       : []),
-
-    // 2. Dentist Quick Demo Access (Allows seamless development & clinic demo login)
-    CredentialsProvider({
-      id: "dentist-demo",
-      name: "Dentist Chairside Access",
-      credentials: {
-        email: { label: "Email", type: "email", placeholder: clinicProfile.email },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        // Allows Dr. Ananya or demo login
-        return {
-          id: "usr_dentist_01",
-          name: clinicProfile.dentistName,
-          email: credentials?.email || clinicProfile.email,
-          image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=256&h=256",
-          role: "dentist",
-        };
-      },
-    }),
   ],
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user }) {
       if (!user.email) return false;
 
       // If allowed emails whitelist is specified, verify the email
@@ -76,8 +53,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id as string;
-        (session.user as any).role = (token.role as string) || "dentist";
+        (session.user as any).id = token.id || token.sub;
+        (session.user as any).role = token.role || "dentist";
       }
       return session;
     },
@@ -87,4 +64,3 @@ export const authOptions: NextAuthOptions = {
     error: "/login",
   },
 };
-

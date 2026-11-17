@@ -9,10 +9,10 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
+  saveClinicProfile,
   seedSampleDataForDoctor,
-  DEFAULT_DEMO_EMAIL,
 } from "@/lib/db/repository";
-import { Patient, Appointment, FeeItem, PaymentTransaction } from "@/lib/mockData";
+import { Patient, Appointment, FeeItem, PaymentTransaction, ClinicProfile } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -34,9 +34,24 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const searchParams = request.nextUrl.searchParams;
-    const requestedEmail = searchParams.get("email") || session?.user?.email || DEFAULT_DEMO_EMAIL;
+    const requestedEmail = searchParams.get("email");
 
-    const state = await getClinicData(requestedEmail);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: "Unauthorized: Please sign in to access clinic records." },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    const targetEmail = session.user.email.toLowerCase().trim();
+    if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const state = await getClinicData(targetEmail);
     return NextResponse.json(state, {
       status: 200,
       headers: {
@@ -59,9 +74,20 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const body = await request.json();
-    const { action, data, appointmentId, date, time, reason, dentistEmail } = body;
+    const { action, data, appointmentId, date, time, reason } = body;
 
-    const email = (dentistEmail || session?.user?.email || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+    // Secure Authorization:
+    // Enforce mutations to the authenticated user's email only.
+    let email: string;
+    if (session?.user?.email) {
+      email = session.user.email.toLowerCase().trim();
+    } else {
+      // Reject unauthenticated modifications to private records
+      return NextResponse.json(
+        { error: "Unauthorized: Please sign in with Google to modify clinic records." },
+        { status: 401, headers: corsHeaders }
+      );
+    }
     const doctorName = session?.user?.name || "Doctor";
 
     switch (action) {
@@ -103,6 +129,11 @@ export async function POST(request: NextRequest) {
 
       case "record_payment": {
         await savePayment({ ...(data as PaymentTransaction), dentistEmail: email }, email);
+        break;
+      }
+
+      case "update_clinic_profile": {
+        await saveClinicProfile(data as Partial<ClinicProfile>, email);
         break;
       }
 

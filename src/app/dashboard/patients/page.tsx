@@ -26,7 +26,6 @@ export default function PatientsPage() {
     payments,
     clinicProfile,
     loading,
-    loadSampleData,
     addPatient,
   } = useClinic();
 
@@ -108,6 +107,23 @@ export default function PatientsPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-16 bg-white rounded-2xl border border-[#DCE2DE]" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-56 bg-white rounded-2xl border border-[#DCE2DE] p-5 space-y-3">
+              <div className="h-6 w-32 bg-slate-200 rounded" />
+              <div className="h-4 w-48 bg-slate-100 rounded" />
+              <div className="h-4 w-40 bg-slate-100 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -138,7 +154,6 @@ export default function PatientsPage() {
           {patients.length === 0 ? (
             <div className="flex flex-wrap justify-center gap-3 pt-1">
               <button onClick={() => setIsAddOpen(true)} className="action-primary"><Plus size={16} />Add Patient</button>
-              <button onClick={() => loadSampleData()} className="action-secondary"><Sparkles size={16} />Load Samples</button>
             </div>
           ) : <button onClick={() => setSearch("")} className="small-outline">Clear Search</button>}
         </div>

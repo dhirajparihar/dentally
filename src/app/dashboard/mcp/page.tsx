@@ -14,7 +14,7 @@ const categories = [
 ] as const;
 
 export default function McpSettingsPage() {
-  const { clinicProfile, patients } = useClinic();
+  const { clinicProfile, patients, userEmail } = useClinic();
   const [mcpUrl, setMcpUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
@@ -29,9 +29,25 @@ export default function McpSettingsPage() {
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setMcpUrl(`${window.location.origin}/api/mcp`);
     return () => { if (copyTimeout.current) clearTimeout(copyTimeout.current); };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setMcpUrl("");
+    setCopyError("");
+    setCopied(false);
+    if (!userEmail) return;
+    fetch("/api/mcp/key", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.mcpUrl) throw new Error("Unable to load your private MCP URL. Refresh the page to retry.");
+        return data.mcpUrl as string;
+      })
+      .then((url) => { if (!controller.signal.aborted) setMcpUrl(url); })
+      .catch((error: Error) => { if (!controller.signal.aborted) setCopyError(error.message); });
+    return () => controller.abort();
+  }, [userEmail]);
 
   const handleCopy = async () => {
     try {
@@ -51,7 +67,9 @@ export default function McpSettingsPage() {
     setSelectedTool(tool);
     const patient = patients[0];
     let parameters: Record<string, unknown> = {};
-    if (tool.name === "search_patient") parameters = { query: patient?.name || "" };
+    if (tool.name === "get_clinic_profile") parameters = {};
+    else if (tool.name === "update_clinic_profile") parameters = {};
+    else if (tool.name === "search_patient") parameters = { query: patient?.name || "" };
     else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history"].includes(tool.name)) parameters = { patientId: patient?._id || "" };
     else if (tool.name === "get_upcoming_appointments") parameters = { limit: 5 };
     else if (tool.name === "check_available_slots") parameters = { date: "today" };
@@ -79,7 +97,7 @@ export default function McpSettingsPage() {
     setTestOutput(null);
     setTestError("");
     try {
-      const response = await fetch("/api/mcp", {
+      const response = await fetch(mcpUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: `mcp_req_${Date.now()}`, method: "tools/call", params: { name: selectedTool.name, arguments: parameters } }),
@@ -98,14 +116,14 @@ export default function McpSettingsPage() {
     <div className="mcp-workspace space-y-4">
       <section className="mcp-connection" aria-labelledby="connection-heading">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 id="connection-heading" className="text-base font-bold">Connect your assistant</h2><p className="mt-1 text-xs leading-5 text-[#64748B]">Use your clinic&apos;s MCP endpoint to connect your assistant.</p></div>
+          <div><h2 id="connection-heading" className="text-base font-bold">Connect your assistant</h2><p className="mt-1 text-xs leading-5 text-[#64748B]">Connect your assistant with your private clinic endpoint.</p></div>
           <span className="mcp-protocol">MCP &middot; JSON-RPC 2.0</span>
         </div>
-        <label htmlFor="mcp-endpoint" className="mb-2 mt-4 block text-xs font-medium text-[#52627A]">Server URL</label>
+        <label htmlFor="mcp-endpoint" className="mb-2 mt-4 block text-xs font-medium text-[#52627A]">Private Server URL</label>
         <div className="mcp-endpoint-field"><input id="mcp-endpoint" type="text" readOnly value={mcpUrl} placeholder="Loading endpoint..." onFocus={(event) => event.currentTarget.select()} /><button type="button" onClick={handleCopy} disabled={!mcpUrl} className="workspace-button primary">{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "Copied" : "Copy URL"}</button></div>
         {copyError && <p role="status" className="mt-2 text-xs text-[#64748B]">{copyError}</p>}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-[#64748B]"><p className="flex min-w-0 items-center gap-1.5"><ShieldCheck size={14} className="shrink-0 text-[#0089A8]" /><span className="break-all">{clinicProfile.dentistName} &middot; {clinicProfile.email}</span></p><span>{DENTALLY_MCP_TOOLS.length} tools</span></div>
-        <details className="mcp-connection-help"><summary>Connection details</summary><p>Add the server URL in your MCP client and sign in with your clinic account when prompted. No API key is required.</p></details>
+        <details className="mcp-connection-help"><summary>Connection details</summary><p>Add the private server URL in your MCP client and select Authentication: None. Your clinic authorization key is included in the URL.</p></details>
       </section>
 
       <div className="mcp-layout">
@@ -128,7 +146,7 @@ export default function McpSettingsPage() {
             <label htmlFor="tool-arguments" className="mb-2 mt-4 block text-xs font-semibold text-[#52627A]">Arguments <span className="font-normal text-[#8291A7]">JSON</span></label>
             <textarea id="tool-arguments" value={argumentsText} onChange={(event) => setArgumentsText(event.target.value)} disabled={loading} rows={5} spellCheck={false} className="mcp-arguments" />
             {testError && <p role="alert" className="mt-2 text-xs leading-5 text-rose-700">{testError}</p>}
-            <div className="mt-3 flex justify-end"><button type="button" disabled={loading} onClick={runTestTool} className="workspace-button primary"><Play size={14} />{loading ? "Running..." : "Run Tool"}</button></div>
+            <div className="mt-3 flex justify-end"><button type="button" disabled={loading || !mcpUrl} onClick={runTestTool} className="workspace-button primary"><Play size={14} />{loading ? "Running..." : "Run Tool"}</button></div>
             <div className="mt-5 border-t border-[#E4E9F0] pt-4"><h4 className="mb-2 text-xs font-semibold text-[#52627A]">Response</h4><div aria-busy={loading}>{loading ? <p role="status" className="mcp-response-placeholder">Running against clinic records...</p> : testOutput !== null ? <pre className="mcp-response" tabIndex={0} aria-label="MCP tool response">{JSON.stringify(testOutput, null, 2)}</pre> : <p className="mcp-response-placeholder">Select a tool and run it to see the response.</p>}</div></div>
           </div>
         </section>

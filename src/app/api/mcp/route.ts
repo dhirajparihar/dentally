@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { DENTALLY_MCP_TOOLS } from "@/lib/mcp/tools";
 import { executeMcpTool } from "@/lib/mcp/server";
 import { clinicProfile } from "@/lib/mockData";
-import { verifyAccessToken } from "@/lib/auth/oauth";
+import { verifyDoctorMcpToken } from "@/lib/mcp/token";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -10,24 +12,58 @@ export const maxDuration = 10; // Vercel Free Tier max function timeout
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key, x-dentist-email",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
 };
 
 export async function OPTIONS() {
-  const baseUrl = process.env.NEXTAUTH_URL || "https://dentally.reline.me";
   return new NextResponse(null, {
     status: 204,
-    headers: {
-      ...corsHeaders,
-      Link: `<${baseUrl}/.well-known/oauth-authorization-server>; rel="oauth-authorization-server"`,
-    },
+    headers: corsHeaders,
+  });
+}
+
+async function resolveDoctorEmail(request: NextRequest): Promise<{ email: string; isAuthorized: boolean }> {
+  // 1. Check query parameter `?key=` or `?token=`
+  const urlKey = request.nextUrl.searchParams.get("key") || request.nextUrl.searchParams.get("token");
+  if (urlKey) {
+    const verified = verifyDoctorMcpToken(urlKey);
+    if (verified.isValid) return { email: verified.email, isAuthorized: true };
+  }
+
+  // 2. Check HTTP Headers `x-api-key` or `Authorization: Bearer <key>`
+  const headerKey =
+    request.headers.get("x-api-key") ||
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (headerKey) {
+    const verified = verifyDoctorMcpToken(headerKey);
+    if (verified.isValid) return { email: verified.email, isAuthorized: true };
+  }
+
+  // 3. Check active NextAuth user session (e.g. when testing from Dashboard UI)
+  try {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.email) {
+      return { email: session.user.email.toLowerCase().trim(), isAuthorized: true };
+    }
+  } catch (err) {
+    // Session lookup fallback
+  }
+
+  // 4. Default: Unauthorized
+  return { email: "", isAuthorized: false };
+}
+
+function respond(data: any, statusOrInit: number | { status?: number } = 200) {
+  const status = typeof statusOrInit === "number" ? statusOrInit : statusOrInit?.status ?? 200;
+  return NextResponse.json(data, {
+    status,
+    headers: corsHeaders,
   });
 }
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXTAUTH_URL || "https://dentally.reline.me";
+  const { email, isAuthorized } = await resolveDoctorEmail(request);
 
-  // Returns MCP server metadata & discovery information
   return NextResponse.json(
     {
       name: "dentally-mcp-server",
@@ -35,7 +71,8 @@ export async function GET(request: NextRequest) {
       protocolVersion: "2024-11-05",
       description: "Dentally AI Model Context Protocol endpoint for ChatGPT & Claude",
       clinic: clinicProfile.name,
-      dentist: clinicProfile.dentistName,
+      attendingDentist: isAuthorized ? email : "Unauthorized",
+      authenticated: isAuthorized,
       capabilities: {
         tools: {
           listChanged: true,
@@ -43,12 +80,9 @@ export async function GET(request: NextRequest) {
         resources: {},
         prompts: {},
       },
-      authentication: {
-        type: "oauth2",
-        authorization_url: `${baseUrl}/api/oauth/authorize`,
-        token_url: `${baseUrl}/api/oauth/token`,
-        registration_url: `${baseUrl}/api/oauth/register`,
-        scopes: ["openid", "email", "clinic"],
+      auth: {
+        type: "doctor_scoped_url",
+        instruction: "Use your private scoped URL from https://dentally.reline.me/dashboard/mcp with Authentication: None in ChatGPT",
       },
       toolsCount: DENTALLY_MCP_TOOLS.length,
       tools: DENTALLY_MCP_TOOLS.map((t) => ({ name: t.name, description: t.description })),
@@ -56,34 +90,31 @@ export async function GET(request: NextRequest) {
     {
       headers: {
         ...corsHeaders,
-        Link: `<${baseUrl}/.well-known/oauth-authorization-server>; rel="oauth-authorization-server"`,
         "Cache-Control": "no-store, max-age=0",
       },
     }
   );
 }
 
-function respond(data: any, statusOrInit: number | { status?: number } = 200) {
-  const status = typeof statusOrInit === 'number' ? statusOrInit : (statusOrInit?.status ?? 200);
-  return NextResponse.json(data, {
-    status,
-    headers: corsHeaders,
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
-    // 1. Resolve Dentist Identity from Bearer OAuth Token or fallback headers
-    const authHeader = request.headers.get("authorization");
-    const verifiedDoctorEmail = await verifyAccessToken(authHeader);
-
-    // Fallbacks: query param ?email=, custom header x-dentist-email, or default demo account
-    const queryEmail = request.nextUrl.searchParams.get("email");
-    const headerEmail = request.headers.get("x-dentist-email");
-    const dentistEmail = (verifiedDoctorEmail || queryEmail || headerEmail || "dr.ananya@dentally.app").toLowerCase().trim();
-
+    const { email, isAuthorized } = await resolveDoctorEmail(request);
     const body = await request.json();
     const { jsonrpc, id, method, params } = body;
+
+    if (!isAuthorized || !email) {
+      return respond(
+        {
+          jsonrpc: "2.0",
+          id: id || null,
+          error: {
+            code: -32001,
+            message: "Unauthorized: Invalid or missing doctor key. Please copy your private MCP URL from https://dentally.reline.me/dashboard/mcp",
+          },
+        },
+        { status: 401 }
+      );
+    }
 
     // Handle MCP protocol initialization
     if (method === "initialize") {
@@ -95,6 +126,8 @@ export async function POST(request: NextRequest) {
           serverInfo: {
             name: "dentally-mcp-server",
             version: "1.0.0",
+            dentistEmail: email,
+            authenticated: isAuthorized,
           },
           capabilities: {
             tools: {},
@@ -123,7 +156,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Call a specific dental tool scoped to the authenticated dentist
+    // Call a specific dental tool
     if (method === "tools/call") {
       const toolName = params?.name;
       const toolArguments = params?.arguments || {};
@@ -143,7 +176,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const result = await executeMcpTool(toolName, toolArguments, dentistEmail);
+        const result = await executeMcpTool(toolName, toolArguments, email);
         return respond({
           jsonrpc: "2.0",
           id,
@@ -165,7 +198,7 @@ export async function POST(request: NextRequest) {
             content: [
               {
                 type: "text",
-                text: `Tool execution failed: ${toolErr.message || String(toolErr)}`,
+                text: `Error executing ${toolName}: ${toolErr.message || String(toolErr)}`,
               },
             ],
           },
@@ -173,26 +206,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Unhandled JSON-RPC method
+    // Direct REST fallback if an agent posts `{ tool: "get_today_appointments", args: {} }`
+    if (body.tool) {
+      const result = await executeMcpTool(body.tool, body.args || {}, email);
+      return respond({ success: true, tool: body.tool, data: result });
+    }
+
     return respond(
       {
         jsonrpc: "2.0",
         id,
         error: {
           code: -32601,
-          message: `Method '${method}' not found`,
+          message: `Method '${method}' not found. Supported methods: initialize, tools/list, tools/call, ping`,
         },
       },
       { status: 404 }
     );
-  } catch (err: any) {
+  } catch (error: any) {
     return respond(
       {
         jsonrpc: "2.0",
         id: null,
         error: {
           code: -32700,
-          message: `Parse error: ${err.message || String(err)}`,
+          message: `Parse error: ${error.message}`,
         },
       },
       { status: 500 }

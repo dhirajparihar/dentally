@@ -30,9 +30,10 @@ interface AppointmentActionsProps {
   onView: () => void;
   onReschedule: () => void;
   onReopen: () => void;
+  onCancel: () => void;
 }
 
-function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen }: AppointmentActionsProps) {
+function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, onCancel }: AppointmentActionsProps) {
   return (
     <details className="appointment-menu" onToggle={(event) => {
       if (!event.currentTarget.open) return;
@@ -48,7 +49,8 @@ function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onResch
         <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
         <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
         {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
-        {appointment.status === "completed" && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+        {(appointment.status === "completed" || appointment.status === "cancelled") && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+        {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
       </div>
     </details>
   );
@@ -59,10 +61,11 @@ export default function AppointmentsPage() {
     appointments,
     patients,
     clinicProfile,
+    loading,
     bookAppointment,
     completeAppointment,
+    cancelAppointment,
     rescheduleAppointment,
-    loading,
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
@@ -125,7 +128,7 @@ export default function AppointmentsPage() {
     reason: "",
   });
 
-  // Hours in Dr. Ananya's Dental Working Day (10 AM - 7 PM)
+  // Dental Working Day Hours (10 AM - 7 PM)
   const workingHours = [
     "10:00 AM",
     "10:30 AM",
@@ -174,6 +177,8 @@ export default function AppointmentsPage() {
     } else if (newStatus === "scheduled") {
       const appointment = appointments.find((entry) => entry._id === id);
       if (appointment) bookAppointment({ ...appointment, status: "scheduled" });
+    } else if (newStatus === "cancelled") {
+      cancelAppointment(id);
     }
   };
 
@@ -332,7 +337,7 @@ export default function AppointmentsPage() {
                 </div>
                 <div className="appointment-card-controls">
                   <span className={`appointment-status ${appointment.status}`}>{appointment.status === "completed" && <Check size={13} aria-hidden="true" />}{appointment.status}</span>
-                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} />
+                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} />
                   {appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
                 </div>
               </article>
