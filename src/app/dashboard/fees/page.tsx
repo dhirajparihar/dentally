@@ -37,6 +37,7 @@ export default function FeesPage() {
     patients,
     appointments,
     clinicProfile,
+    loading,
     addFee,
     recordPayment,
     updatePatient,
@@ -173,6 +174,20 @@ export default function FeesPage() {
     await recordPayment(newPayment);
     setIsRecordPaymentOpen(false);
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-20 bg-white rounded-2xl border border-[#DCE2DE]" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 bg-white rounded-2xl border border-[#DCE2DE]" />
+          ))}
+        </div>
+        <div className="h-96 bg-white rounded-2xl border border-[#DCE2DE]" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

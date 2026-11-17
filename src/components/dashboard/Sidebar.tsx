@@ -30,10 +30,10 @@ const navItems = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
-  const userName = session?.user?.name || clinicProfile.dentistName;
-  const userEmail = session?.user?.email || clinicProfile.email;
+  const userName = status === "loading" ? "Doctor" : (session?.user?.name || clinicProfile.dentistName);
+  const userEmail = status === "loading" ? "" : (session?.user?.email || clinicProfile.email);
   const userImage = session?.user?.image;
   const initials = userName
     .split(" ")

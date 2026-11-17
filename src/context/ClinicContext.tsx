@@ -38,32 +38,40 @@ const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { data: session, status } = useSession();
-  const userEmail = (session?.user?.email || "dr.ananya@dentally.app").toLowerCase().trim();
-  const isDemoUser = userEmail === "dr.ananya@dentally.app";
+  const userEmail = (session?.user?.email || "").toLowerCase().trim();
 
-  const [patients, setPatients] = useState<Patient[]>(() => (isDemoUser ? initialPatients : []));
-  const [appointments, setAppointments] = useState<Appointment[]>(() => (isDemoUser ? initialAppointments : []));
-  const [fees, setFees] = useState<FeeItem[]>(() => (isDemoUser ? initialFees : []));
-  const [payments, setPayments] = useState<PaymentTransaction[]>(() => (isDemoUser ? initialPayments : []));
+  // Always initialize with empty clean state - NEVER flash demo data while loading
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [fees, setFees] = useState<FeeItem[]>([]);
+  const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Dynamically tailor clinic profile to the logged-in doctor
   const clinicProfile = useMemo(() => {
-    if (!session?.user) return defaultClinicProfile;
+    if (status === "loading") {
+      return {
+        ...defaultClinicProfile,
+        dentistName: "Loading Clinic...",
+        email: "",
+      };
+    }
+    if (!session?.user) {
+      return defaultClinicProfile;
+    }
     return {
       ...defaultClinicProfile,
       dentistName: session.user.name || "Dr. Dentist",
       email: session.user.email || defaultClinicProfile.email,
     };
-  }, [session?.user]);
+  }, [session?.user, status]);
 
   // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async () => {
     try {
       setIsSyncing(true);
-      const url = `/api/clinic?email=${encodeURIComponent(userEmail)}`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch("/api/clinic", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setPatients(data.patients || []);
@@ -72,14 +80,14 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setPayments(data.payments || []);
       }
     } catch (err) {
-      console.warn("Clinic sync fallback to local state:", err);
+      console.warn("Clinic sync error:", err);
     } finally {
       setLoading(false);
       setIsSyncing(false);
     }
-  }, [userEmail]);
+  }, []);
 
-  // Sync on session change and periodically poll every 15s for external MCP agent mutations
+  // Sync when NextAuth finishes resolving the session (avoids flashing Dr. Ananya's demo data)
   useEffect(() => {
     if (status === "loading") return;
     refreshClinic();

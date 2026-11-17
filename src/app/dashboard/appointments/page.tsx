@@ -37,6 +37,7 @@ export default function AppointmentsPage() {
     fees,
     payments,
     clinicProfile,
+    loading,
     bookAppointment,
     completeAppointment,
     rescheduleAppointment,
@@ -225,6 +226,16 @@ export default function AppointmentsPage() {
     const msg = `Hello ${apt.patientName}, thank you for visiting ${clinicProfile.name} today.\n\nPost-procedure instructions from ${clinicProfile.dentistName}:\n1) Avoid chewing hard or crunchy foods on the treated side for 24 hours.\n2) If mild tenderness occurs, take prescribed medications as advised.\n3) Reach out directly if you experience persistent discomfort.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-20 bg-white rounded-2xl border border-[#DCE2DE]" />
+        <div className="h-32 bg-white rounded-2xl border border-[#DCE2DE]" />
+        <div className="h-96 bg-white rounded-2xl border border-[#DCE2DE]" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
