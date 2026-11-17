@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
+  ArrowLeft,
   X,
   Phone,
   Mail,
@@ -34,9 +35,9 @@ import {
 import { ToothMap } from "@/components/odontogram/ToothMap";
 import { useClinic } from "@/context/ClinicContext";
 
-interface Patient360DossierModalProps {
+interface PatientDetailsProps {
   patient: Patient | null;
-  onClose: () => void;
+  onBack: () => void;
   onUpdatePatient: (updated: Patient) => void;
   fees: FeeItem[];
   payments: PaymentTransaction[];
@@ -46,9 +47,9 @@ interface Patient360DossierModalProps {
   onBookAppointment?: (appointment: Appointment) => void;
 }
 
-export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
+export const PatientDetails: React.FC<PatientDetailsProps> = ({
   patient,
-  onClose,
+  onBack,
   onUpdatePatient,
   fees,
   payments,
@@ -145,14 +146,6 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
   };
 
-  // ESC key to close
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   if (!patient) return null;
 
@@ -269,8 +262,8 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
   const hasAllergies = patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None";
 
   return (
-    <div className="fixed inset-0 bg-[#162321]/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className="bg-[#FFFFFF] w-[96vw] max-w-6xl h-[92vh] max-h-[880px] rounded-3xl shadow-2xl border border-[#E7E9E3] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+    <div className="w-full">
+      <div className="bg-white w-full rounded-3xl shadow-sm border border-[#E7E9E3] overflow-hidden flex flex-col">
         
         {/* ================= 1. SLIM CLINICAL MASTHEAD (HEADER) ================= */}
         <div className="bg-[#1E2D2B] text-white px-5 sm:px-6 py-3.5 border-b border-[#2C413D] shrink-0">
@@ -378,11 +371,11 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
 
               {/* Close Button */}
               <button
-                onClick={onClose}
-                title="Close (ESC)"
+                onClick={onBack}
+                title="Back to patients" aria-label="Back to patients"
                 className="p-1.5 rounded-xl bg-[#2A3E3B] hover:bg-[#344D49] text-slate-400 hover:text-white transition-all border border-[#37524E]"
               >
-                <X className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -460,7 +453,7 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
         </div>
 
         {/* ================= 3. 360° DOSSIER CONTENT BODY ================= */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 bg-[#FBF9F1]/60">
+        <div className="p-5 sm:p-6 flex-1 bg-[#FBF9F1]/60">
           
           {/* ================= TAB 1: CLINICAL CHART & NOTES ================= */}
           {activeTab === "clinical" && (
@@ -1342,7 +1335,7 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
 
                       <div className="space-y-1">
                         <h4 className="font-bold text-sm text-[#1E2D2B]">{a.procedure}</h4>
-                        {a.notes && <p className="text-xs text-[#586B67] italic">"{a.notes}"</p>}
+                        {a.notes && <p className="text-xs text-[#586B67] italic">&quot;{a.notes}&quot;</p>}
                       </div>
 
                       <div className="pt-2 border-t border-[#E7E9E3] flex items-center justify-between text-[11px] font-mono text-[#7E9691]">
@@ -1366,10 +1359,10 @@ export const Patient360DossierModal: React.FC<Patient360DossierModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={onBack}
             className="px-4 py-1.5 rounded-xl bg-[#E8F0F1] hover:bg-[#BDDBD1]/50 text-[#1E2D2B] font-semibold transition-colors border border-[#C7E7EC]"
           >
-            Close Dossier
+            Back to Patients
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -15,10 +15,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import {
-  Patient,
-} from "@/lib/mockData";
-import { Patient360DossierModal } from "@/components/dashboard/Patient360DossierModal";
+import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 
 export default function DashboardOverviewPage() {
@@ -31,12 +28,8 @@ export default function DashboardOverviewPage() {
     loading,
     loadSampleData,
     completeAppointment,
-    updatePatient,
-    recordPayment,
-    addFee,
-    bookAppointment,
   } = useClinic();
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const router = useRouter();
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -61,14 +54,10 @@ export default function DashboardOverviewPage() {
   // Patients due for follow up
   const dueForFollowUp = patients.filter((p) => p.followUpDue);
 
-  const handleUpdatePatient = (updated: Patient) => {
-    updatePatient(updated);
-    setSelectedPatient(updated);
-  };
 
   const openPatientById = (patientId: string) => {
     const found = patients.find((p) => p._id === patientId);
-    if (found) setSelectedPatient(found);
+    if (found) router.push(`/dashboard/patients/${encodeURIComponent(found._id)}`);
   };
 
   return (
@@ -252,7 +241,7 @@ export default function DashboardOverviewPage() {
                     <h4 className="font-bold text-[#1E2D2B] text-base mt-1 flex items-center gap-2 group-hover:text-[#2F8EAC] transition-colors">
                       <span>{apt.patientName}</span>
                       <span className="text-[10px] font-mono bg-[#E8F0F1] text-[#2F8EAC] px-2 py-0.5 rounded-md font-semibold border border-[#C7E7EC]">
-                        360° Dossier
+                        Patient Details
                       </span>
                     </h4>
                     <p className="text-xs text-[#2F8EAC] font-semibold">
@@ -331,7 +320,7 @@ export default function DashboardOverviewPage() {
                         ₹{p.balance.toLocaleString()}
                       </span>
                       <span className="text-[10px] text-[#2F8EAC] font-bold">
-                        360° Dossier →
+                        Patient Details →
                       </span>
                     </div>
                   </div>
@@ -382,20 +371,6 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* 360° Patient Dossier Modal */}
-      {selectedPatient && (
-        <Patient360DossierModal
-          patient={selectedPatient}
-          onClose={() => setSelectedPatient(null)}
-          onUpdatePatient={handleUpdatePatient}
-          fees={fees}
-          payments={payments}
-          appointments={appointments}
-          onAddPayment={recordPayment}
-          onAddFee={addFee}
-          onBookAppointment={bookAppointment}
-        />
-      )}
     </div>
   );
 }
