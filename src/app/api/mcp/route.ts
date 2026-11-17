@@ -5,7 +5,6 @@ import { DENTALLY_MCP_TOOLS } from "@/lib/mcp/tools";
 import { executeMcpTool } from "@/lib/mcp/server";
 import { clinicProfile } from "@/lib/mockData";
 import { verifyDoctorMcpToken } from "@/lib/mcp/token";
-import { DEFAULT_DEMO_EMAIL } from "@/lib/db/repository";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -50,8 +49,8 @@ async function resolveDoctorEmail(request: NextRequest): Promise<{ email: string
     // Session lookup fallback
   }
 
-  // 4. Default fallback: Demo account
-  return { email: DEFAULT_DEMO_EMAIL, isAuthorized: false };
+  // 4. Default: Unauthorized
+  return { email: "", isAuthorized: false };
 }
 
 function respond(data: any, statusOrInit: number | { status?: number } = 200) {
@@ -72,7 +71,7 @@ export async function GET(request: NextRequest) {
       protocolVersion: "2024-11-05",
       description: "Dentally AI Model Context Protocol endpoint for ChatGPT & Claude",
       clinic: clinicProfile.name,
-      attendingDentist: email === DEFAULT_DEMO_EMAIL ? clinicProfile.dentistName : email,
+      attendingDentist: isAuthorized ? email : "Unauthorized",
       authenticated: isAuthorized,
       capabilities: {
         tools: {
@@ -102,6 +101,20 @@ export async function POST(request: NextRequest) {
     const { email, isAuthorized } = await resolveDoctorEmail(request);
     const body = await request.json();
     const { jsonrpc, id, method, params } = body;
+
+    if (!isAuthorized || !email) {
+      return respond(
+        {
+          jsonrpc: "2.0",
+          id: id || null,
+          error: {
+            code: -32001,
+            message: "Unauthorized: Invalid or missing doctor key. Please copy your private MCP URL from https://dentally.reline.me/dashboard/mcp",
+          },
+        },
+        { status: 401 }
+      );
+    }
 
     // Handle MCP protocol initialization
     if (method === "initialize") {

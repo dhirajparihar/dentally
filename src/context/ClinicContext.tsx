@@ -87,7 +87,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  // Sync when NextAuth finishes resolving the session (avoids flashing Dr. Ananya's demo data)
+  // Sync when NextAuth finishes resolving the session (avoids flashing while loading)
   useEffect(() => {
     if (status === "loading") return;
     refreshClinic();

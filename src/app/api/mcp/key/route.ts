@@ -2,17 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { generateDoctorMcpToken } from "@/lib/mcp/token";
-import { DEFAULT_DEMO_EMAIL } from "@/lib/db/repository";
-import { clinicProfile } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const email = session?.user?.email || DEFAULT_DEMO_EMAIL;
-    const doctorName = session?.user?.name || (email === DEFAULT_DEMO_EMAIL ? clinicProfile.dentistName : "Doctor");
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: "Unauthorized: Please sign in with Google to retrieve your private MCP key." },
+        { status: 401 }
+      );
+    }
 
+    const email = session.user.email.toLowerCase().trim();
+    const doctorName = session.user.name || "Doctor";
     const token = generateDoctorMcpToken(email);
 
     const protocol = request.headers.get("x-forwarded-proto") || "https";

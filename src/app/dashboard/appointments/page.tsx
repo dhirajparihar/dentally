@@ -80,7 +80,7 @@ export default function AppointmentsPage() {
     reason: "",
   });
 
-  // Hours in Dr. Ananya's Dental Working Day (10 AM - 7 PM)
+  // Dental Working Day Hours (10 AM - 7 PM)
   const workingHours = [
     "10:00 AM",
     "10:30 AM",
@@ -533,7 +533,7 @@ export default function AppointmentsPage() {
                           </div>
                         </div>
 
-                        {/* Direct Chairside Actions for Dr. Ananya */}
+                        {/* Direct Chairside Actions */}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#E7E9E3]">
                           {/* Send WhatsApp Reminder or Post-Op */}
                           {isCompleted ? (

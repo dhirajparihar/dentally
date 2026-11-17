@@ -15,8 +15,6 @@ import {
   PaymentTransaction,
 } from "@/lib/mockData";
 
-export const DEFAULT_DEMO_EMAIL = "dr.ananya@dentally.app";
-
 // Active in-memory cache keyed by dentist email for offline / dev fallback
 const inMemoryStore: Record<
   string,
@@ -26,17 +24,10 @@ const inMemoryStore: Record<
     fees: FeeItem[];
     payments: PaymentTransaction[];
   }
-> = {
-  [DEFAULT_DEMO_EMAIL]: {
-    patients: initialPatients.map((p) => ({ ...p, dentistEmail: DEFAULT_DEMO_EMAIL })),
-    appointments: initialAppointments.map((a) => ({ ...a, dentistEmail: DEFAULT_DEMO_EMAIL })),
-    fees: initialFees.map((f) => ({ ...f, dentistEmail: DEFAULT_DEMO_EMAIL })),
-    payments: initialPayments.map((p) => ({ ...p, dentistEmail: DEFAULT_DEMO_EMAIL })),
-  },
-};
+> = {};
 
 function getOrCreateMemoryStore(email: string) {
-  const normalized = (email || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const normalized = email.toLowerCase().trim();
   if (!inMemoryStore[normalized]) {
     inMemoryStore[normalized] = {
       patients: [],
@@ -52,57 +43,24 @@ export function isDbConfigured(): boolean {
   return Boolean(process.env.MONGODB_URI && process.env.MONGODB_URI.trim().length > 0);
 }
 
-export async function ensureDbInitialized(dentistEmail = DEFAULT_DEMO_EMAIL) {
+export async function ensureDbInitialized() {
   if (!isDbConfigured()) return null;
   const conn = await connectDB();
-  if (!conn) return null;
-
-  try {
-    const normalizedEmail = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
-
-    // If it's the demo account, ensure demo data is seeded
-    if (normalizedEmail === DEFAULT_DEMO_EMAIL) {
-      const demoCount = await PatientModel.countDocuments({
-        $or: [{ dentistEmail: DEFAULT_DEMO_EMAIL }, { dentistEmail: { $exists: false } }],
-      });
-
-      if (demoCount === 0) {
-        console.log("Seeding MongoDB with demo Chairside dataset for", DEFAULT_DEMO_EMAIL);
-        const demoPatients = initialPatients.map((p) => ({ ...p, dentistEmail: DEFAULT_DEMO_EMAIL }));
-        const demoApts = initialAppointments.map((a) => ({ ...a, dentistEmail: DEFAULT_DEMO_EMAIL }));
-        const demoFees = initialFees.map((f) => ({ ...f, dentistEmail: DEFAULT_DEMO_EMAIL }));
-        const demoPays = initialPayments.map((p) => ({ ...p, dentistEmail: DEFAULT_DEMO_EMAIL }));
-
-        await PatientModel.insertMany(demoPatients);
-        await AppointmentModel.insertMany(demoApts);
-        await FeeModel.insertMany(demoFees);
-        await PaymentModel.insertMany(demoPays);
-        console.log("MongoDB demo dataset seeded successfully.");
-      } else {
-        // Backfill any legacy records missing dentistEmail to the demo account
-        await PatientModel.updateMany({ dentistEmail: { $exists: false } }, { $set: { dentistEmail: DEFAULT_DEMO_EMAIL } });
-        await AppointmentModel.updateMany({ dentistEmail: { $exists: false } }, { $set: { dentistEmail: DEFAULT_DEMO_EMAIL } });
-        await FeeModel.updateMany({ dentistEmail: { $exists: false } }, { $set: { dentistEmail: DEFAULT_DEMO_EMAIL } });
-        await PaymentModel.updateMany({ dentistEmail: { $exists: false } }, { $set: { dentistEmail: DEFAULT_DEMO_EMAIL } });
-      }
-    }
-  } catch (err) {
-    console.error("Error checking or seeding MongoDB:", err);
-  }
   return conn;
 }
 
 /**
- * Seeds a fresh copy of sample clinic data for a doctor who requests it via 1-click onboarder.
+ * Seeds a fresh copy of sample clinic data ONLY when a doctor explicitly requests it via 1-click onboarder.
  */
 export async function seedSampleDataForDoctor(dentistEmail: string, doctorName = "Doctor") {
-  const normalized = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  if (!dentistEmail) return { patients: [], appointments: [], fees: [], payments: [] };
+  const normalized = dentistEmail.toLowerCase().trim();
   const conn = await connectDB();
 
   const timestamp = Date.now().toString(36);
   const samplePatients: Patient[] = initialPatients.map((p, idx) => ({
     ...p,
-    _id: `sample-${timestamp}-${idx + 1}`,
+    _id: `pat-${timestamp}-${idx + 1}`,
     dentistEmail: normalized,
     notes: p.notes.map((n) => ({ ...n, doctor: `Dr. ${doctorName}` })),
     history: p.history.map((h) => ({ ...h, doctor: `Dr. ${doctorName}` })),
@@ -163,16 +121,24 @@ export async function getClinicData(dentistEmail?: string): Promise<{
   clinicProfile: typeof clinicProfile;
   storage: "mongodb" | "memory";
 }> {
-  const normalized = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  if (!dentistEmail) {
+    return {
+      patients: [],
+      appointments: [],
+      fees: [],
+      payments: [],
+      clinicProfile,
+      storage: isDbConfigured() ? "mongodb" : "memory",
+    };
+  }
+
+  const normalized = dentistEmail.toLowerCase().trim();
 
   try {
-    const conn = await ensureDbInitialized(normalized);
+    const conn = await ensureDbInitialized();
     if (conn) {
-      // Query filter: scoped directly to this doctor's email
-      const filter =
-        normalized === DEFAULT_DEMO_EMAIL
-          ? { $or: [{ dentistEmail: DEFAULT_DEMO_EMAIL }, { dentistEmail: { $exists: false } }] }
-          : { dentistEmail: normalized };
+      // Strictly scoped to this doctor's email
+      const filter = { dentistEmail: normalized };
 
       const [patients, appointments, fees, payments] = await Promise.all([
         PatientModel.find(filter).lean().exec(),
@@ -223,14 +189,15 @@ export async function getClinicData(dentistEmail?: string): Promise<{
 }
 
 export async function savePatient(patient: Patient, dentistEmail?: string) {
-  const email = (patient.dentistEmail || dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (patient.dentistEmail || dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for patient record");
   const patientToSave = { ...patient, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
   mem.patients = [patientToSave, ...mem.patients.filter((p) => p._id !== patientToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       await PatientModel.findOneAndUpdate(
         { _id: patientToSave._id, dentistEmail: email },
@@ -246,14 +213,15 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
 }
 
 export async function saveAppointment(appointment: Appointment, dentistEmail?: string) {
-  const email = (appointment.dentistEmail || dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (appointment.dentistEmail || dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for appointment record");
   const aptToSave = { ...appointment, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
   mem.appointments = [aptToSave, ...mem.appointments.filter((a) => a._id !== aptToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       await AppointmentModel.findOneAndUpdate(
         { _id: aptToSave._id, dentistEmail: email },
@@ -273,14 +241,15 @@ export async function updateAppointmentStatus(
   status: Appointment["status"],
   dentistEmail?: string
 ) {
-  const email = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for appointment update");
   const mem = getOrCreateMemoryStore(email);
   mem.appointments = mem.appointments.map((a) =>
     a._id === appointmentId ? { ...a, status } : a
   );
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       await AppointmentModel.updateOne({ _id: appointmentId, dentistEmail: email }, { status });
     }
@@ -298,7 +267,8 @@ export async function rescheduleAppointment(
   reason?: string,
   dentistEmail?: string
 ) {
-  const email = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for appointment rescheduling");
   const mem = getOrCreateMemoryStore(email);
   mem.appointments = mem.appointments.map((a) =>
     a._id === appointmentId
@@ -312,7 +282,7 @@ export async function rescheduleAppointment(
   );
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       const existing = await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email });
       const finalNotes = existing
@@ -332,14 +302,15 @@ export async function rescheduleAppointment(
 }
 
 export async function saveFee(fee: FeeItem, dentistEmail?: string) {
-  const email = (fee.dentistEmail || dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (fee.dentistEmail || dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for fee record");
   const feeToSave = { ...fee, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
   mem.fees = [feeToSave, ...mem.fees.filter((f) => f._id !== feeToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       await FeeModel.findOneAndUpdate(
         { _id: feeToSave._id, dentistEmail: email },
@@ -355,14 +326,15 @@ export async function saveFee(fee: FeeItem, dentistEmail?: string) {
 }
 
 export async function savePayment(payment: PaymentTransaction, dentistEmail?: string) {
-  const email = (payment.dentistEmail || dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  const email = (payment.dentistEmail || dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for payment record");
   const paymentToSave = { ...payment, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
   mem.payments = [paymentToSave, ...mem.payments.filter((p) => p._id !== paymentToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized(email);
+    const conn = await ensureDbInitialized();
     if (conn) {
       await PaymentModel.findOneAndUpdate(
         { _id: paymentToSave._id, dentistEmail: email },

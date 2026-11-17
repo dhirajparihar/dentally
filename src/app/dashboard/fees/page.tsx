@@ -50,7 +50,7 @@ export default function FeesPage() {
   const [qrModalData, setQrModalData] = useState<{ patientName: string; amount: number; procedure?: string } | null>(null);
   const router = useRouter();
 
-  // Common Procedure Pricing Presets for Dr. Ananya's Practice
+  // Common Procedure Pricing Presets
   const procedurePresets = [
     { name: "Consultation & Diagnostic X-Ray", price: 500 },
     { name: "Composite Restoration / Filling", price: 1500 },
@@ -620,7 +620,7 @@ export default function FeesPage() {
                   Bill Treatment Fee
                 </h3>
                 <p className="text-[11px] text-[#586B67] mt-0.5">
-                  1-Tap standard pricing presets for Dr. Ananya&apos;s practice
+                  1-Tap standard pricing presets for your practice
                 </p>
               </div>
               <button

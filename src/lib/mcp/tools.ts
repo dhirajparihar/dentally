@@ -117,7 +117,7 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
       properties: {
         patientId: { type: "string", description: "Unique patient ID or name" },
         note: { type: "string", description: "Clinical observation, procedure details, or advice" },
-        doctor: { type: "string", description: "Attending dentist name (defaults to Dr. Ananya Ray)" },
+        doctor: { type: "string", description: "Attending dentist name" },
       },
       required: ["patientId", "note"],
     },

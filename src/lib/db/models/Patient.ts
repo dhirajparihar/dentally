@@ -4,7 +4,7 @@ import { Patient } from "@/lib/mockData";
 const PatientSchema = new Schema<Patient>(
   {
     _id: { type: String, required: true },
-    dentistEmail: { type: String, required: true, index: true, default: "dr.ananya@dentally.app" },
+    dentistEmail: { type: String, required: true, index: true },
     name: { type: String, required: true },
     age: { type: Number, required: true },
     gender: { type: String, required: true },
@@ -21,7 +21,7 @@ const PatientSchema = new Schema<Patient>(
         id: { type: String, required: true },
         date: { type: String, required: true },
         text: { type: String, required: true },
-        doctor: { type: String, default: "Dr. Ananya Ray" },
+        doctor: { type: String, default: "Attending Doctor" },
       },
     ],
     history: [
@@ -29,7 +29,7 @@ const PatientSchema = new Schema<Patient>(
         date: { type: String, required: true },
         procedure: { type: String, required: true },
         tooth: { type: String },
-        doctor: { type: String, default: "Dr. Ananya Ray" },
+        doctor: { type: String, default: "Attending Doctor" },
         notes: { type: String, default: "" },
       },
     ],

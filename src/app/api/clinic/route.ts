@@ -10,7 +10,6 @@ import {
   saveFee,
   savePayment,
   seedSampleDataForDoctor,
-  DEFAULT_DEMO_EMAIL,
 } from "@/lib/db/repository";
 import { Patient, Appointment, FeeItem, PaymentTransaction } from "@/lib/mockData";
 
@@ -36,21 +35,19 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const requestedEmail = searchParams.get("email");
 
-    // Secure Authorization:
-    // If user has an active session, lock strictly to their authenticated email.
-    // Prevent IDOR (insecure direct object reference) where Doctor A queries Doctor B's email.
-    let targetEmail: string;
-    if (session?.user?.email) {
-      targetEmail = session.user.email.toLowerCase().trim();
-      if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
-        return NextResponse.json(
-          { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
-          { status: 403, headers: corsHeaders }
-        );
-      }
-    } else {
-      // Unauthenticated callers may only access the public demo account
-      targetEmail = DEFAULT_DEMO_EMAIL;
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: "Unauthorized: Please sign in to access clinic records." },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    const targetEmail = session.user.email.toLowerCase().trim();
+    if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
+      return NextResponse.json(
+        { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
+        { status: 403, headers: corsHeaders }
+      );
     }
 
     const state = await getClinicData(targetEmail);

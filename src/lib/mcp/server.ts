@@ -6,7 +6,6 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
-  DEFAULT_DEMO_EMAIL,
 } from "@/lib/db/repository";
 import {
   initialPatients,
@@ -85,7 +84,10 @@ function calculatePatientBalance(patientId: string) {
 }
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
-  const email = (dentistEmail || DEFAULT_DEMO_EMAIL).toLowerCase().trim();
+  if (!dentistEmail) {
+    throw new Error("Unauthorized: Dentist email is required to execute MCP tools");
+  }
+  const email = dentistEmail.toLowerCase().trim();
   const fresh = await getClinicData(email);
 
   // Request-scoped state (strictly isolated per execution to prevent multi-tenant race conditions)

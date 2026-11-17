@@ -1,17 +1,13 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   ShieldCheck,
   Lock,
-  ArrowRight,
-  AlertCircle,
   Sparkles,
-  Stethoscope,
-  ChevronLeft,
+  AlertCircle,
 } from "lucide-react";
 import { clinicProfile } from "@/lib/mockData";
 
@@ -24,14 +20,6 @@ function LoginFormContent() {
   const handleGoogleSignIn = async () => {
     setLoading("google");
     await signIn("google", { callbackUrl });
-  };
-
-  const handleDemoSignIn = async () => {
-    setLoading("demo");
-    await signIn("dentist-demo", {
-      email: clinicProfile.email,
-      callbackUrl,
-    });
   };
 
   return (
@@ -49,7 +37,7 @@ function LoginFormContent() {
             Dentist Portal Sign In
           </h1>
           <p className="text-xs text-[#3D5450]">
-            {clinicProfile.name} • Dr. Ananya&apos;s Solo Practice OS
+            {clinicProfile.name} • Private Solo Practice Operatory OS
           </p>
         </div>
 
@@ -62,21 +50,20 @@ function LoginFormContent() {
               <span>
                 {errorParam === "AccessDenied"
                   ? "Your Google account is not on the authorized dentist whitelist for this clinic."
-                  : "An authentication error occurred. Please try again or use Chairside Demo."}
+                  : "An authentication error occurred. Please try again."}
               </span>
             </div>
           </div>
         )}
 
-        {/* Login Actions */}
-        <div className="space-y-3">
-          {/* 1. Official Google Sign-in Button */}
+        {/* Login Action: Google Sign-in */}
+        <div className="space-y-3 pt-2">
           <button
             onClick={handleGoogleSignIn}
             disabled={loading !== null}
-            className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-[#F8FAF9] text-[#1E2D2B] border border-[#DCE2DE] font-semibold text-sm flex items-center justify-center gap-3 transition-all shadow-sm hover:border-[#2F8EAC] disabled:opacity-50 group"
+            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-[#F8FAF9] text-[#1E2D2B] border border-[#DCE2DE] font-semibold text-sm flex items-center justify-center gap-3 transition-all shadow-sm hover:border-[#2F8EAC] disabled:opacity-50 group"
           >
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -94,26 +81,9 @@ function LoginFormContent() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>{loading === "google" ? "Connecting to Google..." : "Sign in with Google"}</span>
-          </button>
-
-          {/* Divider */}
-          <div className="relative flex items-center justify-center my-2">
-            <div className="border-t border-[#DCE2DE] w-full" />
-            <span className="bg-white px-3 text-[10px] uppercase font-mono text-[#3D5450] shrink-0 font-bold">
-              Or Chairside Quick Access
+            <span className="font-medium text-sm">
+              {loading === "google" ? "Connecting to Google..." : "Continue with Google"}
             </span>
-          </div>
-
-          {/* 2. Demo Instant Dentist Sign In */}
-          <button
-            onClick={handleDemoSignIn}
-            disabled={loading !== null}
-            className="w-full py-3 px-4 rounded-2xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50"
-          >
-            <Stethoscope className="w-4 h-4 text-[#C7E7EC]" />
-            <span>{loading === "demo" ? "Opening Operatory..." : "1-Click Sign In as Dr. Ananya"}</span>
-            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
@@ -129,14 +99,14 @@ function LoginFormContent() {
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#2F8EAC] shrink-0" />
-            <span>ChatGPT Remote MCP Server Authenticated</span>
+            <span>Isolated Multi-Tenant Clinic Database</span>
           </div>
         </div>
       </div>
 
       {/* Footer Note */}
       <p className="text-center text-[11px] text-[#3D5450] mt-4 font-mono">
-        Authorized personnel only • Dentally Clinic Platform
+        Authorized dentists only • Dentally Clinic Platform
       </p>
     </div>
   );
@@ -144,37 +114,16 @@ function LoginFormContent() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[#FBF9F1] flex flex-col justify-between p-4 sm:p-6 lg:p-8">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between max-w-5xl w-full mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#3D5450] hover:text-[#1E2D2B] transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span>Back to Home</span>
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-mono text-[11px] text-[#3D5450] font-medium">
-            OAuth 2.0 Auth Server Online
-          </span>
-        </div>
-      </div>
-
-      {/* Suspense-wrapped login form */}
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-8">
       <Suspense
         fallback={
-          <div className="max-w-md w-full mx-auto my-8 p-10 bg-white rounded-3xl border border-[#DCE2DE] text-center text-xs text-[#3D5450]">
-            Loading login portal...
+          <div className="max-w-md w-full mx-auto p-8 bg-white rounded-3xl border border-[#DCE2DE] text-center text-xs text-[#3D5450] animate-pulse">
+            Loading secure authentication...
           </div>
         }
       >
         <LoginFormContent />
       </Suspense>
-
-      <div />
     </div>
   );
 }
