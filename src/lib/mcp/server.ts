@@ -6,6 +6,7 @@ import {
   rescheduleAppointment,
   saveFee,
   savePayment,
+  saveClinicProfile,
 } from "@/lib/db/repository";
 import {
   initialPatients,
@@ -13,6 +14,7 @@ import {
   initialFees,
   initialPayments,
   clinicProfile,
+  ClinicProfile,
   Patient,
   Appointment,
   FeeItem,
@@ -911,6 +913,43 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
         missedAppointments: missed,
         totalMonthlyRevenueINR: totalCollection,
         totalActivePatients: patientsState.length,
+      };
+    }
+
+    case "get_clinic_profile": {
+      return {
+        success: true,
+        clinicProfile,
+        message: `Current clinic settings for ${clinicProfile.name}`,
+      };
+    }
+
+    case "update_clinic_profile": {
+      const allowedKeys = [
+        "name",
+        "dentistName",
+        "qualification",
+        "regNo",
+        "phone",
+        "address",
+        "upiId",
+        "slotDuration",
+        "workingHoursStart",
+        "workingHoursEnd",
+        "receiptFooter",
+      ];
+      const updates: Partial<ClinicProfile> = {};
+      for (const key of allowedKeys) {
+        if (args[key] !== undefined) {
+          (updates as any)[key] = args[key];
+        }
+      }
+
+      const updated = await saveClinicProfile(updates, email);
+      return {
+        success: true,
+        message: `Clinic profile updated successfully for ${updated.name}.`,
+        clinicProfile: updated,
       };
     }
 

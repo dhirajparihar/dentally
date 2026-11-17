@@ -489,4 +489,34 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
       },
     },
   },
+  {
+    name: "get_clinic_profile",
+    category: "assistant",
+    description: "Retrieve current clinic branding, attending dentist credentials, DCI council reg, address, phone, and chairside UPI ID.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "update_clinic_profile",
+    category: "assistant",
+    description: "Update clinic details, attending dentist name, medical degrees, DCI registration number, phone, physical address, chairside UPI payment ID, or operatory chair slot duration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Clinic or dental studio name (e.g. Apex Multispeciality Dental Care)" },
+        dentistName: { type: "string", description: "Attending doctor's full name (e.g. Dr. Dhiraj Sharma)" },
+        qualification: { type: "string", description: "Degrees & specialization (e.g. BDS, MDS (Endodontics))" },
+        regNo: { type: "string", description: "State Dental Council / DCI registration number (e.g. DCI-MH-49210)" },
+        phone: { type: "string", description: "Clinic contact or WhatsApp line" },
+        address: { type: "string", description: "Physical clinic address" },
+        upiId: { type: "string", description: "Doctor's personal UPI ID for chairside payments & WhatsApp QR (e.g. drsharma@okaxis)" },
+        slotDuration: { type: "number", description: "Default chair appointment duration in minutes (15, 30, 45, 60)" },
+        workingHoursStart: { type: "string", description: "Daily operatory start time (e.g. 09:30 AM)" },
+        workingHoursEnd: { type: "string", description: "Daily operatory end time (e.g. 08:00 PM)" },
+        receiptFooter: { type: "string", description: "Custom footer note on printed receipts and WhatsApp messages" },
+      },
+    },
+  },
 ];
