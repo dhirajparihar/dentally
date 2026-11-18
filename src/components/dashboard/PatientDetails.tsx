@@ -250,14 +250,26 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     { name: "Composite Restoration", duration: 30 },
   ];
 
+  const handleRecallDateChange = (newDate: string) => {
+    setRecallDate(newDate);
+    setRecallError("");
+    const slots = recallHours.filter((slot) =>
+      isFutureAppointment(newDate, slot, getAppointmentClock())
+    );
+    if (slots.length > 0 && !slots.includes(recallTime)) {
+      setRecallTime(slots[0]);
+    }
+  };
+
   const handleSetRecallOffset = (days: number) => {
-    setRecallDate(shiftAppointmentDate(getAppointmentClock().date, days));
+    const nextDate = shiftAppointmentDate(getAppointmentClock().date, days);
+    handleRecallDateChange(nextDate);
   };
 
   const handleConfirmRecall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onBookAppointment || !patient || isBookingRecall) return;
-    if (!isFutureAppointment(recallDate, recallTime)) {
+    if (!isFutureAppointment(recallDate, recallTime, getAppointmentClock())) {
       setRecallError("Choose a future time to book this visit.");
       return;
     }
@@ -314,7 +326,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   // Patient appointments
   const patientAppts = appointments.filter((a) => a.patientId === patient._id);
-  const upcomingAppt = patientAppts.find((a) => a.status === "scheduled");
+  const upcomingAppt =
+    patientAppts
+      .filter((a) => a.status === "scheduled" && a.date >= recallClock.date)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ||
+    patientAppts.find((a) => a.status === "scheduled");
 
   // Fast Clinical Note Phrases for busy chairside dentists
   const quickPhrases = [
@@ -1106,7 +1122,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         required
                         min={recallClock.date}
                         value={recallDate}
-                        onChange={(e) => setRecallDate(e.target.value)}
+                        onChange={(e) => handleRecallDateChange(e.target.value)}
                         className="p-1.5 px-3 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
                       />
                     </div>
@@ -1150,48 +1166,58 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                      {recallHours.filter((slot) => isFutureAppointment(recallDate, slot, recallClock)).map((slot) => {
-                        const isBooked = appointments.some(
-                          (a) => a.date === recallDate && a.time === slot && a.status !== "cancelled"
-                        );
-                        const isSelected = recallTime === slot;
-
-                        if (isBooked) {
+                      {(() => {
+                        const availableSlots = recallHours.filter((slot) => isFutureAppointment(recallDate, slot, recallClock));
+                        if (availableSlots.length === 0) {
                           return (
-                            <div
-                              key={slot}
-                              className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
-                              title="Slot already booked"
-                            >
-                              <div className="line-through">{slot}</div>
-                              <span className="text-[9px]">Busy</span>
+                            <div className="col-span-full p-4 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] text-center text-xs text-[#64748B]">
+                              No remaining slots available for {recallDate}. Please pick a future date.
                             </div>
                           );
                         }
+                        return availableSlots.map((slot) => {
+                          const isBooked = appointments.some(
+                            (a) => a.date === recallDate && a.time === slot && a.status !== "cancelled" && a.status !== "missed"
+                          );
+                          const isSelected = recallTime === slot;
 
-                        return (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => setRecallTime(slot)}
-                            className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
-                              isSelected
-                                ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
-                                : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
-                            }`}
-                          >
-                            <div>{slot}</div>
-                            <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
-                              {isSelected ? "Selected" : "Open"}
-                            </span>
-                          </button>
-                        );
-                      })}
+                          if (isBooked) {
+                            return (
+                              <div
+                                key={slot}
+                                className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
+                                title="Slot already booked"
+                              >
+                                <div className="line-through">{slot}</div>
+                                <span className="text-[9px]">Busy</span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => setRecallTime(slot)}
+                              className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
+                                isSelected
+                                  ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
+                                  : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
+                              }`}
+                            >
+                              <div>{slot}</div>
+                              <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
+                                {isSelected ? "Selected" : "Open"}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
 
                   {/* Submit Bar */}
-                  {recallError && <p role="alert" className="text-rose-700">{recallError}</p>}
+                  {recallError && <p role="alert" className="text-xs text-rose-700 font-medium">{recallError}</p>}
                   <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
                     <button
                       type="button"
@@ -1206,7 +1232,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Book Visit</span>
+                      <span>{isBookingRecall ? "Booking..." : "Book Visit"}</span>
                     </button>
                   </div>
                 </form>

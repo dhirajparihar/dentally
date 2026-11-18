@@ -24,10 +24,28 @@ import {
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import { Patient, Appointment } from "@/lib/mockData";
+import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 
 const patientUrl = (id: string) => `/dashboard/patients/${encodeURIComponent(id)}`;
 const money = (amount: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+
+const clinicSlots = [
+  "10:00 AM",
+  "10:30 AM",
+  "11:15 AM",
+  "12:00 PM",
+  "12:45 PM",
+  "02:00 PM",
+  "02:45 PM",
+  "03:30 PM",
+  "04:15 PM",
+  "05:00 PM",
+  "05:45 PM",
+  "06:30 PM",
+  "07:15 PM",
+  "08:00 PM",
+];
 
 function parseTimeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
@@ -62,31 +80,31 @@ export default function DashboardOverviewPage() {
   const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
   const [isRecordingQrPayment, setIsRecordingQrPayment] = useState(false);
 
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const clock = getAppointmentClock();
+  const todayStr = clock.date;
+  const currentMinutes = clock.minutes;
 
   // Operatory Schedule Date Navigation
   const [scheduleDate, setScheduleDate] = useState(() => todayStr);
   const isViewingToday = scheduleDate === todayStr;
 
   const shiftScheduleDate = (days: number) => {
-    const cur = new Date(scheduleDate + "T00:00:00");
-    cur.setDate(cur.getDate() + days);
-    setScheduleDate(cur.toISOString().split("T")[0]);
+    setScheduleDate((prev) => shiftAppointmentDate(prev, days));
   };
 
   const formatScheduleHeaderDate = (dateStr: string) => {
     if (dateStr === todayStr) return "Today's Schedule";
-    const d = new Date(dateStr + "T00:00:00");
-    const diff = Math.round((new Date(dateStr + "T00:00:00").getTime() - new Date(todayStr + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24));
+    const diff = Math.round((new Date(dateStr + "T00:00:00Z").getTime() - new Date(todayStr + "T00:00:00Z").getTime()) / (1000 * 60 * 60 * 24));
     if (diff === 1) return "Tomorrow's Schedule";
     if (diff === -1) return "Yesterday's Schedule";
-    return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    const d = new Date(dateStr + "T00:00:00Z");
+    return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   };
 
   // Quick Walk-In Booking Modal State
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
+  const [walkInError, setWalkInError] = useState("");
+  const [isSubmittingWalkIn, setIsSubmittingWalkIn] = useState(false);
   const [walkInForm, setWalkInForm] = useState({
     patientName: "",
     patientPhone: "",
@@ -95,6 +113,20 @@ export default function DashboardOverviewPage() {
     durationMinutes: 30,
     notes: "Emergency walk-in",
   });
+
+  const openWalkInModal = () => {
+    const validSlots = clinicSlots.filter((slot) => isFutureAppointment(scheduleDate, slot, clock));
+    setWalkInForm({
+      patientName: "",
+      patientPhone: "",
+      procedure: "Toothache / Emergency Exam",
+      time: validSlots[0] || clinicSlots[0],
+      durationMinutes: 30,
+      notes: "Emergency walk-in",
+    });
+    setWalkInError("");
+    setIsWalkInOpen(true);
+  };
 
   // Next 7 days boundary for practical recalls
   const weekAhead = new Date();
@@ -198,68 +230,94 @@ export default function DashboardOverviewPage() {
 
   const handleWalkInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setWalkInError("");
     const trimmedName = walkInForm.patientName.trim();
     const trimmedPhone = walkInForm.patientPhone.trim();
-    if (!trimmedName) return;
-
-    const matched = patients.find(
-      (p) =>
-        p.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
-        (trimmedPhone && p.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
-    );
-
-    let resolvedPatientId = matched?._id;
-    let resolvedPhone = trimmedPhone || matched?.phone || "+91 98000 00000";
-
-    if (!matched) {
-      resolvedPatientId = `pat_${Date.now()}`;
-      const newPat: Patient = {
-        _id: resolvedPatientId,
-        name: trimmedName,
-        age: 32,
-        gender: "Other",
-        phone: resolvedPhone,
-        email: "",
-        address: "",
-        medicalAlerts: ["None"],
-        bloodGroup: "Unknown",
-        registeredDate: scheduleDate,
-        lastVisit: scheduleDate,
-        notes: [
-          {
-            id: `note_${Date.now()}`,
-            date: scheduleDate,
-            text: `Walk-in emergency visit: ${walkInForm.procedure}. ${walkInForm.notes || ""}`.trim(),
-            doctor: clinicProfile.dentistName || "Doctor",
-          },
-        ],
-        history: [],
-      };
-      await addPatient(newPat);
+    if (!trimmedName) {
+      setWalkInError("Patient name is required.");
+      return;
     }
 
-    const newApt: Appointment = {
-      _id: `apt_${Date.now()}`,
-      patientId: resolvedPatientId!,
-      patientName: trimmedName,
-      patientPhone: resolvedPhone,
-      date: scheduleDate,
-      time: walkInForm.time,
-      durationMinutes: Number(walkInForm.durationMinutes) || 30,
-      procedure: walkInForm.procedure,
-      status: "scheduled",
-      notes: walkInForm.notes || "Emergency Walk-In",
-    };
+    if (!walkInForm.time) {
+      setWalkInError("Please choose a time slot.");
+      return;
+    }
 
-    await bookAppointment(newApt);
-    setIsWalkInOpen(false);
+    if (!isFutureAppointment(scheduleDate, walkInForm.time, clock)) {
+      setWalkInError(`The selected time (${walkInForm.time}) is in the past for ${scheduleDate}. Please pick an upcoming slot.`);
+      return;
+    }
+
+    setIsSubmittingWalkIn(true);
+    try {
+      const matched = patients.find(
+        (p) =>
+          p.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
+          (trimmedPhone && p.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
+      );
+
+      let resolvedPatientId = matched?._id;
+      let resolvedPhone = trimmedPhone || matched?.phone || "+91 98000 00000";
+
+      if (!matched) {
+        resolvedPatientId = `pat_${Date.now()}`;
+        const newPat: Patient = {
+          _id: resolvedPatientId,
+          name: trimmedName,
+          age: 32,
+          gender: "Other",
+          phone: resolvedPhone,
+          email: "",
+          address: "",
+          medicalAlerts: ["None"],
+          bloodGroup: "Unknown",
+          registeredDate: scheduleDate,
+          lastVisit: scheduleDate,
+          notes: [
+            {
+              id: `note_${Date.now()}`,
+              date: scheduleDate,
+              text: `Walk-in emergency visit: ${walkInForm.procedure}. ${walkInForm.notes || ""}`.trim(),
+              doctor: clinicProfile.dentistName || "Doctor",
+            },
+          ],
+          history: [],
+        };
+        await addPatient(newPat);
+      }
+
+      const newApt: Appointment = {
+        _id: `apt_${Date.now()}`,
+        patientId: resolvedPatientId!,
+        patientName: trimmedName,
+        patientPhone: resolvedPhone,
+        date: scheduleDate,
+        time: walkInForm.time,
+        durationMinutes: Number(walkInForm.durationMinutes) || 30,
+        procedure: walkInForm.procedure,
+        status: "scheduled",
+        notes: walkInForm.notes || "Emergency Walk-In",
+      };
+
+      const success = await bookAppointment(newApt);
+      if (success === false) {
+        setWalkInError("Could not book the appointment. Check that the slot is available and in the future.");
+        return;
+      }
+      setIsWalkInOpen(false);
+    } catch (err: any) {
+      setWalkInError(err?.message || "Failed to schedule walk-in.");
+    } finally {
+      setIsSubmittingWalkIn(false);
+    }
   };
 
-  const formattedDate = now.toLocaleDateString("en-US", {
+  const formattedDate = new Date(`${clock.date}T00:00:00Z`).toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   const todayAppointments = appointments.filter((a) => a.date === todayStr);
@@ -335,7 +393,7 @@ export default function DashboardOverviewPage() {
             Good day, {clinicProfile.dentistName}
           </h1>
           <p className="mt-0.5 text-xs text-[#52627A]">
-            {clinicProfile.name} &middot; {todayList.filter((a) => a.status === "scheduled").length} patients on schedule today
+            {clinicProfile.name} &middot; {todayAppointments.filter((a) => a.status === "scheduled").length} patients on schedule today
           </p>
         </div>
 
@@ -439,17 +497,7 @@ export default function DashboardOverviewPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setWalkInForm({
-                  patientName: "",
-                  patientPhone: "",
-                  procedure: "Toothache / Emergency Exam",
-                  time: "11:30 AM",
-                  durationMinutes: 30,
-                  notes: "Emergency walk-in",
-                });
-                setIsWalkInOpen(true);
-              }}
+              onClick={openWalkInModal}
               className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
             >
               <UserPlus size={14} />
@@ -471,7 +519,7 @@ export default function DashboardOverviewPage() {
             <div className="flex items-center justify-center gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => setIsWalkInOpen(true)}
+                onClick={openWalkInModal}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline"
               >
                 <Plus size={13} /> Book Walk-In
@@ -589,15 +637,26 @@ export default function DashboardOverviewPage() {
                       </>
                     )}
                     {(apt.status === "missed" || apt.status === "cancelled") && (
-                      <button
-                        type="button"
-                        onClick={() => bookAppointment({ ...apt, status: "scheduled" })}
-                        className="small-outline text-xs text-[#0089A8] hover:bg-[#EDF7FA] font-semibold"
-                        title="Revert back to scheduled"
-                      >
-                        <RefreshCw size={12} />
-                        <span>Re-open</span>
-                      </button>
+                      isFutureAppointment(apt.date, apt.time, clock) ? (
+                        <button
+                          type="button"
+                          onClick={() => bookAppointment({ ...apt, status: "scheduled" })}
+                          className="small-outline text-xs text-[#0089A8] hover:bg-[#EDF7FA] font-semibold"
+                          title="Revert back to scheduled"
+                        >
+                          <RefreshCw size={12} />
+                          <span>Re-open</span>
+                        </button>
+                      ) : (
+                        <Link
+                          href="/dashboard/appointments"
+                          className="small-outline text-xs text-[#0089A8] hover:bg-[#EDF7FA] font-semibold"
+                          title="Reschedule to a future slot"
+                        >
+                          <RefreshCw size={12} />
+                          <span>Reschedule</span>
+                        </Link>
+                      )
                     )}
                   </div>
                 </article>
@@ -916,6 +975,12 @@ export default function DashboardOverviewPage() {
             </div>
 
             <form onSubmit={handleWalkInSubmit} className="space-y-3">
+              {walkInError && (
+                <div role="alert" className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                  {walkInError}
+                </div>
+              )}
+
               <div>
                 <label className="font-semibold text-[#111C3A] block mb-1">Patient Name *</label>
                 <input
@@ -923,7 +988,10 @@ export default function DashboardOverviewPage() {
                   required
                   placeholder="e.g. Ramesh Patel"
                   value={walkInForm.patientName}
-                  onChange={(e) => setWalkInForm({ ...walkInForm, patientName: e.target.value })}
+                  onChange={(e) => {
+                    setWalkInForm({ ...walkInForm, patientName: e.target.value });
+                    if (walkInError) setWalkInError("");
+                  }}
                   className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                 />
               </div>
@@ -936,20 +1004,35 @@ export default function DashboardOverviewPage() {
                     required
                     placeholder="+91 98200 11223"
                     value={walkInForm.patientPhone}
-                    onChange={(e) => setWalkInForm({ ...walkInForm, patientPhone: e.target.value })}
+                    onChange={(e) => {
+                      setWalkInForm({ ...walkInForm, patientPhone: e.target.value });
+                      if (walkInError) setWalkInError("");
+                    }}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
                   />
                 </div>
                 <div>
                   <label className="font-semibold text-[#111C3A] block mb-1">Time Slot *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="11:30 AM"
+                  <select
                     value={walkInForm.time}
-                    onChange={(e) => setWalkInForm({ ...walkInForm, time: e.target.value })}
+                    onChange={(e) => {
+                      setWalkInForm({ ...walkInForm, time: e.target.value });
+                      if (walkInError) setWalkInError("");
+                    }}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
-                  />
+                  >
+                    {(() => {
+                      const futureSlots = clinicSlots.filter((slot) => isFutureAppointment(scheduleDate, slot, clock));
+                      if (futureSlots.length === 0) {
+                        return <option value="">No future slots on this date</option>;
+                      }
+                      return futureSlots.map((slot) => (
+                        <option key={slot} value={slot}>
+                          {slot}
+                        </option>
+                      ));
+                    })()}
+                  </select>
                 </div>
               </div>
 
@@ -1006,10 +1089,11 @@ export default function DashboardOverviewPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs flex items-center gap-1.5"
+                  disabled={isSubmittingWalkIn || !walkInForm.time || !isFutureAppointment(scheduleDate, walkInForm.time, clock)}
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Check size={14} />
-                  <span>Confirm Walk-In</span>
+                  <span>{isSubmittingWalkIn ? "Scheduling..." : "Confirm Walk-In"}</span>
                 </button>
               </div>
             </form>
