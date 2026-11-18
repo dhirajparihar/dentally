@@ -18,6 +18,9 @@ import {
   X,
   Clock,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  UserPlus,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import { Patient, Appointment } from "@/lib/mockData";
@@ -47,6 +50,10 @@ export default function DashboardOverviewPage() {
     clinicProfile,
     loading,
     completeAppointment,
+    cancelAppointment,
+    missAppointment,
+    bookAppointment,
+    addPatient,
     recordPayment,
   } = useClinic();
 
@@ -59,29 +66,63 @@ export default function DashboardOverviewPage() {
   const todayStr = now.toISOString().split("T")[0];
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+  // Operatory Schedule Date Navigation
+  const [scheduleDate, setScheduleDate] = useState(() => todayStr);
+  const isViewingToday = scheduleDate === todayStr;
+
+  const shiftScheduleDate = (days: number) => {
+    const cur = new Date(scheduleDate + "T00:00:00");
+    cur.setDate(cur.getDate() + days);
+    setScheduleDate(cur.toISOString().split("T")[0]);
+  };
+
+  const formatScheduleHeaderDate = (dateStr: string) => {
+    if (dateStr === todayStr) return "Today's Schedule";
+    const d = new Date(dateStr + "T00:00:00");
+    const diff = Math.round((new Date(dateStr + "T00:00:00").getTime() - new Date(todayStr + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24));
+    if (diff === 1) return "Tomorrow's Schedule";
+    if (diff === -1) return "Yesterday's Schedule";
+    return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  };
+
+  // Quick Walk-In Booking Modal State
+  const [isWalkInOpen, setIsWalkInOpen] = useState(false);
+  const [walkInForm, setWalkInForm] = useState({
+    patientName: "",
+    patientPhone: "",
+    procedure: "Toothache / Emergency Exam",
+    time: "11:30 AM",
+    durationMinutes: 30,
+    notes: "Emergency walk-in",
+  });
+
   // Next 7 days boundary for practical recalls
   const weekAhead = new Date();
   weekAhead.setDate(weekAhead.getDate() + 7);
   const weekAheadStr = weekAhead.toISOString().split("T")[0];
 
-  // Chronologically sorted daily schedule
-  const todayList = appointments
-    .filter((a) => a.date === todayStr)
+  // Chronologically sorted schedule for the selected date
+  const scheduleList = appointments
+    .filter((a) => a.date === scheduleDate)
     .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
 
-  // Live operatory chair indicators
-  const inOperatoryApt = todayList.find((a) => {
-    if (a.status !== "scheduled") return false;
-    const start = parseTimeToMinutes(a.time);
-    const end = start + (a.durationMinutes || 30);
-    return currentMinutes >= start && currentMinutes <= end;
-  });
+  // Live operatory chair indicators (only evaluated when viewing today)
+  const inOperatoryApt = isViewingToday
+    ? scheduleList.find((a) => {
+        if (a.status !== "scheduled") return false;
+        const start = parseTimeToMinutes(a.time);
+        const end = start + (a.durationMinutes || 30);
+        return currentMinutes >= start && currentMinutes <= end;
+      })
+    : undefined;
 
-  const nextUpApt = todayList.find((a) => {
-    if (a.status !== "scheduled") return false;
-    const start = parseTimeToMinutes(a.time);
-    return start > currentMinutes;
-  });
+  const nextUpApt = isViewingToday
+    ? scheduleList.find((a) => {
+        if (a.status !== "scheduled") return false;
+        const start = parseTimeToMinutes(a.time);
+        return start > currentMinutes;
+      })
+    : undefined;
 
   const todayPayments = payments.filter((p) => p.date === todayStr && !p.isRefund);
   const totalDailyCollection = todayPayments.reduce((s, p) => s + p.amount, 0);
@@ -155,6 +196,65 @@ export default function DashboardOverviewPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
+  const handleWalkInSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = walkInForm.patientName.trim();
+    const trimmedPhone = walkInForm.patientPhone.trim();
+    if (!trimmedName) return;
+
+    const matched = patients.find(
+      (p) =>
+        p.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
+        (trimmedPhone && p.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
+    );
+
+    let resolvedPatientId = matched?._id;
+    let resolvedPhone = trimmedPhone || matched?.phone || "+91 98000 00000";
+
+    if (!matched) {
+      resolvedPatientId = `pat_${Date.now()}`;
+      const newPat: Patient = {
+        _id: resolvedPatientId,
+        name: trimmedName,
+        age: 32,
+        gender: "Other",
+        phone: resolvedPhone,
+        email: "",
+        address: "",
+        medicalAlerts: ["None"],
+        bloodGroup: "Unknown",
+        registeredDate: scheduleDate,
+        lastVisit: scheduleDate,
+        notes: [
+          {
+            id: `note_${Date.now()}`,
+            date: scheduleDate,
+            text: `Walk-in emergency visit: ${walkInForm.procedure}. ${walkInForm.notes || ""}`.trim(),
+            doctor: clinicProfile.dentistName || "Doctor",
+          },
+        ],
+        history: [],
+      };
+      await addPatient(newPat);
+    }
+
+    const newApt: Appointment = {
+      _id: `apt_${Date.now()}`,
+      patientId: resolvedPatientId!,
+      patientName: trimmedName,
+      patientPhone: resolvedPhone,
+      date: scheduleDate,
+      time: walkInForm.time,
+      durationMinutes: Number(walkInForm.durationMinutes) || 30,
+      procedure: walkInForm.procedure,
+      status: "scheduled",
+      notes: walkInForm.notes || "Emergency Walk-In",
+    };
+
+    await bookAppointment(newApt);
+    setIsWalkInOpen(false);
+  };
+
   const formattedDate = now.toLocaleDateString("en-US", {
     weekday: "long",
     day: "numeric",
@@ -162,11 +262,13 @@ export default function DashboardOverviewPage() {
     year: "numeric",
   });
 
+  const todayAppointments = appointments.filter((a) => a.date === todayStr);
+
   const metrics = [
     {
       label: "Today's Appointments",
-      value: todayList.length,
-      detail: `${todayList.filter((a) => a.status === "scheduled").length} scheduled / ${todayList.filter((a) => a.status === "completed").length} completed`,
+      value: todayAppointments.length,
+      detail: `${todayAppointments.filter((a) => a.status === "scheduled").length} scheduled / ${todayAppointments.filter((a) => a.status === "completed").length} completed`,
       icon: Calendar,
       tone: "blue",
       href: "/dashboard/appointments",
@@ -290,38 +392,101 @@ export default function DashboardOverviewPage() {
         ))}
       </section>
 
-      {/* ================= TODAY'S CHRONOLOGICAL OPERATORY SCHEDULE ================= */}
+      {/* ================= CHRONOLOGICAL OPERATORY SCHEDULE WITH DATE NAVIGATOR ================= */}
       <section aria-labelledby="schedule-heading" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h2 id="schedule-heading" className="text-base font-bold text-[#111C3A] flex items-center gap-2">
               <Calendar size={18} className="text-[#0089A8]" />
-              Today&apos;s Schedule
+              <span>{formatScheduleHeaderDate(scheduleDate)}</span>
             </h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-[#EDF7FA] font-bold text-[#00738E] border border-[#CDEBF2]">
-              {todayList.length} visits
+              {scheduleList.length} visits
             </span>
+
+            {/* Date Shifter Controls */}
+            <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-[#E4E9F0] shadow-2xs">
+              <button
+                type="button"
+                onClick={() => shiftScheduleDate(-1)}
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#111C3A] hover:bg-[#EDF7FA] transition-colors"
+                title="Previous Day"
+                aria-label="Previous Day"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              {!isViewingToday && (
+                <button
+                  type="button"
+                  onClick={() => setScheduleDate(todayStr)}
+                  className="px-2 py-0.5 text-[11px] font-semibold text-[#0089A8] hover:bg-[#EDF7FA] rounded-md transition-colors"
+                >
+                  Today
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => shiftScheduleDate(1)}
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#111C3A] hover:bg-[#EDF7FA] transition-colors"
+                title="Next Day"
+                aria-label="Next Day"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
           </div>
-          <Link href="/dashboard/appointments" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
-            Open Full Calendar <ArrowRight size={14} />
-          </Link>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setWalkInForm({
+                  patientName: "",
+                  patientPhone: "",
+                  procedure: "Toothache / Emergency Exam",
+                  time: "11:30 AM",
+                  durationMinutes: 30,
+                  notes: "Emergency walk-in",
+                });
+                setIsWalkInOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+            >
+              <UserPlus size={14} />
+              <span>+ Quick Walk-In</span>
+            </button>
+            <Link href="/dashboard/appointments" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
+              Full Calendar <ArrowRight size={14} />
+            </Link>
+          </div>
         </div>
 
-        {todayList.length === 0 ? (
+        {scheduleList.length === 0 ? (
           <div className="bg-white rounded-3xl border border-[#E4E9F0] p-8 text-center space-y-2">
             <Calendar size={28} className="mx-auto text-[#0089A8]" />
-            <h3 className="font-semibold text-sm text-[#111C3A]">Chair 1 is open for today</h3>
-            <p className="text-xs text-[#64748B]">No appointments booked on today&apos;s schedule.</p>
-            <Link
-              href="/dashboard/appointments"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline pt-1"
-            >
-              Book an appointment &rarr;
-            </Link>
+            <h3 className="font-semibold text-sm text-[#111C3A]">
+              Chair 1 is open {isViewingToday ? "for today" : `on ${scheduleDate}`}
+            </h3>
+            <p className="text-xs text-[#64748B]">No appointments booked for this schedule.</p>
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsWalkInOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline"
+              >
+                <Plus size={13} /> Book Walk-In
+              </button>
+              <Link
+                href="/dashboard/appointments"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#64748B] hover:underline"
+              >
+                Open Calendar &rarr;
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
-            {todayList.map((apt) => {
+            {scheduleList.map((apt) => {
               const isCurrentChair = inOperatoryApt?._id === apt._id;
               const isNext = !inOperatoryApt && nextUpApt?._id === apt._id;
 
@@ -393,13 +558,45 @@ export default function DashboardOverviewPage() {
                       <span>WhatsApp</span>
                     </a>
                     {apt.status === "scheduled" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => completeAppointment(apt._id)}
+                          className="small-outline complete-action text-xs font-semibold"
+                          title="Mark visit complete"
+                        >
+                          <Check size={13} />
+                          <span>Complete</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => missAppointment(apt._id, "Marked missed at chairside")}
+                          className="small-outline text-xs text-amber-700 hover:bg-amber-50 hover:border-amber-300 font-semibold"
+                          title="Mark missed / no-show"
+                        >
+                          <Clock size={13} />
+                          <span>Missed</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cancelAppointment(apt._id, "Cancelled from dashboard")}
+                          className="small-outline text-xs text-rose-700 hover:bg-rose-50 hover:border-rose-300 font-semibold"
+                          title="Cancel appointment"
+                        >
+                          <X size={13} />
+                          <span>Cancel</span>
+                        </button>
+                      </>
+                    )}
+                    {(apt.status === "missed" || apt.status === "cancelled") && (
                       <button
                         type="button"
-                        onClick={() => completeAppointment(apt._id)}
-                        className="small-outline complete-action text-xs font-semibold"
+                        onClick={() => bookAppointment({ ...apt, status: "scheduled" })}
+                        className="small-outline text-xs text-[#0089A8] hover:bg-[#EDF7FA] font-semibold"
+                        title="Revert back to scheduled"
                       >
-                        <Check size={13} />
-                        <span>Complete</span>
+                        <RefreshCw size={12} />
+                        <span>Re-open</span>
                       </button>
                     )}
                   </div>
@@ -559,22 +756,39 @@ export default function DashboardOverviewPage() {
               <p className="text-xs text-[#64748B]">{clinicProfile.dentistName}</p>
             </div>
 
-            {/* Quick Amount Presets */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              {[500, 1500, 2500, 5000].map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => setQrModalData((prev) => ({ ...prev, amount: amt }))}
-                  className={`text-[11px] px-2.5 py-1 rounded-xl border font-mono font-semibold transition-all ${
-                    qrModalData.amount === amt
-                      ? "bg-[#0089A8] text-white border-[#0089A8]"
-                      : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
-                  }`}
-                >
-                  ₹{amt.toLocaleString()}
-                </button>
-              ))}
+            {/* Custom Amount Input & Quick Amount Presets */}
+            <div className="space-y-2">
+              <div className="relative max-w-[200px] mx-auto">
+                <span className="absolute left-3.5 top-2 font-mono font-bold text-slate-400 text-sm">₹</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={qrModalData.amount || ""}
+                  onChange={(e) => {
+                    const val = Math.max(0, Number(e.target.value) || 0);
+                    setQrModalData((prev) => (prev ? { ...prev, amount: val } : null));
+                  }}
+                  placeholder="Amount"
+                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-[#E4E9F0] text-center font-mono font-bold text-lg text-[#111C3A] outline-none focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 bg-[#FAFBFC]"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {[500, 1500, 2500, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setQrModalData((prev) => (prev ? { ...prev, amount: amt } : null))}
+                    className={`text-[11px] px-2.5 py-1 rounded-xl border font-mono font-semibold transition-all ${
+                      qrModalData.amount === amt
+                        ? "bg-[#0089A8] text-white border-[#0089A8]"
+                        : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
+                    }`}
+                  >
+                    ₹{amt.toLocaleString()}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Real Dynamic UPI QR Graphic */}
@@ -674,6 +888,131 @@ export default function DashboardOverviewPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= QUICK CHAIRSIDE WALK-IN BOOKING MODAL ================= */}
+      {isWalkInOpen && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] space-y-4 animate-in fade-in zoom-in-95 my-auto text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-[#EDF7FA] text-[#0089A8]">
+                  <UserPlus size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#111C3A]">Quick Walk-In Booking</h3>
+                  <p className="text-[11px] text-[#64748B]">Schedule an immediate chairside visit for {formatScheduleHeaderDate(scheduleDate)}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsWalkInOpen(false)}
+                aria-label="Close modal"
+                className="text-[#8291A7] hover:text-[#111C3A]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleWalkInSubmit} className="space-y-3">
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Patient Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh Patel"
+                  value={walkInForm.patientName}
+                  onChange={(e) => setWalkInForm({ ...walkInForm, patientName: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+91 98200 11223"
+                    value={walkInForm.patientPhone}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, patientPhone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Time Slot *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="11:30 AM"
+                    value={walkInForm.time}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, time: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="font-semibold text-[#111C3A] block mb-1">Procedure / Complaint</label>
+                  <select
+                    value={walkInForm.procedure}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, procedure: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                  >
+                    <option value="Toothache / Emergency Exam">Toothache / Emergency Exam</option>
+                    <option value="Temporary Dressing">Temporary Dressing</option>
+                    <option value="Emergency Tooth Extraction">Emergency Tooth Extraction</option>
+                    <option value="Suture Removal">Suture Removal</option>
+                    <option value="RCT Sitting / Access Opening">RCT Sitting / Access Opening</option>
+                    <option value="Recement Crown">Recement Crown</option>
+                    <option value="Scaling & Cleaning">Scaling & Cleaning</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Duration</label>
+                  <select
+                    value={walkInForm.durationMinutes}
+                    onChange={(e) => setWalkInForm({ ...walkInForm, durationMinutes: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  >
+                    <option value={15}>15 mins</option>
+                    <option value={30}>30 mins</option>
+                    <option value={45}>45 mins</option>
+                    <option value={60}>60 mins</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Clinical / Operatory Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Severe throbbing pain in lower molar"
+                  value={walkInForm.notes}
+                  onChange={(e) => setWalkInForm({ ...walkInForm, notes: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
+                <button
+                  type="button"
+                  onClick={() => setIsWalkInOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>Confirm Walk-In</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
