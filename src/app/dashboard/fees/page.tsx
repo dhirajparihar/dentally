@@ -92,9 +92,12 @@ export default function FeesPage() {
   const patientLedgers = patients.map((p) => {
     const pFees = fees.filter((f) => f.patientId === p._id);
     const pPayments = payments.filter((pay) => pay.patientId === p._id && !pay.isRefund);
+    const pRefunds = payments.filter((pay) => pay.patientId === p._id && pay.isRefund);
     const totalBilled = pFees.reduce((s, f) => s + f.netAmount, 0);
     const totalPaid = pPayments.reduce((s, pay) => s + pay.amount, 0);
-    const outstanding = Math.max(0, totalBilled - totalPaid);
+    const totalRefunded = pRefunds.reduce((s, pay) => s + pay.amount, 0);
+    const netPaid = totalPaid - totalRefunded;
+    const outstanding = Math.max(0, totalBilled - netPaid);
     const latestFee = pFees[0];
     return {
       patient: p,

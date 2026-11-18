@@ -295,9 +295,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   // Patient financial calculations
   const patientFees = fees.filter((f) => f.patientId === patient._id);
   const patientPayments = payments.filter((p) => p.patientId === patient._id && !p.isRefund);
+  const patientRefunds = payments.filter((p) => p.patientId === patient._id && p.isRefund);
   const totalBilled = patientFees.reduce((acc, f) => acc + f.netAmount, 0);
   const totalPaid = patientPayments.reduce((acc, p) => acc + p.amount, 0);
-  const outstandingBalance = Math.max(0, totalBilled - totalPaid);
+  const totalRefunded = patientRefunds.reduce((acc, p) => acc + p.amount, 0);
+  const netPaid = totalPaid - totalRefunded;
+  const outstandingBalance = Math.max(0, totalBilled - netPaid);
   const feeSettlements = useMemo(
     () => calculateFeeSettlements(patientFees, patientPayments),
     [patientFees, patientPayments]

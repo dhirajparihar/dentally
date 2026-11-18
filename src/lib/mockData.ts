@@ -84,9 +84,13 @@ export function calculateFeeSettlements(
   patientPayments: PaymentTransaction[]
 ): Map<string, FeeSettlement> {
   const result = new Map<string, FeeSettlement>();
-  const totalPaid = patientPayments
+  const grossPaid = patientPayments
     .filter((p) => !p.isRefund)
     .reduce((sum, p) => sum + p.amount, 0);
+  const totalRefunded = patientPayments
+    .filter((p) => p.isRefund)
+    .reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = Math.max(0, grossPaid - totalRefunded);
 
   // Sort fees chronologically (by date ascending, then ID)
   const sortedFees = [...patientFees].sort((a, b) => {

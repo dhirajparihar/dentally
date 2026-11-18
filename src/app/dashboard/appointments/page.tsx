@@ -183,7 +183,7 @@ export default function AppointmentsPage() {
     return appointments.some((apt) => {
       if (apt._id === excludeAptId) return false;
       if (apt.date !== date) return false;
-      if (apt.status === "cancelled") return false;
+      if (apt.status === "cancelled" || apt.status === "missed") return false;
 
       const aptStart = parseTimeToMinutes(apt.time);
       const aptEnd = aptStart + (apt.durationMinutes || 30);
@@ -567,7 +567,7 @@ export default function AppointmentsPage() {
                     const hStart = parseTimeToMinutes(hour);
                     const hEnd = hStart + formDur;
                     const busyApt = appointments.find((a) => {
-                      if (a.date !== form.date || a.status === "cancelled") return false;
+                      if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
                       const aStart = parseTimeToMinutes(a.time);
                       const aEnd = aStart + (a.durationMinutes || 30);
                       return hStart < aEnd && hEnd > aStart;
@@ -613,7 +613,7 @@ export default function AppointmentsPage() {
                 const formStart = parseTimeToMinutes(form.time);
                 const formEnd = formStart + (Number(form.durationMinutes) || 30);
                 const conflict = appointments.find((a) => {
-                  if (a.date !== form.date || a.status === "cancelled") return false;
+                  if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
                   const aStart = parseTimeToMinutes(a.time);
                   const aEnd = aStart + (a.durationMinutes || 30);
                   return formStart < aEnd && formEnd > aStart;
@@ -667,7 +667,7 @@ export default function AppointmentsPage() {
                       const formStart = parseTimeToMinutes(form.time);
                       const formEnd = formStart + (Number(form.durationMinutes) || 30);
                       const conflict = appointments.find((a) => {
-                        if (a.date !== form.date || a.status === "cancelled") return false;
+                        if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
                         const aStart = parseTimeToMinutes(a.time);
                         const aEnd = aStart + (a.durationMinutes || 30);
                         return formStart < aEnd && formEnd > aStart;
@@ -744,7 +744,7 @@ export default function AppointmentsPage() {
                 const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
                 const conflict = appointments.find((a) => {
                   if (a._id === rescheduleApt._id) return false;
-                  if (a.date !== rescheduleData.date || a.status === "cancelled") return false;
+                  if (a.date !== rescheduleData.date || a.status === "cancelled" || a.status === "missed") return false;
                   const aStart = parseTimeToMinutes(a.time);
                   const aEnd = aStart + (a.durationMinutes || 30);
                   return rStart < aEnd && rEnd > aStart;
@@ -787,7 +787,7 @@ export default function AppointmentsPage() {
                       const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
                       const conflict = appointments.find((a) => {
                         if (a._id === rescheduleApt._id) return false;
-                        if (a.date !== rescheduleData.date || a.status === "cancelled") return false;
+                        if (a.date !== rescheduleData.date || a.status === "cancelled" || a.status === "missed") return false;
                         const aStart = parseTimeToMinutes(a.time);
                         const aEnd = aStart + (a.durationMinutes || 30);
                         return rStart < aEnd && rEnd > aStart;

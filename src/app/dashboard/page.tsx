@@ -96,8 +96,9 @@ export default function DashboardOverviewPage() {
     .map((p) => {
       const pFees = fees.filter((f) => f.patientId === p._id);
       const paid = payments.filter((pay) => pay.patientId === p._id && !pay.isRefund).reduce((s, pay) => s + pay.amount, 0);
+      const refunded = payments.filter((pay) => pay.patientId === p._id && pay.isRefund).reduce((s, pay) => s + pay.amount, 0);
       const billed = pFees.reduce((s, f) => s + f.netAmount, 0);
-      return { ...p, balance: Math.max(0, billed - paid) };
+      return { ...p, balance: Math.max(0, billed - (paid - refunded)) };
     })
     .filter((p) => p.balance > 0);
 
