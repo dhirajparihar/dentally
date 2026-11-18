@@ -89,6 +89,9 @@ export const ToothMap: React.FC<ToothMapProps> = ({
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">
             <span className="w-2 h-2 rounded-full bg-emerald-600" /> Implant
           </span>
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 text-slate-700 font-bold">
+            <span className="w-2 h-2 rounded-full bg-slate-400" /> Missing
+          </span>
         </div>
       </div>
 

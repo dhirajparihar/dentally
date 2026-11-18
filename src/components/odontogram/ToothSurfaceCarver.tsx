@@ -50,6 +50,8 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
     if (selectedStatus === "caries") return "fill-rose-500 hover:fill-rose-600";
     if (selectedStatus === "filled") return "fill-sky-500 hover:fill-sky-600";
     if (selectedStatus === "rct") return "fill-amber-500 hover:fill-amber-600";
+    if (selectedStatus === "crown") return "fill-purple-500 hover:fill-purple-600";
+    if (selectedStatus === "missing") return "fill-slate-400 hover:fill-slate-500";
     return "fill-emerald-500 hover:fill-emerald-600";
   };
 
@@ -192,7 +194,7 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 font-semibold block">
               Diagnostic Classification:
             </span>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs font-mono">
+            <div className="grid grid-cols-2 min-[420px]:grid-cols-4 sm:grid-cols-7 gap-2 text-xs font-mono">
               {(
                 [
                   { id: "sound", label: "Sound", border: "border-slate-700", bg: "bg-slate-800" },
@@ -201,6 +203,7 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
                   { id: "rct", label: "RCT", border: "border-amber-500", bg: "bg-amber-950/60" },
                   { id: "crown", label: "Crown", border: "border-purple-500", bg: "bg-purple-950/60" },
                   { id: "implant", label: "Implant", border: "border-emerald-500", bg: "bg-emerald-950/60" },
+                  { id: "missing", label: "Missing", border: "border-slate-400", bg: "bg-slate-700/80" },
                 ] as const
               ).map((item) => (
                 <button

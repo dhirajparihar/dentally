@@ -277,6 +277,67 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       };
     }
 
+    case "get_patient_odontogram": {
+      const patient = findPatientHelper(args.patientId);
+      if (!patient) return { error: `Patient '${args.patientId}' not found.` };
+
+      return {
+        patientId: patient._id,
+        patientName: patient.name,
+        teeth: patient.teeth || {},
+      };
+    }
+
+    case "update_tooth_condition": {
+      const patient = findPatientHelper(args.patientId);
+      if (!patient) return { error: `Patient '${args.patientId}' not found.` };
+
+      const toothId = Number(args.toothId);
+      if (!toothId || isNaN(toothId)) {
+        return { error: "Valid numeric FDI tooth ID is required (e.g. 11, 16, 26, 36, 46)." };
+      }
+
+      const existingTeeth = patient.teeth || {};
+      const currentTooth = existingTeeth[toothId] || {
+        id: toothId,
+        name: `Tooth #${toothId}`,
+        quadrant: Math.floor(toothId / 10),
+        status: "sound",
+      };
+
+      const updatedTooth = {
+        ...currentTooth,
+        status: args.status || currentTooth.status,
+        surfaces: args.surfaces || currentTooth.surfaces || [],
+        notes: args.notes || currentTooth.notes || "",
+        lastTreated: todayStr,
+      };
+
+      patient.teeth = {
+        ...existingTeeth,
+        [toothId]: updatedTooth,
+      };
+
+      // Add to patient history
+      const historyEntry = {
+        date: todayStr,
+        procedure: `${(args.status || updatedTooth.status).toUpperCase()}: Tooth #${toothId}`,
+        tooth: `#${toothId}`,
+        doctor: clinicProfile.dentistName,
+        notes: args.notes || `Tooth condition marked as ${args.status || updatedTooth.status} via AI MCP`,
+      };
+      patient.history = [historyEntry, ...patient.history];
+      patient.lastVisit = todayStr;
+
+      await savePatient(patient, email);
+
+      return {
+        success: true,
+        message: `Tooth #${toothId} updated to ${updatedTooth.status} for ${patient.name}.`,
+        updatedTooth,
+      };
+    }
+
     case "get_patient_fees_history": {
       const patient = findPatientHelper(args.patientId);
       if (!patient) return { error: `Patient '${args.patientId}' not found.` };

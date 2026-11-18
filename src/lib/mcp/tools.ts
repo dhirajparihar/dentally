@@ -123,6 +123,42 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: "get_patient_odontogram",
+    category: "patient",
+    description: "Get the visual odontogram / tooth condition map (all 32 teeth with FDI notation, caries, fillings, RCT, crowns, implants, missing) for a patient.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        patientId: { type: "string", description: "Unique patient ID or name" },
+      },
+      required: ["patientId"],
+    },
+  },
+  {
+    name: "update_tooth_condition",
+    category: "patient",
+    description: "Update the clinical diagnosis, tooth status (sound, caries, filled, rct, crown, implant, missing), carved surfaces, and notes for a specific tooth in the patient's odontogram.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        patientId: { type: "string", description: "Unique patient ID or name" },
+        toothId: { type: "number", description: "FDI tooth number (e.g. 11, 16, 26, 36, 46)" },
+        status: {
+          type: "string",
+          enum: ["sound", "caries", "filled", "rct", "crown", "implant", "missing"],
+          description: "Tooth condition status",
+        },
+        surfaces: {
+          type: "array",
+          items: { type: "string", enum: ["mesial", "distal", "occlusal", "buccal", "lingual"] },
+          description: "Affected anatomical surfaces",
+        },
+        notes: { type: "string", description: "Clinical notes or procedure description" },
+      },
+      required: ["patientId", "toothId", "status"],
+    },
+  },
+  {
     name: "get_patient_fees_history",
     category: "patient",
     description: "View a patient's complete fee and billing history (charges, discounts, net amount, and payment status).",

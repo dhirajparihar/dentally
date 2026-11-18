@@ -20,6 +20,9 @@ import {
   Receipt,
   Activity,
   Droplet,
+  Edit3,
+  Printer,
+  Trash2,
 } from "lucide-react";
 import {
   Patient,
@@ -59,6 +62,104 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   // Clinical Note State
   const [newNoteText, setNewNoteText] = useState("");
   const [activeTab, setActiveTab] = useState<"clinical" | "odontogram" | "financials" | "appointments">("clinical");
+
+  // Profile Editing State
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: patient?.name || "",
+    age: patient?.age?.toString() || "30",
+    gender: (patient?.gender || "Male") as "Male" | "Female" | "Other",
+    phone: patient?.phone || "",
+    email: patient?.email || "",
+    address: patient?.address || "",
+    bloodGroup: patient?.bloodGroup || "O+",
+    medicalAlerts: (patient?.medicalAlerts || []).join(", "),
+  });
+
+  // Selected receipt for official view/print
+  const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
+
+  // Dental Rx Generator State
+  const [isRxModalOpen, setIsRxModalOpen] = useState(false);
+  const [rxMedicines, setRxMedicines] = useState<
+    { name: string; dosage: string; duration: string; instructions: string }[]
+  >([]);
+  const [rxDiagnosis, setRxDiagnosis] = useState("Acute Pulpitis / Post-operative care");
+  const [rxAdvice, setRxAdvice] = useState("Avoid chewing hard foods. Maintain good oral hygiene. Warm saline rinses after 24 hrs.");
+
+  const standardDentalRxPresets = [
+    { name: "Amoxicillin 500mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Complete full antibiotic course." },
+    { name: "Augmentin 625mg (Amox+Clav)", dosage: "1 tab BD (Twice a day)", duration: "5 days", instructions: "With food. For severe odontogenic infection." },
+    { name: "Metronidazole 400mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Avoid alcohol during course." },
+    { name: "Ibuprofen 400mg + Paracetamol 325mg", dosage: "1 tab TID (Three times a day)", duration: "3 days", instructions: "After food for pain and swelling." },
+    { name: "Ketorolac 10mg (Dispersible)", dosage: "1 tab SOS (When needed)", duration: "2 days", instructions: "Dissolve in half glass water. Max 40mg/day." },
+    { name: "Chlorhexidine 0.2% Mouthwash", dosage: "10 ml rinse BD (Twice a day)", duration: "7 days", instructions: "Rinse for 30s after brushing. Do not swallow." },
+    { name: "Pantoprazole 40mg", dosage: "1 tab OD (Once a day)", duration: "5 days", instructions: "30 mins before breakfast." },
+  ];
+
+  const handleEditProfileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patient) return;
+    const alerts = editForm.medicalAlerts
+      ? editForm.medicalAlerts.split(",").map((s) => s.trim()).filter(Boolean)
+      : ["None"];
+
+    onUpdatePatient({
+      ...patient,
+      name: editForm.name.trim(),
+      age: Number(editForm.age) || patient.age,
+      gender: editForm.gender,
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      address: editForm.address.trim(),
+      bloodGroup: editForm.bloodGroup.trim(),
+      medicalAlerts: alerts.length > 0 ? alerts : ["None"],
+    });
+    setIsEditProfileOpen(false);
+  };
+
+  const handleQuickSetRecall = (months: number) => {
+    if (!patient) return;
+    const d = new Date();
+    d.setMonth(d.getMonth() + months);
+    const dateStr = d.toISOString().split("T")[0];
+    onUpdatePatient({
+      ...patient,
+      followUpDue: dateStr,
+    });
+  };
+
+  const handleAddRxMedicine = (preset: typeof standardDentalRxPresets[0]) => {
+    setRxMedicines((prev) => [...prev, { ...preset }]);
+  };
+
+  const handleRemoveRxMedicine = (index: number) => {
+    setRxMedicines((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveRxToNotes = () => {
+    if (!patient || rxMedicines.length === 0) return;
+    const rxText = [
+      `[PRESCRIPTION (Rx) by ${clinicProfile.dentistName}]`,
+      `Diagnosis: ${rxDiagnosis}`,
+      ...rxMedicines.map((m, i) => `${i + 1}. ${m.name} - ${m.dosage} for ${m.duration} (${m.instructions})`),
+      `Advice: ${rxAdvice}`,
+    ].join("\n");
+
+    const noteObj = {
+      id: `note_${Date.now()}`,
+      date: new Date().toISOString().split("T")[0],
+      text: rxText,
+      doctor: clinicProfile.dentistName,
+    };
+
+    onUpdatePatient({
+      ...patient,
+      notes: [noteObj, ...patient.notes],
+      lastVisit: new Date().toISOString().split("T")[0],
+    });
+    setIsRxModalOpen(false);
+  };
 
   // Inline Payment State
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -278,6 +379,27 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="flex min-w-0 items-start gap-1.5">
               <button type="button" onClick={onBack} className="detail-back" aria-label="Back to patients"><ArrowLeft size={16} /></button>
               <h2 className="min-w-0 break-words text-xl font-bold text-[#111C3A] sm:text-2xl">{patient.name}</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditForm({
+                    name: patient.name,
+                    age: patient.age.toString(),
+                    gender: patient.gender,
+                    phone: patient.phone,
+                    email: patient.email || "",
+                    address: patient.address || "",
+                    bloodGroup: patient.bloodGroup || "O+",
+                    medicalAlerts: (patient.medicalAlerts || []).join(", "),
+                  });
+                  setIsEditProfileOpen(true);
+                }}
+                className="p-1.5 rounded-lg text-[#64748B] hover:text-[#0089A8] hover:bg-[#EDF7FA] transition-colors mt-0.5"
+                title="Edit Patient Demographics & Allergies"
+                aria-label="Edit Profile"
+              >
+                <Edit3 size={15} />
+              </button>
             </div>
             <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
               <span>{patient.age} yrs &middot; {patient.gender}</span><span className="break-all">ID: {patient._id}</span>
@@ -322,7 +444,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
           <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-5">
             <div className="min-w-0 space-y-4">
               <section className="detail-card consultation-card" aria-labelledby="consultation-heading">
-                <div className="flex flex-wrap items-center justify-between gap-2"><h3 id="consultation-heading" className="text-base font-bold">New Consultation</h3><span className="consultation-date"><Calendar size={14} aria-hidden="true" />{new Date().toISOString().split("T")[0]}</span></div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 id="consultation-heading" className="text-base font-bold">New Consultation</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRxModalOpen(true)}
+                      className="px-2.5 py-1 rounded-xl bg-[#EDF7FA] text-[#00738E] border border-[#CDEBF2] hover:bg-[#DDF1F6] text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Generate and print dental prescription on clinic letterhead"
+                    >
+                      <FileText size={13} />
+                      <span>Write Rx</span>
+                    </button>
+                    <span className="consultation-date"><Calendar size={14} aria-hidden="true" />{new Date().toISOString().split("T")[0]}</span>
+                  </div>
+                </div>
                 <div className="mt-4">
                   <p className="mb-2 text-xs font-medium text-[#64748B]">Quick presets</p>
                   <div className="flex flex-wrap gap-2">
@@ -338,13 +474,51 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
                 </div>
               </section>
-              <details className="detail-card patient-information">
-                <summary className="cursor-pointer text-sm font-semibold">Patient information</summary>
+              <details className="detail-card patient-information" open>
+                <summary className="cursor-pointer text-sm font-semibold flex items-center justify-between">
+                  <span>Patient information</span>
+                  <span className="text-[11px] font-normal text-[#0089A8]">Quick Recall & Info</span>
+                </summary>
                 <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
                   <div><dt>Registered</dt><dd>{patient.registeredDate}</dd></div>
                   <div><dt>Last visit</dt><dd>{patient.lastVisit || "Not recorded"}</dd></div>
-                  <div><dt>Follow-up due</dt><dd>{patient.followUpDue || "Not set"}</dd></div>
-                  <div><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
+                  <div className="sm:col-span-2">
+                    <dt>Follow-up / Recall Due</dt>
+                    <dd className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold text-[#111C3A] font-mono mr-1.5">
+                        {patient.followUpDue || "Not set"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSetRecall(1)}
+                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                      >
+                        +1 Mo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSetRecall(3)}
+                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                      >
+                        +3 Mo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSetRecall(6)}
+                        className="px-2 py-0.5 rounded-lg border border-[#CDEBF2] bg-[#EDF7FA] text-[10px] font-mono hover:bg-[#DDF1F6] text-[#00738E] font-bold"
+                      >
+                        +6 Mo (Checkup)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSetRecall(12)}
+                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                      >
+                        +1 Yr
+                      </button>
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2"><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
                 </dl>
               </details>
             </div>
@@ -733,9 +907,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               {p.date} at {p.time}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-mono font-bold text-emerald-700">+₹{p.amount.toLocaleString()}</div>
-                            <span className="text-[10px] text-[#8291A7] font-mono">Verified</span>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right">
+                              <div className="font-mono font-bold text-emerald-700">+₹{p.amount.toLocaleString()}</div>
+                              <span className="text-[10px] text-[#8291A7] font-mono">Verified</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReceipt(p)}
+                              className="px-2.5 py-1 rounded-xl border border-[#E4E9F0] bg-white text-[#0089A8] hover:bg-[#EDF7FA] font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                              title="View & Print Official Payment Receipt"
+                            >
+                              <Receipt size={13} />
+                              <span>Receipt</span>
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -991,6 +1176,361 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
           )}
       </div>
 
+      {/* ================= EDIT PATIENT PROFILE MODAL ================= */}
+      {isEditProfileOpen && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
+              <div>
+                <h3 className="font-bold text-base text-[#111C3A]">Edit Patient Details</h3>
+                <p className="text-[11px] text-[#64748B] mt-0.5">Update contact, address, or medical alerts</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditProfileOpen(false)}
+                aria-label="Close edit profile form"
+                className="text-[#8291A7] hover:text-[#111C3A]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditProfileSubmit} className="mt-4 space-y-3">
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editForm.age}
+                    onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Gender</label>
+                  <select
+                    value={editForm.gender}
+                    onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as "Male" | "Female" | "Other" })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. B+, O-"
+                    value={editForm.bloodGroup}
+                    onChange={(e) => setEditForm({ ...editForm, bloodGroup: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Email</label>
+                <input
+                  type="email"
+                  placeholder="patient@example.com"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Medical Alerts & Drug Allergies</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Penicillin Allergy, Diabetic, Hypertensive"
+                  value={editForm.medicalAlerts}
+                  onChange={(e) => setEditForm({ ...editForm, medicalAlerts: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+                <span className="text-[10px] text-[#8291A7] mt-0.5 block">Separate multiple alerts with commas</span>
+              </div>
+
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Address</label>
+                <input
+                  type="text"
+                  placeholder="Residential address / locality"
+                  value={editForm.address}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= DENTAL PRESCRIPTION (Rx) GENERATOR MODAL ================= */}
+      {isRxModalOpen && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto">
+            {/* Letterhead Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif text-2xl font-bold text-[#0089A8]">℞</span>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111C3A]">{clinicProfile.name}</h3>
+                    <p className="text-[11px] text-[#64748B]">
+                      Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; Reg: {clinicProfile.regNo}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRxModalOpen(false)}
+                aria-label="Close prescription form"
+                className="text-[#8291A7] hover:text-[#111C3A]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Patient Header Strip */}
+            <div className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="text-[#64748B]">Patient: </span>
+                <strong className="text-[#111C3A] font-semibold">{patient.name}</strong> ({patient.age}y / {patient.gender})
+              </div>
+              <div>
+                <span className="text-[#64748B]">Date: </span>
+                <strong className="font-mono text-[#111C3A]">{new Date().toISOString().split("T")[0]}</strong>
+              </div>
+              {medicalAlerts.length > 0 && (
+                <div className="w-full flex items-center gap-1.5 pt-1 text-rose-700 font-semibold text-[11px]">
+                  <AlertTriangle size={13} />
+                  <span>Allergies: {medicalAlerts.join(", ")}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Fast Drug Presets */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#111C3A] block">
+                Quick Dental Medication Presets
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {standardDentalRxPresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => handleAddRxMedicine(preset)}
+                    className="px-2.5 py-1 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] border border-[#CDEBF2] text-[#00738E] text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    <Plus size={12} />
+                    <span>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Prescribed Drugs Table */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-[#111C3A] block">
+                Prescribed Medications ({rxMedicines.length})
+              </label>
+              {rxMedicines.length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-[#8291A7]">
+                  Click the presets above or enter custom medications.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {rxMedicines.map((med, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <strong className="text-[#111C3A] font-semibold">{idx + 1}. {med.name}</strong>
+                        <div className="text-[11px] text-[#64748B] flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                          <span>Dosage: <strong>{med.dosage}</strong></span>
+                          <span>Duration: <strong>{med.duration}</strong></span>
+                          <span>Note: <em>{med.instructions}</em></span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRxMedicine(idx)}
+                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                        title="Remove drug"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Diagnosis & Advice */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Clinical Diagnosis</label>
+                <input
+                  type="text"
+                  value={rxDiagnosis}
+                  onChange={(e) => setRxDiagnosis(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Post-Op Advice / Instructions</label>
+                <input
+                  type="text"
+                  value={rxAdvice}
+                  onChange={(e) => setRxAdvice(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0]">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-2 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1.5 text-[#52627A]"
+              >
+                <Printer size={14} />
+                <span>Print Rx Letterhead</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRxModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRxToNotes}
+                  disabled={rxMedicines.length === 0}
+                  className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs disabled:opacity-50 shadow-xs"
+                >
+                  Save Rx to Clinical Notes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= OFFICIAL PAYMENT RECEIPT MODAL ================= */}
+      {selectedReceipt && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
+              <span className="font-mono text-xs font-bold text-[#0089A8]">Official Payment Receipt</span>
+              <button
+                type="button"
+                onClick={() => setSelectedReceipt(null)}
+                aria-label="Close receipt"
+                className="text-[#8291A7] hover:text-[#111C3A]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center space-y-1">
+              <h4 className="font-bold text-lg text-[#111C3A]">{clinicProfile.name}</h4>
+              <p className="text-xs text-[#64748B]">{clinicProfile.dentistName} ({clinicProfile.qualification})</p>
+              <p className="text-[10px] font-mono text-[#8291A7]">{clinicProfile.address}</p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-[#FAFBFC] border border-[#E4E9F0] space-y-2 font-mono text-xs">
+              <div className="flex justify-between text-[#64748B]">
+                <span>Receipt No:</span>
+                <strong className="text-[#111C3A]">{selectedReceipt.receiptNo}</strong>
+              </div>
+              <div className="flex justify-between text-[#64748B]">
+                <span>Date & Time:</span>
+                <span className="text-[#111C3A]">{selectedReceipt.date} • {selectedReceipt.time}</span>
+              </div>
+              <div className="flex justify-between text-[#64748B]">
+                <span>Patient:</span>
+                <strong className="text-[#111C3A] font-sans">{selectedReceipt.patientName}</strong>
+              </div>
+              <div className="flex justify-between text-[#64748B]">
+                <span>Payment Mode:</span>
+                <span className="text-[#0089A8] font-bold">{selectedReceipt.paymentMethod}</span>
+              </div>
+              <div className="pt-2 border-t border-[#E4E9F0] flex justify-between text-sm">
+                <span className="font-bold text-[#111C3A]">Amount Received:</span>
+                <strong className="text-emerald-700 font-bold">₹{selectedReceipt.amount.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3 py-1.5 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1 text-[#64748B]"
+              >
+                <Printer className="w-3.5 h-3.5" /> Print Receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedReceipt(null)}
+                className="px-4 py-1.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

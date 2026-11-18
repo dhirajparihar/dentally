@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Calendar,
   Plus,
@@ -132,22 +132,6 @@ export default function AppointmentsPage() {
     reason: "",
   });
 
-  // Dental Working Day Hours (10 AM - 7 PM)
-  const workingHours = [
-    "10:00 AM",
-    "10:30 AM",
-    "11:15 AM",
-    "12:00 PM",
-    "12:45 PM",
-    "02:00 PM",
-    "02:45 PM",
-    "03:30 PM",
-    "04:15 PM",
-    "05:00 PM",
-    "05:45 PM",
-    "06:30 PM",
-  ];
-
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr) return 0;
     const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -159,6 +143,30 @@ export default function AppointmentsPage() {
     if (period === "AM" && hours === 12) hours = 0;
     return hours * 60 + minutes;
   };
+
+  // Dynamically generate slots from ClinicProfile settings
+  const workingHours = useMemo(() => {
+    const sMin = parseTimeToMinutes(clinicProfile.workingHoursStart || "10:00 AM");
+    const eMin = parseTimeToMinutes(clinicProfile.workingHoursEnd || "07:00 PM");
+    const step = Math.max(15, clinicProfile.slotDuration || 30);
+    const slots: string[] = [];
+
+    for (let m = sMin; m + step <= eMin; m += step) {
+      let h = Math.floor(m / 60);
+      const min = m % 60;
+      const period = h >= 12 ? "PM" : "AM";
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+      const hStr = h.toString().padStart(2, "0");
+      const mStr = min.toString().padStart(2, "0");
+      slots.push(`${hStr}:${mStr} ${period}`);
+    }
+
+    if (slots.length === 0) {
+      return ["10:00 AM", "10:30 AM", "11:15 AM", "12:00 PM", "02:00 PM", "02:45 PM", "03:30 PM", "04:15 PM", "05:00 PM", "05:45 PM", "06:30 PM"];
+    }
+    return slots;
+  }, [clinicProfile.workingHoursStart, clinicProfile.workingHoursEnd, clinicProfile.slotDuration]);
 
   const isSlotBusy = (
     date: string,

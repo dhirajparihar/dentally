@@ -70,7 +70,8 @@ export default function McpSettingsPage() {
     if (tool.name === "get_clinic_profile") parameters = {};
     else if (tool.name === "update_clinic_profile") parameters = {};
     else if (tool.name === "search_patient") parameters = { query: patient?.name || "" };
-    else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history"].includes(tool.name)) parameters = { patientId: patient?._id || "" };
+    else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history", "get_patient_odontogram"].includes(tool.name)) parameters = { patientId: patient?._id || "" };
+    else if (tool.name === "update_tooth_condition") parameters = { patientId: patient?._id || "", toothId: 46, status: "rct", surfaces: ["occlusal"], notes: "RCT obturation completed" };
     else if (tool.name === "get_upcoming_appointments") parameters = { limit: 5 };
     else if (tool.name === "check_available_slots") parameters = { date: "today" };
     else if (tool.name === "get_patient_summary") parameters = { patientQuery: patient?.name || "" };

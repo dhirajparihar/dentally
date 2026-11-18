@@ -30,6 +30,7 @@ export default function PatientsPage() {
   } = useClinic();
 
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered">("recent");
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -44,13 +45,37 @@ export default function PatientsPage() {
     bloodGroup: "O+",
   });
 
-  const filtered = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.phone.includes(search) ||
-      p._id.toLowerCase().includes(search.toLowerCase()) ||
-      p.medicalAlerts.some((a) => a.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Helper to calculate balance
+  const getBalance = (patientId: string) => {
+    const pFees = fees.filter((f) => f.patientId === patientId);
+    const paid = payments
+      .filter((p) => p.patientId === patientId && !p.isRefund)
+      .reduce((s, p) => s + p.amount, 0);
+    const billed = pFees.reduce((s, f) => s + f.netAmount, 0);
+    return Math.max(0, billed - paid);
+  };
+
+  const filtered = patients
+    .filter((p) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
+        p._id.toLowerCase().includes(q) ||
+        (p.address && p.address.toLowerCase().includes(q)) ||
+        p.medicalAlerts.some((a) => a.toLowerCase().includes(q)) ||
+        p.notes.some((n) => n.text.toLowerCase().includes(q)) ||
+        p.history.some((h) => h.procedure.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "due") return getBalance(b._id) - getBalance(a._id);
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "registered") return (b.registeredDate || "").localeCompare(a.registeredDate || "");
+      // Default: recent visits first
+      return (b.lastVisit || b.registeredDate || "").localeCompare(a.lastVisit || a.registeredDate || "");
+    });
 
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,16 +111,6 @@ export default function PatientsPage() {
   };
 
 
-  // Helper to calculate balance
-  const getBalance = (patientId: string) => {
-    const pFees = fees.filter((f) => f.patientId === patientId);
-    const paid = payments
-      .filter((p) => p.patientId === patientId && !p.isRefund)
-      .reduce((s, p) => s + p.amount, 0);
-    const billed = pFees.reduce((s, f) => s + f.netAmount, 0);
-    return Math.max(0, billed - paid);
-  };
-
   // Quick WhatsApp link generator
   const getWhatsAppLink = (patient: Patient) => {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
@@ -126,20 +141,33 @@ export default function PatientsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#E4E9F0] bg-white px-3 focus-within:border-[#0089A8]">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-[#E4E9F0] bg-white px-3 focus-within:border-[#0089A8]">
           <Search className="h-4 w-4 shrink-0 text-[#8291A7]" aria-hidden="true" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search patients"
+            placeholder="Search by name, phone, allergy, tooth, note..."
             aria-label="Search patients by name, phone, ID, or allergy"
             className="h-11 w-full min-w-0 bg-transparent text-sm text-[#111C3A] outline-none placeholder:text-[#8291A7]"
           />
           {search && <button onClick={() => setSearch("")} aria-label="Clear search" className="flex shrink-0 items-center justify-center text-[#64748B]"><X size={16} /></button>}
         </div>
-        <button onClick={() => setIsAddOpen(true)} className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0089A8] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#00738E] sm:px-4 sm:text-sm">
+
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as any)}
+          aria-label="Sort patients"
+          className="h-11 px-3 rounded-xl border border-[#E4E9F0] bg-white text-xs font-semibold text-[#111C3A] outline-none focus:border-[#0089A8]"
+        >
+          <option value="recent">Sort: Recent Visits</option>
+          <option value="due">Sort: Highest Dues</option>
+          <option value="name">Sort: Name (A-Z)</option>
+          <option value="registered">Sort: Newest Registered</option>
+        </select>
+
+        <button onClick={() => setIsAddOpen(true)} className="flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0089A8] px-3.5 text-xs font-semibold text-white transition-colors hover:bg-[#00738E] sm:text-sm shadow-xs">
           <Plus size={16} />Add Patient
         </button>
       </div>
