@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   ArrowLeft,
   X,
@@ -310,10 +310,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const totalRefunded = patientRefunds.reduce((acc, p) => acc + p.amount, 0);
   const netPaid = totalPaid - totalRefunded;
   const outstandingBalance = Math.max(0, totalBilled - netPaid);
-  const feeSettlements = useMemo(
-    () => calculateFeeSettlements(patientFees, patientPayments),
-    [patientFees, patientPayments]
-  );
+  const feeSettlements = calculateFeeSettlements(patientFees, patientPayments);
 
   // Patient appointments
   const patientAppts = appointments.filter((a) => a.patientId === patient._id);
@@ -1447,7 +1444,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-400 text-rose-900 space-y-2 animate-in fade-in">
                 <div className="flex items-center gap-2 font-bold text-sm text-rose-700">
                   <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
-                  <span>CRITICAL ALLERGY ALERT: {allergyAlert.allergyType}</span>
+                  <span>CRITICAL ALLERGY ALERT: {allergyAlert.allergen}</span>
                 </div>
                 <p className="text-xs text-rose-800 leading-relaxed font-sans">
                   <strong>{allergyAlert.drugName}</strong> is contraindicated. {allergyAlert.reason}

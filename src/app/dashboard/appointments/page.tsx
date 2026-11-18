@@ -634,21 +634,8 @@ export default function AppointmentsPage() {
                 </div>
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-<<<<<<< Updated upstream
-                  {workingHours.map((hour) => {
-                    const formDur = Number(form.durationMinutes) || 30;
-                    const hStart = parseTimeToMinutes(hour);
-                    const hEnd = hStart + formDur;
-                    const busyApt = appointments.find((a) => {
-                      if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
-                      const aStart = parseTimeToMinutes(a.time);
-                      const aEnd = aStart + (a.durationMinutes || 30);
-                      return hStart < aEnd && hEnd > aStart;
-                    });
-=======
                   {bookingSlots.map((hour) => {
                     const busyApt = findSlotConflict(form.date, hour, form.durationMinutes || 30);
->>>>>>> Stashed changes
                     const isSelected = form.time === hour;
 
                     if (busyApt) {
@@ -687,21 +674,7 @@ export default function AppointmentsPage() {
               </div>
 
               {/* Overlap Conflict Detection Notice */}
-<<<<<<< Updated upstream
-              {(() => {
-                const formStart = parseTimeToMinutes(form.time);
-                const formEnd = formStart + (Number(form.durationMinutes) || 30);
-                const conflict = appointments.find((a) => {
-                  if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
-                  const aStart = parseTimeToMinutes(a.time);
-                  const aEnd = aStart + (a.durationMinutes || 30);
-                  return formStart < aEnd && formEnd > aStart;
-                });
-                if (!conflict) return null;
-                return (
-=======
               {bookingConflict && bookingSlots.includes(form.time) && (
->>>>>>> Stashed changes
                   <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -745,23 +718,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
-<<<<<<< Updated upstream
-                  disabled={Boolean(
-                    (() => {
-                      const formStart = parseTimeToMinutes(form.time);
-                      const formEnd = formStart + (Number(form.durationMinutes) || 30);
-                      const conflict = appointments.find((a) => {
-                        if (a.date !== form.date || a.status === "cancelled" || a.status === "missed") return false;
-                        const aStart = parseTimeToMinutes(a.time);
-                        const aEnd = aStart + (a.durationMinutes || 30);
-                        return formStart < aEnd && formEnd > aStart;
-                      });
-                      return conflict && !emergencyOverride;
-                    })()
-                  )}
-=======
                   disabled={isSubmitting || !bookingSlots.includes(form.time) || Boolean(bookingConflict && !emergencyOverride)}
->>>>>>> Stashed changes
                   className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Booking
@@ -835,22 +792,7 @@ export default function AppointmentsPage() {
               </div>
 
               {/* Conflict Detection for Rescheduling */}
-<<<<<<< Updated upstream
-              {(() => {
-                const rStart = parseTimeToMinutes(rescheduleData.time);
-                const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
-                const conflict = appointments.find((a) => {
-                  if (a._id === rescheduleApt._id) return false;
-                  if (a.date !== rescheduleData.date || a.status === "cancelled" || a.status === "missed") return false;
-                  const aStart = parseTimeToMinutes(a.time);
-                  const aEnd = aStart + (a.durationMinutes || 30);
-                  return rStart < aEnd && rEnd > aStart;
-                });
-                if (!conflict) return null;
-                return (
-=======
               {rescheduleConflict && rescheduleSlots.includes(rescheduleData.time) && (
->>>>>>> Stashed changes
                   <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
                     <div className="flex items-start gap-1.5">
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -881,24 +823,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
-<<<<<<< Updated upstream
-                  disabled={Boolean(
-                    (() => {
-                      const rStart = parseTimeToMinutes(rescheduleData.time);
-                      const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
-                      const conflict = appointments.find((a) => {
-                        if (a._id === rescheduleApt._id) return false;
-                        if (a.date !== rescheduleData.date || a.status === "cancelled" || a.status === "missed") return false;
-                        const aStart = parseTimeToMinutes(a.time);
-                        const aEnd = aStart + (a.durationMinutes || 30);
-                        return rStart < aEnd && rEnd > aStart;
-                      });
-                      return conflict && !rescheduleOverride;
-                    })()
-                  )}
-=======
                   disabled={isSubmitting || rescheduleApt.date < clock.date || !rescheduleSlots.includes(rescheduleData.time) || Boolean(rescheduleConflict && !rescheduleOverride)}
->>>>>>> Stashed changes
                   className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Reschedule
