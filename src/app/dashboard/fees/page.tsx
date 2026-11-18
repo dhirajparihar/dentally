@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   CreditCard,
@@ -19,6 +19,8 @@ import {
   FeeItem,
   PaymentTransaction,
   Patient,
+  FeeSettlement,
+  calculateFeeSettlements,
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
@@ -185,7 +187,22 @@ export default function FeesPage() {
     { label: "Invoices", value: fees.length, detail: "Treatment charges", icon: Receipt, tone: "teal" },
     { label: "Payments", value: payments.length, detail: "Receipts issued", icon: CreditCard, tone: "teal" },
   ];
-  const feeStatus = (fee: FeeItem) => patientLedgers.find((ledger) => ledger.patient._id === fee.patientId)?.outstanding === 0 ? "paid" : fee.status;
+  const feeSettlements = useMemo(() => {
+    const map = new Map<string, FeeSettlement>();
+    const patientIds = Array.from(new Set(fees.map((f) => f.patientId)));
+    for (const pid of patientIds) {
+      const pFees = fees.filter((f) => f.patientId === pid);
+      const pPayments = payments.filter((p) => p.patientId === pid);
+      const pMap = calculateFeeSettlements(pFees, pPayments);
+      pMap.forEach((val, key) => map.set(key, val));
+    }
+    return map;
+  }, [fees, payments]);
+
+  const feeStatus = (fee: FeeItem) => {
+    const settlement = feeSettlements.get(fee._id);
+    return settlement?.status || fee.status || "unpaid";
+  };
 
   return (
     <div className="fees-workspace space-y-4">
@@ -231,7 +248,42 @@ export default function FeesPage() {
       ) : activeTab === "fees" ? (
         visibleFees.length === 0 ? <div className="workspace-empty">{search ? "No matching invoices." : "No invoices yet."}</div> : (
           <section aria-label="Treatment invoices" className="finance-record-list">
-            {visibleFees.map((fee) => <article key={fee._id} className="finance-record"><div className="finance-record-main"><h2 className="text-sm font-semibold">{fee.patientName}</h2><p className="mt-1 text-xs leading-5 text-[#52627A]">{fee.procedureName}{fee.tooth && <> &middot; {fee.tooth}</>}</p><time className="mt-1 block text-[11px] text-[#8291A7]">{fee.date}</time></div><div className="finance-record-amount"><p className="text-sm font-semibold">{money(fee.netAmount)}</p><span className={`finance-status ${feeStatus(fee)}`}>{feeStatus(fee)}</span></div><details className="finance-record-details"><summary>Details</summary><dl><div><dt>Gross</dt><dd>{money(fee.amount)}</dd></div><div><dt>Discount</dt><dd>{money(fee.discount)}</dd></div><div><dt>Patient ID</dt><dd>{fee.patientId}</dd></div>{fee.notes && <div className="sm:col-span-2"><dt>Notes</dt><dd>{fee.notes}</dd></div>}</dl></details></article>)}
+            {visibleFees.map((fee) => {
+              const status = feeStatus(fee);
+              const settlement = feeSettlements.get(fee._id);
+              return (
+                <article key={fee._id} className="finance-record">
+                  <div className="finance-record-main">
+                    <h2 className="text-sm font-semibold">{fee.patientName}</h2>
+                    <p className="mt-1 text-xs leading-5 text-[#52627A]">
+                      {fee.procedureName}{fee.tooth && <> &middot; {fee.tooth}</>}
+                    </p>
+                    <time className="mt-1 block text-[11px] text-[#8291A7]">{fee.date}</time>
+                  </div>
+                  <div className="finance-record-amount">
+                    <p className="text-sm font-semibold">{money(fee.netAmount)}</p>
+                    <span className={`finance-status ${status}`}>{status}</span>
+                    {status === "partial" && settlement && (
+                      <p className="mt-0.5 text-[10px] font-mono text-[#995c13]">
+                        {money(settlement.allocatedAmount)} paid
+                      </p>
+                    )}
+                  </div>
+                  <details className="finance-record-details">
+                    <summary>Details</summary>
+                    <dl>
+                      <div><dt>Gross</dt><dd>{money(fee.amount)}</dd></div>
+                      <div><dt>Discount</dt><dd>{money(fee.discount)}</dd></div>
+                      <div><dt>Patient ID</dt><dd>{fee.patientId}</dd></div>
+                      {settlement && status === "partial" && (
+                        <div><dt>Balance Due</dt><dd className="font-semibold text-rose-700">{money(settlement.balanceDue)}</dd></div>
+                      )}
+                      {fee.notes && <div className="sm:col-span-2"><dt>Notes</dt><dd>{fee.notes}</dd></div>}
+                    </dl>
+                  </details>
+                </article>
+              );
+            })}
           </section>
         )
       ) : (

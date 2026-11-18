@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   Appointment,
+  Patient,
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
@@ -62,6 +63,7 @@ export default function AppointmentsPage() {
     patients,
     clinicProfile,
     loading,
+    addPatient,
     bookAppointment,
     completeAppointment,
     cancelAppointment,
@@ -75,6 +77,8 @@ export default function AppointmentsPage() {
 
   // Modals
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [emergencyOverride, setEmergencyOverride] = useState(false);
+  const [rescheduleOverride, setRescheduleOverride] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
   const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
@@ -144,16 +148,43 @@ export default function AppointmentsPage() {
     "06:30 PM",
   ];
 
-  const timeInMinutes = (time: string) => {
-    const [clock, period] = time.split(" ");
-    const [hours, minutes] = clock.split(":").map(Number);
-    return (hours % 12 + (period === "PM" ? 12 : 0)) * 60 + minutes;
+  const parseTimeToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 0;
+    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return 0;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3]?.toUpperCase();
+    if (period === "PM" && hours < 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  };
+
+  const isSlotBusy = (
+    date: string,
+    time: string,
+    durationMinutes = 30,
+    excludeAptId?: string
+  ) => {
+    const slotStart = parseTimeToMinutes(time);
+    const slotEnd = slotStart + durationMinutes;
+
+    return appointments.some((apt) => {
+      if (apt._id === excludeAptId) return false;
+      if (apt.date !== date) return false;
+      if (apt.status === "cancelled") return false;
+
+      const aptStart = parseTimeToMinutes(apt.time);
+      const aptEnd = aptStart + (apt.durationMinutes || 30);
+
+      return slotStart < aptEnd && slotEnd > aptStart;
+    });
   };
 
   // Filtered by selected date for single dentist timeline
   const dayAppointments = appointments
     .filter((a) => a.date === selectedDate)
-    .sort((a, b) => timeInMinutes(a.time) - timeInMinutes(b.time));
+    .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
 
   // Filtered for list view
   const listAppointments = appointments.filter((a) => {
@@ -191,16 +222,52 @@ export default function AppointmentsPage() {
   // Booking submit
   const handleBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmedName = form.patientName.trim();
+    const trimmedPhone = form.patientPhone.trim();
+    if (!trimmedName) return;
+
     const matched = patients.find(
-      (p) => p.name.trim().toLowerCase() === form.patientName.trim().toLowerCase()
+      (p) =>
+        p.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
+        (trimmedPhone && p.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
     );
-    const resolvedPatientId = matched ? matched._id : `pat_${Date.now().toString().slice(-4)}`;
-    const resolvedPhone = form.patientPhone || (matched ? matched.phone : "+91 98201 00000");
+
+    let resolvedPatientId = matched?._id;
+    let resolvedPhone = trimmedPhone || matched?.phone || "";
+
+    if (!matched) {
+      // Auto-create registered patient in MongoDB so clinical dossier navigation works seamlessly
+      resolvedPatientId = `pat_${Date.now()}`;
+      const newPat: Patient = {
+        _id: resolvedPatientId,
+        name: trimmedName,
+        age: 30,
+        gender: "Other",
+        phone: resolvedPhone,
+        email: "",
+        address: "",
+        medicalAlerts: ["None"],
+        bloodGroup: "Unknown",
+        registeredDate: form.date || new Date().toISOString().split("T")[0],
+        notes: form.notes
+          ? [
+              {
+                id: `note_${Date.now()}`,
+                date: form.date,
+                text: `Initial booking: ${form.procedure}. ${form.notes}`,
+                doctor: clinicProfile.dentistName || "Doctor",
+              },
+            ]
+          : [],
+        history: [],
+      };
+      await addPatient(newPat);
+    }
 
     const newApt: Appointment = {
       _id: `apt_${Date.now()}`,
-      patientId: resolvedPatientId,
-      patientName: form.patientName.trim(),
+      patientId: resolvedPatientId!,
+      patientName: trimmedName,
       patientPhone: resolvedPhone,
       date: form.date,
       time: form.time,
@@ -212,6 +279,7 @@ export default function AppointmentsPage() {
 
     await bookAppointment(newApt);
     setIsBookModalOpen(false);
+    setEmergencyOverride(false);
     setBookedSuccessApt(newApt);
     setForm({
       patientName: "",
@@ -236,6 +304,7 @@ export default function AppointmentsPage() {
       rescheduleData.reason
     );
     setRescheduleApt(null);
+    setRescheduleOverride(false);
   };
 
   // WhatsApp Instant Booking Confirmation
@@ -262,9 +331,10 @@ export default function AppointmentsPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
-  const availableSlots = workingHours.filter((slot) => !dayAppointments.some((appointment) => appointment.time === slot && appointment.status !== "cancelled"));
+  const availableSlots = workingHours.filter((slot) => !isSlotBusy(selectedDate, slot, 30));
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
   const openBooking = (time?: string) => {
+    setEmergencyOverride(false);
     setForm((previous) => ({ ...previous, date: selectedDate, ...(time ? { time } : {}) }));
     setIsBookModalOpen(true);
   };
@@ -474,17 +544,23 @@ export default function AppointmentsPage() {
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {workingHours.map((hour) => {
-                    const booked = appointments.some(
-                      (a) => a.date === form.date && a.time === hour && a.status === "scheduled"
-                    );
+                    const formDur = Number(form.durationMinutes) || 30;
+                    const hStart = parseTimeToMinutes(hour);
+                    const hEnd = hStart + formDur;
+                    const busyApt = appointments.find((a) => {
+                      if (a.date !== form.date || a.status === "cancelled") return false;
+                      const aStart = parseTimeToMinutes(a.time);
+                      const aEnd = aStart + (a.durationMinutes || 30);
+                      return hStart < aEnd && hEnd > aStart;
+                    });
                     const isSelected = form.time === hour;
 
-                    if (booked) {
+                    if (busyApt) {
                       return (
                         <div
                           key={hour}
                           className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
-                          title="Time slot already occupied"
+                          title={`Operatory occupied by ${busyApt.patientName} (${busyApt.time}, ${busyApt.durationMinutes}m)`}
                         >
                           <div className="line-through">{hour}</div>
                           <span className="text-[9px]">Booked</span>
@@ -513,19 +589,35 @@ export default function AppointmentsPage() {
                 </div>
               </div>
 
-              {/* Conflict Detection Notice */}
+              {/* Overlap Conflict Detection Notice */}
               {(() => {
-                const conflict = appointments.find(
-                  (a) => a.date === form.date && a.time === form.time && a.status === "scheduled"
-                );
+                const formStart = parseTimeToMinutes(form.time);
+                const formEnd = formStart + (Number(form.durationMinutes) || 30);
+                const conflict = appointments.find((a) => {
+                  if (a.date !== form.date || a.status === "cancelled") return false;
+                  const aStart = parseTimeToMinutes(a.time);
+                  const aEnd = aStart + (a.durationMinutes || 30);
+                  return formStart < aEnd && formEnd > aStart;
+                });
                 if (!conflict) return null;
                 return (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>
-                      <strong>Solo Operatory Notice:</strong> {clinicProfile.dentistName} is already scheduled with{" "}
-                      <strong>{conflict.patientName}</strong> at {form.time}. Please select an adjacent time slot to avoid double booking.
-                    </span>
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Chair 1 Operatory Conflict:</strong> {clinicProfile.dentistName} already has an appointment with{" "}
+                        <strong>{conflict.patientName}</strong> from <strong>{conflict.time}</strong> ({conflict.durationMinutes}m for {conflict.procedure}).
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={emergencyOverride}
+                        onChange={(e) => setEmergencyOverride(e.target.checked)}
+                        className="rounded border-amber-300 text-[#0089A8] focus:ring-[#0089A8]"
+                      />
+                      <span>Emergency Override: Allow double-booking operatory</span>
+                    </label>
                   </div>
                 );
               })()}
@@ -551,7 +643,20 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs"
+                  disabled={Boolean(
+                    (() => {
+                      const formStart = parseTimeToMinutes(form.time);
+                      const formEnd = formStart + (Number(form.durationMinutes) || 30);
+                      const conflict = appointments.find((a) => {
+                        if (a.date !== form.date || a.status === "cancelled") return false;
+                        const aStart = parseTimeToMinutes(a.time);
+                        const aEnd = aStart + (a.durationMinutes || 30);
+                        return formStart < aEnd && formEnd > aStart;
+                      });
+                      return conflict && !emergencyOverride;
+                    })()
+                  )}
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Booking
                 </button>
@@ -614,6 +719,39 @@ export default function AppointmentsPage() {
                 />
               </div>
 
+              {/* Conflict Detection for Rescheduling */}
+              {(() => {
+                const rStart = parseTimeToMinutes(rescheduleData.time);
+                const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
+                const conflict = appointments.find((a) => {
+                  if (a._id === rescheduleApt._id) return false;
+                  if (a.date !== rescheduleData.date || a.status === "cancelled") return false;
+                  const aStart = parseTimeToMinutes(a.time);
+                  const aEnd = aStart + (a.durationMinutes || 30);
+                  return rStart < aEnd && rEnd > aStart;
+                });
+                if (!conflict) return null;
+                return (
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
+                    <div className="flex items-start gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Chair 1 Conflict:</strong> {conflict.patientName} is scheduled at {conflict.time} ({conflict.durationMinutes}m for {conflict.procedure}).
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rescheduleOverride}
+                        onChange={(e) => setRescheduleOverride(e.target.checked)}
+                        className="rounded border-amber-300 text-[#0089A8]"
+                      />
+                      <span>Emergency override conflict</span>
+                    </label>
+                  </div>
+                );
+              })()}
+
               <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
@@ -624,7 +762,21 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E]"
+                  disabled={Boolean(
+                    (() => {
+                      const rStart = parseTimeToMinutes(rescheduleData.time);
+                      const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
+                      const conflict = appointments.find((a) => {
+                        if (a._id === rescheduleApt._id) return false;
+                        if (a.date !== rescheduleData.date || a.status === "cancelled") return false;
+                        const aStart = parseTimeToMinutes(a.time);
+                        const aEnd = aStart + (a.durationMinutes || 30);
+                        return rStart < aEnd && rEnd > aStart;
+                      });
+                      return conflict && !rescheduleOverride;
+                    })()
+                  )}
+                  className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Reschedule
                 </button>

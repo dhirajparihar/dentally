@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   ArrowLeft,
   X,
@@ -27,6 +27,7 @@ import {
   PaymentTransaction,
   Appointment,
   ToothCondition,
+  calculateFeeSettlements,
 } from "@/lib/mockData";
 import { ToothMap } from "@/components/odontogram/ToothMap";
 import { useClinic } from "@/context/ClinicContext";
@@ -151,6 +152,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const totalBilled = patientFees.reduce((acc, f) => acc + f.netAmount, 0);
   const totalPaid = patientPayments.reduce((acc, p) => acc + p.amount, 0);
   const outstandingBalance = Math.max(0, totalBilled - totalPaid);
+  const feeSettlements = useMemo(
+    () => calculateFeeSettlements(patientFees, patientPayments),
+    [patientFees, patientPayments]
+  );
 
   // Patient appointments
   const patientAppts = appointments.filter((a) => a.patientId === patient._id);
@@ -359,8 +364,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
           <div className="min-w-0 space-y-4">
             <ToothMap
                 readOnly={false}
+                teeth={patient.teeth}
                 patientName={patient.name}
                 onUpdateTooth={(tooth: ToothCondition) => {
+                  const updatedTeeth = {
+                    ...(patient.teeth || {}),
+                    [tooth.id]: tooth,
+                  };
                   const newEntry = {
                     date: new Date().toISOString().split("T")[0],
                     procedure: `${tooth.status.toUpperCase()}: ${tooth.name}${tooth.surfaces?.length ? ` (${tooth.surfaces.join(", ")})` : ""}`,
@@ -370,6 +380,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   };
                   onUpdatePatient({
                     ...patient,
+                    teeth: updatedTeeth,
                     history: [newEntry, ...patient.history],
                   });
                 }}
@@ -661,27 +672,39 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     <p className="text-xs text-[#64748B] py-4 text-center">No invoices yet.</p>
                   ) : (
                     <div className="space-y-2">
-                      {patientFees.map((f) => (
-                        <div
-                          key={f._id}
-                          className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-3 text-xs"
-                        >
-                          <div>
-                            <div className="font-bold text-[#111C3A]">
-                              {f.procedureName} {f.tooth && <span className="text-[#0089A8] font-mono">({f.tooth})</span>}
+                      {patientFees.map((f) => {
+                        const settlement = feeSettlements.get(f._id);
+                        const status = settlement?.status || f.status || "unpaid";
+                        return (
+                          <div
+                            key={f._id}
+                            className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-3 text-xs"
+                          >
+                            <div>
+                              <div className="font-bold text-[#111C3A]">
+                                {f.procedureName} {f.tooth && <span className="text-[#0089A8] font-mono">({f.tooth})</span>}
+                              </div>
+                              <div className="text-[10px] text-[#8291A7] font-mono mt-0.5">{f.date}</div>
                             </div>
-                            <div className="text-[10px] text-[#8291A7] font-mono mt-0.5">{f.date}</div>
+                            <div className="text-right">
+                              <div className="font-mono font-bold text-[#111C3A]">₹{f.netAmount.toLocaleString()}</div>
+                              <span
+                                className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono uppercase font-semibold ${
+                                  status === "paid"
+                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                    : status === "partial"
+                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                    : "bg-rose-100 text-rose-800 border border-rose-200"
+                                }`}
+                              >
+                                {status === "partial" && settlement
+                                  ? `Partial (₹${settlement.allocatedAmount.toLocaleString()} paid)`
+                                  : status}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-mono font-bold text-[#111C3A]">₹{f.netAmount.toLocaleString()}</div>
-                            <span className={`text-[10px] px-2 py-0.2 rounded font-mono uppercase ${
-                              f.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                            }`}>
-                              {f.status}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

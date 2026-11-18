@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ToothCondition, generateDefaultToothMap } from "@/lib/mockData";
 import { ToothItem } from "./ToothItem";
 import { ToothSurfaceCarver } from "./ToothSurfaceCarver";
@@ -21,7 +21,16 @@ export const ToothMap: React.FC<ToothMapProps> = ({
 }) => {
   const [selectedTooth, setSelectedTooth] = useState<ToothCondition | null>(null);
   const [isCarverOpen, setIsCarverOpen] = useState(false);
-  const [localTeeth, setLocalTeeth] = useState<Record<number, ToothCondition>>(teeth);
+  const [localTeeth, setLocalTeeth] = useState<Record<number, ToothCondition>>(() => ({
+    ...generateDefaultToothMap(),
+    ...(teeth || {}),
+  }));
+
+  useEffect(() => {
+    if (teeth) {
+      setLocalTeeth({ ...generateDefaultToothMap(), ...teeth });
+    }
+  }, [teeth]);
 
   // Quadrants
   const q1 = [18, 17, 16, 15, 14, 13, 12, 11].map((id) => localTeeth[id] || { id, name: `Tooth #${id}`, quadrant: 1, status: "sound" });
