@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
+  AppointmentTimeError,
   getClinicData,
   savePatient,
   saveAppointment,
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Failed to process clinic action" },
-      { status: 500, headers: corsHeaders }
+      { status: err instanceof AppointmentTimeError ? 400 : 500, headers: corsHeaders }
     );
   }
 }

@@ -8,6 +8,7 @@ import {
   savePayment,
   saveClinicProfile,
 } from "@/lib/db/repository";
+import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import {
   initialPatients,
   initialAppointments,
@@ -396,12 +397,9 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
     // ==========================================
     case "book_appointment": {
       let dateVal = args.date;
-      if (dateVal === "today") dateVal = todayStr;
-      if (dateVal === "tomorrow") {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        dateVal = tomorrow.toISOString().split("T")[0];
-      }
+      const appointmentClock = getAppointmentClock();
+      if (dateVal === "today") dateVal = appointmentClock.date;
+      if (dateVal === "tomorrow") dateVal = shiftAppointmentDate(appointmentClock.date, 1);
 
       // Find or link patient
       let patient = findPatientHelper(args.patientName);
@@ -477,12 +475,9 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
 
     case "check_available_slots": {
       let targetDate = args.date;
-      if (targetDate === "today") targetDate = todayStr;
-      if (targetDate === "tomorrow") {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        targetDate = d.toISOString().split("T")[0];
-      }
+      const appointmentClock = getAppointmentClock();
+      if (targetDate === "today") targetDate = appointmentClock.date;
+      if (targetDate === "tomorrow") targetDate = shiftAppointmentDate(appointmentClock.date, 1);
 
       const workingSlots = [
         "10:00 AM",
@@ -500,7 +495,9 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
         .filter((a) => a.date === targetDate && a.status !== "cancelled")
         .map((a) => a.time);
 
-      const availableSlots = workingSlots.filter((slot) => !bookedTimes.includes(slot));
+      const availableSlots = workingSlots.filter((slot) =>
+        isFutureAppointment(targetDate, slot, appointmentClock) && !bookedTimes.includes(slot)
+      );
 
       return {
         date: targetDate,
@@ -514,17 +511,18 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       const apt = appointmentsState.find((a) => a._id === args.appointmentId);
       if (!apt) return { error: `Appointment ID '${args.appointmentId}' not found.` };
 
-      const oldDate = apt.date;
-      const oldTime = apt.time;
-      apt.date = args.newDate;
-      apt.time = args.newTime;
-      if (args.reason) apt.notes = `${apt.notes || ""} [Rescheduled: ${args.reason}]`.trim();
-      await rescheduleAppointment(apt._id, apt.date, apt.time, args.reason, email);
+      await rescheduleAppointment(apt._id, args.newDate, args.newTime, args.reason, email);
+      const updated = {
+        ...apt,
+        date: args.newDate,
+        time: args.newTime,
+        notes: `${apt.notes || ""} [Rescheduled: ${args.reason || "Patient request"}]`.trim(),
+      };
 
       return {
         success: true,
-        message: `Appointment for ${apt.patientName} rescheduled from ${oldDate} ${oldTime} to ${apt.date} at ${apt.time}.`,
-        appointment: apt,
+        message: `Appointment for ${apt.patientName} rescheduled from ${apt.date} ${apt.time} to ${updated.date} at ${updated.time}.`,
+        appointment: updated,
       };
     }
 

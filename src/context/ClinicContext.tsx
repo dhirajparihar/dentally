@@ -28,11 +28,11 @@ export interface ClinicContextType {
   loadSampleData: () => Promise<void>;
   addPatient: (patient: Patient) => Promise<void>;
   updatePatient: (patient: Patient) => Promise<void>;
-  bookAppointment: (appointment: Appointment) => Promise<void>;
+  bookAppointment: (appointment: Appointment) => Promise<boolean>;
   completeAppointment: (appointmentId: string) => Promise<void>;
   cancelAppointment: (appointmentId: string, reason?: string) => Promise<void>;
   missAppointment: (appointmentId: string, reason?: string) => Promise<void>;
-  rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<void>;
+  rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<boolean>;
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
   updateClinicProfile: (profile: Partial<ClinicProfile>) => Promise<void>;
@@ -123,15 +123,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, dentistEmail: userEmail }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.patients) setPatients(data.patients);
-        if (data.appointments) setAppointments(data.appointments);
-        if (data.fees) setFees(data.fees);
-        if (data.payments) setPayments(data.payments);
-      }
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.patients) setPatients(data.patients);
+      if (data.appointments) setAppointments(data.appointments);
+      if (data.fees) setFees(data.fees);
+      if (data.payments) setPayments(data.payments);
+      return true;
     } catch (err) {
       console.error("Failed to sync mutation to clinic API:", err);
+      return false;
     } finally {
       setIsSyncing(false);
     }
@@ -155,8 +156,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const bookAppointment = async (newApt: Appointment) => {
     const scoped = { ...newApt, dentistEmail: userEmail };
-    setAppointments((prev) => [scoped, ...prev.filter((a) => a._id !== scoped._id)]);
-    await postMutation({ action: "book_appointment", data: scoped });
+    return postMutation({ action: "book_appointment", data: scoped });
   };
 
   const completeAppointment = async (appointmentId: string) => {
@@ -201,21 +201,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     date: string,
     time: string,
     reason?: string
-  ) => {
-    setAppointments((prev) =>
-      prev.map((a) =>
-        a._id === appointmentId
-          ? {
-              ...a,
-              date,
-              time,
-              notes: `${a.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim(),
-            }
-          : a
-      )
-    );
-    await postMutation({ action: "reschedule_appointment", appointmentId, date, time, reason });
-  };
+  ) => postMutation({ action: "reschedule_appointment", appointmentId, date, time, reason });
 
   const addFee = async (newFee: FeeItem) => {
     const scoped = { ...newFee, dentistEmail: userEmail };

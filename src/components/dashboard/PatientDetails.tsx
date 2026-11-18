@@ -34,6 +34,7 @@ import {
 } from "@/lib/mockData";
 import { ToothMap } from "@/components/odontogram/ToothMap";
 import { useClinic } from "@/context/ClinicContext";
+import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 
 interface PatientDetailsProps {
   patient: Patient | null;
@@ -44,7 +45,7 @@ interface PatientDetailsProps {
   appointments: Appointment[];
   onAddPayment: (payment: PaymentTransaction) => void;
   onAddFee: (fee: FeeItem) => void;
-  onBookAppointment?: (appointment: Appointment) => void;
+  onBookAppointment?: (appointment: Appointment) => Promise<boolean>;
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
@@ -217,15 +218,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   // Chairside Recall / Follow-up Booking State
   const [showRecallForm, setShowRecallForm] = useState(false);
-  const [recallDate, setRecallDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().split("T")[0];
-  });
+  const [recallDate, setRecallDate] = useState(() => shiftAppointmentDate(getAppointmentClock().date, 7));
   const [recallTime, setRecallTime] = useState("11:15 AM");
   const [recallProcedure, setRecallProcedure] = useState("Crown Cementation");
   const [recallDuration, setRecallDuration] = useState(30);
   const [recallSuccessApt, setRecallSuccessApt] = useState<Appointment | null>(null);
+  const [recallError, setRecallError] = useState("");
+  const [isBookingRecall, setIsBookingRecall] = useState(false);
+  const recallClock = getAppointmentClock();
 
   const recallHours = [
     "10:00 AM",
@@ -251,14 +251,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   ];
 
   const handleSetRecallOffset = (days: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    setRecallDate(d.toISOString().split("T")[0]);
+    setRecallDate(shiftAppointmentDate(getAppointmentClock().date, days));
   };
 
-  const handleConfirmRecall = (e: React.FormEvent) => {
+  const handleConfirmRecall = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onBookAppointment || !patient) return;
+    if (!onBookAppointment || !patient || isBookingRecall) return;
+    if (!isFutureAppointment(recallDate, recallTime)) {
+      setRecallError("Choose a future time to book this visit.");
+      return;
+    }
 
     const newApt: Appointment = {
       _id: `apt_${Date.now()}`,
@@ -273,7 +275,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       notes: `Chairside recall booked by ${clinicProfile.dentistName}`,
     };
 
-    onBookAppointment(newApt);
+    setRecallError("");
+    setIsBookingRecall(true);
+    const saved = await onBookAppointment(newApt);
+    setIsBookingRecall(false);
+    if (!saved) {
+      setRecallError("Could not book the visit. Check the date and time and try again.");
+      return;
+    }
     onUpdatePatient({
       ...patient,
       followUpDue: recallDate,
@@ -1098,6 +1107,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       <input
                         type="date"
                         required
+                        min={recallClock.date}
                         value={recallDate}
                         onChange={(e) => setRecallDate(e.target.value)}
                         className="p-1.5 px-3 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
@@ -1143,7 +1153,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                      {recallHours.map((slot) => {
+                      {recallHours.filter((slot) => isFutureAppointment(recallDate, slot, recallClock)).map((slot) => {
                         const isBooked = appointments.some(
                           (a) => a.date === recallDate && a.time === slot && a.status !== "cancelled"
                         );
@@ -1184,6 +1194,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   </div>
 
                   {/* Submit Bar */}
+                  {recallError && <p role="alert" className="text-rose-700">{recallError}</p>}
                   <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
                     <button
                       type="button"
@@ -1194,7 +1205,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5"
+                      disabled={isBookingRecall || !isFutureAppointment(recallDate, recallTime, recallClock)}
+                      className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Book Visit</span>

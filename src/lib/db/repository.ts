@@ -1,4 +1,5 @@
 import { connectDB } from "./connect";
+import { isFutureAppointment } from "@/lib/appointmentTime";
 import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import FeeModel from "./models/Fee";
@@ -271,9 +272,18 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
   return mem.patients;
 }
 
+export class AppointmentTimeError extends Error {}
+
+function requireFutureAppointment(date: string, time: string) {
+  if (!isFutureAppointment(date, time)) {
+    throw new AppointmentTimeError("Choose an appointment date and time in the future.");
+  }
+}
+
 export async function saveAppointment(appointment: Appointment, dentistEmail?: string) {
   const email = (appointment.dentistEmail || dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment record");
+  requireFutureAppointment(appointment.date, appointment.time);
   const aptToSave = { ...appointment, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
@@ -360,6 +370,7 @@ export async function rescheduleAppointment(
 ) {
   const email = (dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment rescheduling");
+  requireFutureAppointment(date, time);
   const mem = getOrCreateMemoryStore(email);
   mem.appointments = mem.appointments.map((a) =>
     a._id === appointmentId

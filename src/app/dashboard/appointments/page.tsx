@@ -23,6 +23,7 @@ import {
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
+import { getAppointmentClock, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -31,11 +32,12 @@ interface AppointmentActionsProps {
   onView: () => void;
   onReschedule: () => void;
   onReopen: () => void;
+  canReopen: boolean;
   onCancel: () => void;
   onMarkMissed: () => void;
 }
 
-function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, onCancel, onMarkMissed }: AppointmentActionsProps) {
+function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, canReopen, onCancel, onMarkMissed }: AppointmentActionsProps) {
   return (
     <details className="appointment-menu" onToggle={(event) => {
       if (!event.currentTarget.open) return;
@@ -52,7 +54,7 @@ function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onResch
         <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
         {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
         {appointment.status === "scheduled" && <button type="button" onClick={onMarkMissed} className="text-amber-700"><AlertCircle size={15} />Mark as Missed</button>}
-        {(appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "missed") && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+        {canReopen && appointment.status !== "scheduled" && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
         {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
       </div>
     </details>
@@ -74,7 +76,8 @@ export default function AppointmentsPage() {
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [clock, setClock] = useState(getAppointmentClock);
+  const [selectedDate, setSelectedDate] = useState(clock.date);
   const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
 
@@ -85,6 +88,18 @@ export default function AppointmentsPage() {
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
   const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
+  const [bookingError, setBookingError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const updateClock = () => {
+      setClock(getAppointmentClock());
+      timer = setTimeout(updateClock, 60_000 - Date.now() % 60_000);
+    };
+    updateClock();
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
@@ -122,7 +137,7 @@ export default function AppointmentsPage() {
     patientName: "",
     patientPhone: "",
     date: selectedDate,
-    time: "10:30 AM",
+    time: "",
     durationMinutes: 30,
     procedure: "Root Canal Treatment (RCT)",
     notes: "",
@@ -131,26 +146,14 @@ export default function AppointmentsPage() {
   // Reschedule Form State
   const [rescheduleData, setRescheduleData] = useState({
     date: selectedDate,
-    time: "11:00 AM",
+    time: "",
     reason: "",
   });
 
-  const parseTimeToMinutes = (timeStr: string): number => {
-    if (!timeStr) return 0;
-    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if (!match) return 0;
-    let hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    const period = match[3]?.toUpperCase();
-    if (period === "PM" && hours < 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
-    return hours * 60 + minutes;
-  };
-
   // Dynamically generate slots from ClinicProfile settings
   const workingHours = useMemo(() => {
-    const sMin = parseTimeToMinutes(clinicProfile.workingHoursStart || "10:00 AM");
-    const eMin = parseTimeToMinutes(clinicProfile.workingHoursEnd || "07:00 PM");
+    const sMin = parseAppointmentTime(clinicProfile.workingHoursStart) ?? 600;
+    const eMin = parseAppointmentTime(clinicProfile.workingHoursEnd) ?? 1140;
     const step = Math.max(15, clinicProfile.slotDuration || 30);
     const slots: string[] = [];
 
@@ -171,31 +174,44 @@ export default function AppointmentsPage() {
     return slots;
   }, [clinicProfile.workingHoursStart, clinicProfile.workingHoursEnd, clinicProfile.slotDuration]);
 
-  const isSlotBusy = (
+  const findSlotConflict = (
     date: string,
     time: string,
     durationMinutes = 30,
     excludeAptId?: string
   ) => {
-    const slotStart = parseTimeToMinutes(time);
+    const slotStart = parseAppointmentTime(time);
+    if (slotStart === null) return;
     const slotEnd = slotStart + durationMinutes;
 
-    return appointments.some((apt) => {
+    return appointments.find((apt) => {
       if (apt._id === excludeAptId) return false;
       if (apt.date !== date) return false;
       if (apt.status === "cancelled" || apt.status === "missed") return false;
 
-      const aptStart = parseTimeToMinutes(apt.time);
+      const aptStart = parseAppointmentTime(apt.time);
+      if (aptStart === null) return false;
       const aptEnd = aptStart + (apt.durationMinutes || 30);
 
       return slotStart < aptEnd && slotEnd > aptStart;
     });
   };
 
+  const futureSlots = (date: string, currentClock = clock) =>
+    workingHours.filter((slot) => isFutureAppointment(date, slot, currentClock));
+  const bookingSlots = futureSlots(form.date);
+  const bookingConflict = findSlotConflict(form.date, form.time, form.durationMinutes || 30);
+  const rescheduleSlots = futureSlots(rescheduleData.date);
+  const rescheduleConflict = rescheduleApt
+    ? findSlotConflict(rescheduleData.date, rescheduleData.time, rescheduleApt.durationMinutes || 30, rescheduleApt._id)
+    : undefined;
+  const isToday = selectedDate === clock.date;
+  const isPastDay = selectedDate < clock.date;
+
   // Filtered by selected date for single dentist timeline
   const dayAppointments = appointments
     .filter((a) => a.date === selectedDate)
-    .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
+    .sort((a, b) => (parseAppointmentTime(a.time) ?? 0) - (parseAppointmentTime(b.time) ?? 0));
 
   // Filtered for list view (sorted chronologically: upcoming & recent first)
   const listAppointments = appointments
@@ -206,25 +222,26 @@ export default function AppointmentsPage() {
     .sort((a, b) => {
       const dComp = b.date.localeCompare(a.date);
       if (dComp !== 0) return dComp;
-      return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+      return (parseAppointmentTime(a.time) ?? 0) - (parseAppointmentTime(b.time) ?? 0);
     });
 
   // Date Navigator Helpers
-  const shiftDate = (days: number) => {
-    const cur = new Date(selectedDate);
-    cur.setDate(cur.getDate() + days);
-    setSelectedDate(cur.toISOString().split("T")[0]);
-  };
-
-  const isToday = selectedDate === new Date().toISOString().split("T")[0];
+  const shiftDate = (days: number) => setSelectedDate((date) => shiftAppointmentDate(date, days));
 
   // Status Handlers
-  const handleMarkStatus = (id: string, newStatus: "scheduled" | "completed" | "missed" | "cancelled") => {
+  const handleMarkStatus = async (id: string, newStatus: Appointment["status"]) => {
+    const appointment = appointments.find((entry) => entry._id === id);
+    const currentClock = getAppointmentClock();
+    if (!appointment || appointment.date < currentClock.date) return;
     if (newStatus === "completed") {
       completeAppointment(id);
     } else if (newStatus === "scheduled") {
-      const appointment = appointments.find((entry) => entry._id === id);
-      if (appointment) bookAppointment({ ...appointment, status: "scheduled" });
+      if (!isFutureAppointment(appointment.date, appointment.time, currentClock)) return;
+      setBookingError("");
+      const saved = await bookAppointment({ ...appointment, status: "scheduled" });
+      if (!saved) {
+        setBookingError("Could not reopen the appointment. Check the time and try again.");
+      }
     } else if (newStatus === "cancelled") {
       cancelAppointment(id);
     } else if (newStatus === "missed") {
@@ -241,9 +258,18 @@ export default function AppointmentsPage() {
   // Booking submit
   const handleBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    if (!isFutureAppointment(form.date, form.time)) {
+      setBookingError("Choose a future time to book this appointment.");
+      return;
+    }
+    if (bookingConflict && !emergencyOverride) return;
     const trimmedName = form.patientName.trim();
     const trimmedPhone = form.patientPhone.trim();
     if (!trimmedName) return;
+
+    setBookingError("");
+    setIsSubmitting(true);
 
     const matched = patients.find(
       (p) =>
@@ -267,7 +293,7 @@ export default function AppointmentsPage() {
         address: "",
         medicalAlerts: ["None"],
         bloodGroup: "Unknown",
-        registeredDate: form.date || new Date().toISOString().split("T")[0],
+        registeredDate: form.date,
         notes: form.notes
           ? [
               {
@@ -296,7 +322,12 @@ export default function AppointmentsPage() {
       notes: form.notes,
     };
 
-    await bookAppointment(newApt);
+    const saved = await bookAppointment(newApt);
+    setIsSubmitting(false);
+    if (!saved) {
+      setBookingError("Could not book the appointment. Check the date and time and try again.");
+      return;
+    }
     setIsBookModalOpen(false);
     setEmergencyOverride(false);
     setBookedSuccessApt(newApt);
@@ -304,7 +335,7 @@ export default function AppointmentsPage() {
       patientName: "",
       patientPhone: "",
       date: selectedDate,
-      time: "10:30 AM",
+      time: "",
       durationMinutes: 30,
       procedure: "Root Canal Treatment (RCT)",
       notes: "",
@@ -314,14 +345,27 @@ export default function AppointmentsPage() {
   // Reschedule submit
   const handleRescheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rescheduleApt) return;
+    if (!rescheduleApt || isSubmitting) return;
+    const currentClock = getAppointmentClock();
+    if (rescheduleApt.date < currentClock.date || !isFutureAppointment(rescheduleData.date, rescheduleData.time, currentClock)) {
+      setBookingError("Choose a future time for a current appointment.");
+      return;
+    }
+    if (rescheduleConflict && !rescheduleOverride) return;
 
-    await rescheduleAppointment(
+    setBookingError("");
+    setIsSubmitting(true);
+    const saved = await rescheduleAppointment(
       rescheduleApt._id,
       rescheduleData.date,
       rescheduleData.time,
       rescheduleData.reason
     );
+    setIsSubmitting(false);
+    if (!saved) {
+      setBookingError("Could not reschedule the appointment. Check the date and time and try again.");
+      return;
+    }
     setRescheduleApt(null);
     setRescheduleOverride(false);
   };
@@ -350,12 +394,29 @@ export default function AppointmentsPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
-  const availableSlots = workingHours.filter((slot) => !isSlotBusy(selectedDate, slot, 30));
+  const availableSlots = futureSlots(selectedDate).filter((slot) => !findSlotConflict(selectedDate, slot));
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
   const openBooking = (time?: string) => {
+    const currentClock = getAppointmentClock();
+    if (loading || selectedDate < currentClock.date) return;
+    const slots = futureSlots(selectedDate, currentClock);
+    const initialTime = time && slots.includes(time)
+      ? time
+      : slots.find((slot) => !findSlotConflict(selectedDate, slot, form.durationMinutes || 30)) ?? slots[0] ?? "";
+    setBookingError("");
     setEmergencyOverride(false);
-    setForm((previous) => ({ ...previous, date: selectedDate, ...(time ? { time } : {}) }));
+    setForm((previous) => ({ ...previous, date: selectedDate, time: initialTime }));
     setIsBookModalOpen(true);
+  };
+  const openReschedule = (appointment: Appointment) => {
+    const currentClock = getAppointmentClock();
+    if (appointment.date < currentClock.date) return;
+    setBookingError("");
+    setRescheduleOverride(false);
+    const appointmentTime = parseAppointmentTime(appointment.time);
+    const time = futureSlots(appointment.date, currentClock).find((slot) => parseAppointmentTime(slot) === appointmentTime);
+    setRescheduleData({ date: appointment.date, time: time ?? "", reason: "" });
+    setRescheduleApt(appointment);
   };
   const selectedDateLabel = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
@@ -364,7 +425,7 @@ export default function AppointmentsPage() {
       <section className="appointment-toolbar" aria-label="Appointment controls">
         <div className="appointment-date-controls">
           <button type="button" onClick={() => shiftDate(-1)} className="calendar-icon-button" aria-label="Previous day"><ChevronLeft size={18} /></button>
-          <button type="button" onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])} className={`calendar-today ${isToday ? "selected" : ""}`}>Today</button>
+          <button type="button" onClick={() => setSelectedDate(getAppointmentClock().date)} className={`calendar-today ${isToday ? "selected" : ""}`}>Today</button>
           <button type="button" onClick={() => shiftDate(1)} className="calendar-icon-button" aria-label="Next day"><ChevronRight size={18} /></button>
         </div>
         <p className="appointment-selected-date"><Calendar size={17} aria-hidden="true" /><time dateTime={selectedDate}>{selectedDateLabel}</time></p>
@@ -372,10 +433,12 @@ export default function AppointmentsPage() {
           <button type="button" aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>Day</button>
           <button type="button" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>All Bookings</button>
         </div>
-        <button type="button" onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>
+        {!isPastDay && <button type="button" disabled={loading} onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>}
       </section>
 
-      {bookedSuccessApt && (
+      {bookingError && !isBookModalOpen && !rescheduleApt && <p role="alert" className="text-xs text-rose-700">{bookingError}</p>}
+
+      {bookedSuccessApt && !isPastDay && (
         <div className="appointment-success" role="status">
           <CheckCircle2 size={19} className="shrink-0" aria-hidden="true" />
           <p className="min-w-0 flex-1 text-xs leading-5"><strong>{bookedSuccessApt.patientName}</strong> booked for {bookedSuccessApt.date} at {bookedSuccessApt.time}<span className="block text-[#52627A]">{bookedSuccessApt.procedure} &middot; {bookedSuccessApt.patientPhone}</span></p>
@@ -384,7 +447,7 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {viewMode === "timeline" && (
+      {viewMode === "timeline" && !isPastDay && (
         <section className="appointment-slots" aria-labelledby="slots-heading">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 id="slots-heading" className="text-sm font-semibold">Available Slots <span className="font-normal text-[#64748B]">&middot; Chair 1</span></h2>
@@ -409,7 +472,7 @@ export default function AppointmentsPage() {
           )}
         </div>
         {loading ? <p role="status" className="appointment-empty">Loading appointments...</p> : visibleAppointments.length === 0 ? (
-          <div className="appointment-empty"><Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" /><p className="text-sm font-medium">No appointments {viewMode === "timeline" ? "on this date" : "found"}.</p><p className="mt-1 text-xs text-[#64748B]">{viewMode === "timeline" ? "Choose a time slot to book." : "Try another status filter."}</p></div>
+          <div className="appointment-empty"><Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" /><p className="text-sm font-medium">No appointments {viewMode === "timeline" ? "on this date" : "found"}.</p>{viewMode === "list" && <p className="mt-1 text-xs text-[#64748B]">Try another status filter.</p>}</div>
         ) : (
           <div className={viewMode === "list" ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "appointment-timeline space-y-3"}>
             {visibleAppointments.map((appointment) => (
@@ -422,12 +485,16 @@ export default function AppointmentsPage() {
                   <h3 className="mt-2 break-words text-base font-bold"><button type="button" onClick={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} className="text-left hover:text-[#0089A8]">{appointment.patientName}</button></h3>
                   <p className="mt-1 text-sm font-medium text-[#007F96]">{appointment.procedure}</p>
                   {appointment.notes && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#64748B]">{appointment.notes}</p>}
-                  <a href={`tel:${appointment.patientPhone}`} className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</a>
+                  {appointment.date < clock.date ? (
+                    <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</span>
+                  ) : (
+                    <a href={`tel:${appointment.patientPhone}`} className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</a>
+                  )}
                 </div>
                 <div className="appointment-card-controls">
                   <span className={`appointment-status ${appointment.status}`}>{appointment.status === "completed" && <Check size={13} aria-hidden="true" />}{appointment.status}</span>
-                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} onMarkMissed={() => handleMarkStatus(appointment._id, "missed")} />
-                  {appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
+                  {appointment.date >= clock.date && <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => openReschedule(appointment)} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} canReopen={isFutureAppointment(appointment.date, appointment.time, clock)} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} onMarkMissed={() => handleMarkStatus(appointment._id, "missed")} />}
+                  {appointment.date >= clock.date && appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
                 </div>
               </article>
             ))}
@@ -532,8 +599,13 @@ export default function AppointmentsPage() {
                   <input
                     type="date"
                     required
+                    min={clock.date}
                     value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    onChange={(e) => {
+                      const date = e.target.value;
+                      setEmergencyOverride(false);
+                      setForm({ ...form, date, time: "" });
+                    }}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
                   />
                 </div>
@@ -557,11 +629,12 @@ export default function AppointmentsPage() {
                     Select Available Time Slot for {form.date}:
                   </label>
                   <span className="text-[11px] font-mono text-[#8291A7]">
-                    Selected: <strong className="text-[#0089A8]">{form.time}</strong>
+                    Selected: <strong className="text-[#0089A8]">{bookingSlots.includes(form.time) ? form.time : "None"}</strong>
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+<<<<<<< Updated upstream
                   {workingHours.map((hour) => {
                     const formDur = Number(form.durationMinutes) || 30;
                     const hStart = parseTimeToMinutes(hour);
@@ -572,6 +645,10 @@ export default function AppointmentsPage() {
                       const aEnd = aStart + (a.durationMinutes || 30);
                       return hStart < aEnd && hEnd > aStart;
                     });
+=======
+                  {bookingSlots.map((hour) => {
+                    const busyApt = findSlotConflict(form.date, hour, form.durationMinutes || 30);
+>>>>>>> Stashed changes
                     const isSelected = form.time === hour;
 
                     if (busyApt) {
@@ -606,9 +683,11 @@ export default function AppointmentsPage() {
                     );
                   })}
                 </div>
+                {bookingSlots.length === 0 && <p className="text-[#64748B]">Choose another date to see future slots.</p>}
               </div>
 
               {/* Overlap Conflict Detection Notice */}
+<<<<<<< Updated upstream
               {(() => {
                 const formStart = parseTimeToMinutes(form.time);
                 const formEnd = formStart + (Number(form.durationMinutes) || 30);
@@ -620,12 +699,15 @@ export default function AppointmentsPage() {
                 });
                 if (!conflict) return null;
                 return (
+=======
+              {bookingConflict && bookingSlots.includes(form.time) && (
+>>>>>>> Stashed changes
                   <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <div>
                         <strong>Chair 1 Operatory Conflict:</strong> {clinicProfile.dentistName} already has an appointment with{" "}
-                        <strong>{conflict.patientName}</strong> from <strong>{conflict.time}</strong> ({conflict.durationMinutes}m for {conflict.procedure}).
+                        <strong>{bookingConflict.patientName}</strong> from <strong>{bookingConflict.time}</strong> ({bookingConflict.durationMinutes}m for {bookingConflict.procedure}).
                       </div>
                     </div>
                     <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
@@ -638,8 +720,7 @@ export default function AppointmentsPage() {
                       <span>Emergency Override: Allow double-booking operatory</span>
                     </label>
                   </div>
-                );
-              })()}
+              )}
 
               <div>
                 <label className="font-semibold text-[#111C3A] block mb-1">Notes (Optional)</label>
@@ -652,6 +733,8 @@ export default function AppointmentsPage() {
                 />
               </div>
 
+              {bookingError && <p role="alert" className="text-rose-700">{bookingError}</p>}
+
               <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
@@ -662,6 +745,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
+<<<<<<< Updated upstream
                   disabled={Boolean(
                     (() => {
                       const formStart = parseTimeToMinutes(form.time);
@@ -675,6 +759,9 @@ export default function AppointmentsPage() {
                       return conflict && !emergencyOverride;
                     })()
                   )}
+=======
+                  disabled={isSubmitting || !bookingSlots.includes(form.time) || Boolean(bookingConflict && !emergencyOverride)}
+>>>>>>> Stashed changes
                   className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Booking
@@ -706,8 +793,12 @@ export default function AppointmentsPage() {
                 <input
                   type="date"
                   required
+                  min={clock.date}
                   value={rescheduleData.date}
-                  onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value })}
+                  onChange={(e) => {
+                    setRescheduleOverride(false);
+                    setRescheduleData({ ...rescheduleData, date: e.target.value, time: "" });
+                  }}
                   className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
                 />
               </div>
@@ -715,11 +806,16 @@ export default function AppointmentsPage() {
               <div>
                 <label className="font-semibold text-[#111C3A] block mb-1">New Time *</label>
                 <select
-                  value={rescheduleData.time}
-                  onChange={(e) => setRescheduleData({ ...rescheduleData, time: e.target.value })}
+                  required
+                  value={rescheduleSlots.includes(rescheduleData.time) ? rescheduleData.time : ""}
+                  onChange={(e) => {
+                    setRescheduleOverride(false);
+                    setRescheduleData({ ...rescheduleData, time: e.target.value });
+                  }}
                   className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
                 >
-                  {workingHours.map((h) => (
+                  <option value="" disabled>{rescheduleSlots.length ? "Choose a time" : "No future slots"}</option>
+                  {rescheduleSlots.map((h) => (
                     <option key={h} value={h}>
                       {h}
                     </option>
@@ -739,6 +835,7 @@ export default function AppointmentsPage() {
               </div>
 
               {/* Conflict Detection for Rescheduling */}
+<<<<<<< Updated upstream
               {(() => {
                 const rStart = parseTimeToMinutes(rescheduleData.time);
                 const rEnd = rStart + (rescheduleApt.durationMinutes || 30);
@@ -751,11 +848,14 @@ export default function AppointmentsPage() {
                 });
                 if (!conflict) return null;
                 return (
+=======
+              {rescheduleConflict && rescheduleSlots.includes(rescheduleData.time) && (
+>>>>>>> Stashed changes
                   <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
                     <div className="flex items-start gap-1.5">
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <div>
-                        <strong>Chair 1 Conflict:</strong> {conflict.patientName} is scheduled at {conflict.time} ({conflict.durationMinutes}m for {conflict.procedure}).
+                        <strong>Chair 1 Conflict:</strong> {rescheduleConflict.patientName} is scheduled at {rescheduleConflict.time} ({rescheduleConflict.durationMinutes}m for {rescheduleConflict.procedure}).
                       </div>
                     </div>
                     <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
@@ -768,9 +868,9 @@ export default function AppointmentsPage() {
                       <span>Emergency override conflict</span>
                     </label>
                   </div>
-                );
-              })()}
+              )}
 
+              {bookingError && <p role="alert" className="text-rose-700">{bookingError}</p>}
               <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
@@ -781,6 +881,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   type="submit"
+<<<<<<< Updated upstream
                   disabled={Boolean(
                     (() => {
                       const rStart = parseTimeToMinutes(rescheduleData.time);
@@ -795,6 +896,9 @@ export default function AppointmentsPage() {
                       return conflict && !rescheduleOverride;
                     })()
                   )}
+=======
+                  disabled={isSubmitting || rescheduleApt.date < clock.date || !rescheduleSlots.includes(rescheduleData.time) || Boolean(rescheduleConflict && !rescheduleOverride)}
+>>>>>>> Stashed changes
                   className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirm Reschedule
