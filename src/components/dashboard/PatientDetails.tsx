@@ -274,6 +274,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     };
 
     onBookAppointment(newApt);
+    onUpdatePatient({
+      ...patient,
+      followUpDue: recallDate,
+    });
     setRecallSuccessApt(newApt);
     setShowRecallForm(false);
   };
@@ -813,7 +817,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </button>
                   </h4>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                     <div className="sm:col-span-2">
                       <label className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Procedure Name *
@@ -830,7 +834,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                     <div>
                       <label className="text-[11px] font-mono text-[#64748B] block mb-1">
-                        Tooth (Optional)
+                        Tooth (Opt.)
                       </label>
                       <input
                         type="text"
@@ -851,6 +855,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         value={feeAmount}
                         onChange={(e) => setFeeAmount(e.target.value)}
                         placeholder="e.g. 5000"
+                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
+                        Discount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={feeDiscount}
+                        onChange={(e) => setFeeDiscount(e.target.value)}
+                        placeholder="0"
                         className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
                       />
                     </div>

@@ -45,7 +45,9 @@ export default function FeesPage() {
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
-  const [qrModalData, setQrModalData] = useState<{ patientName: string; amount: number; procedure?: string } | null>(null);
+  const [qrModalData, setQrModalData] = useState<{ patientId?: string; patientName: string; amount: number; procedure?: string } | null>(null);
+  const [isRecordingQrPayment, setIsRecordingQrPayment] = useState(false);
+  const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
   const router = useRouter();
 
   // Common Procedure Pricing Presets
@@ -240,7 +242,7 @@ export default function FeesPage() {
                 {latestFee && <p className="mt-3 text-xs leading-5 text-[#52627A]">{latestFee.procedureName}{latestFee.tooth && <span> &middot; {latestFee.tooth}</span>}</p>}
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#64748B]"><span>Billed <strong className="font-medium text-[#111C3A]">{money(totalBilled)}</strong></span><span>Paid <strong className="font-medium text-[#197344]">{money(totalPaid)}</strong></span></div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] pt-3">
-                  <div className="flex flex-wrap gap-2"><a href={getWhatsAppBillUrl(patient, outstanding, latestFee?.procedureName)} target="_blank" rel="noopener noreferrer" className="workspace-button secondary small"><Share2 size={14} />Remind</a><button type="button" onClick={() => setQrModalData({ patientName: patient.name, amount: outstanding, procedure: latestFee?.procedureName })} className="workspace-button secondary small"><QrCode size={14} />UPI QR</button></div>
+                  <div className="flex flex-wrap gap-2"><a href={getWhatsAppBillUrl(patient, outstanding, latestFee?.procedureName)} target="_blank" rel="noopener noreferrer" className="workspace-button secondary small"><Share2 size={14} />Remind</a><button type="button" onClick={() => { setQrModalData({ patientId: patient._id, patientName: patient.name, amount: outstanding, procedure: latestFee?.procedureName }); setQrRecordedSuccess(null); }} className="workspace-button secondary small"><QrCode size={14} />UPI QR</button></div>
                   <button type="button" onClick={() => openPayment(patient._id, outstanding, `Balance payment for ${latestFee?.procedureName || "Treatment"}`)} className="workspace-button primary small">Collect</button>
                 </div>
               </article>
@@ -600,14 +602,58 @@ export default function FeesPage() {
               </span>
             </div>
 
-            <div className="pt-2 border-t border-[#E4E9F0]">
-              <button
-                onClick={() => setQrModalData(null)}
-                className="w-full py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
-              >
-                Done
-              </button>
-            </div>
+            {qrRecordedSuccess ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs flex items-center justify-center gap-2">
+                <CheckCircle2 size={16} />
+                <span>{qrRecordedSuccess}</span>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-[#E4E9F0] space-y-2">
+                <button
+                  type="button"
+                  disabled={isRecordingQrPayment}
+                  onClick={async () => {
+                    setIsRecordingQrPayment(true);
+                    try {
+                      const patientObj = patients.find(
+                        (p) => p._id === qrModalData.patientId || p.name === qrModalData.patientName
+                      );
+                      await recordPayment({
+                        _id: `pay_${Date.now()}`,
+                        patientId: patientObj?._id || qrModalData.patientId || "walk_in",
+                        patientName: patientObj?.name || qrModalData.patientName,
+                        date: todayStr,
+                        time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+                        amount: qrModalData.amount,
+                        paymentMethod: "UPI",
+                        notes: `Chairside UPI QR payment${qrModalData.procedure ? ` for ${qrModalData.procedure}` : ""}`,
+                        receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                      });
+                      setQrRecordedSuccess(`₹${qrModalData.amount.toLocaleString()} credited successfully!`);
+                      setTimeout(() => {
+                        setQrModalData(null);
+                        setQrRecordedSuccess(null);
+                      }, 1500);
+                    } catch (err) {
+                      console.error("Failed to record QR payment:", err);
+                    } finally {
+                      setIsRecordingQrPayment(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{isRecordingQrPayment ? "Recording..." : `Record ₹${qrModalData.amount.toLocaleString()} as Paid`}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrModalData(null)}
+                  className="w-full py-1.5 rounded-xl text-[#8291A7] hover:text-[#111C3A] text-xs font-medium"
+                >
+                  Dismiss Without Recording
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

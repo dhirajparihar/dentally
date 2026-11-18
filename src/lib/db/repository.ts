@@ -298,19 +298,33 @@ export async function saveAppointment(appointment: Appointment, dentistEmail?: s
 export async function updateAppointmentStatus(
   appointmentId: string,
   status: Appointment["status"],
-  dentistEmail?: string
+  dentistEmail?: string,
+  reason?: string
 ) {
   const email = (dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment update");
   const mem = getOrCreateMemoryStore(email);
   mem.appointments = mem.appointments.map((a) =>
-    a._id === appointmentId ? { ...a, status } : a
+    a._id === appointmentId
+      ? {
+          ...a,
+          status,
+          notes: reason ? `${a.notes || ""} [${status === "cancelled" ? "Cancelled" : "Missed"}: ${reason}]`.trim() : a.notes,
+        }
+      : a
   );
 
   try {
     const conn = await ensureDbInitialized();
     if (conn) {
-      await AppointmentModel.updateOne({ _id: appointmentId, dentistEmail: email }, { status });
+      const existing = await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email });
+      const finalNotes = reason && existing
+        ? `${existing.notes || ""} [${status === "cancelled" ? "Cancelled" : "Missed"}: ${reason}]`.trim()
+        : existing?.notes;
+      await AppointmentModel.updateOne(
+        { _id: appointmentId, dentistEmail: email },
+        { status, ...(finalNotes !== undefined ? { notes: finalNotes } : {}) }
+      );
     }
   } catch (err) {
     console.error("Error updating appointment status in MongoDB:", err);

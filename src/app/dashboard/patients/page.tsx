@@ -255,7 +255,7 @@ export default function PatientsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
                   <input
@@ -264,7 +264,7 @@ export default function PatientsPage() {
                     placeholder="34"
                     value={form.age}
                     onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -272,24 +272,64 @@ export default function PatientsPage() {
                   <select
                     value={form.gender}
                     onChange={(e) => setForm({ ...form, gender: e.target.value as "Male" | "Female" | "Other" })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
+                  <select
+                    value={form.bloodGroup}
+                    onChange={(e) => setForm({ ...form, bloodGroup: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
+                  >
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+91 98201 44521"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Email</label>
+                  <input
+                    type="email"
+                    placeholder="patient@example.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
+                <label className="font-semibold text-[#111C3A] block mb-1">Address / Locality</label>
                 <input
-                  type="tel"
-                  required
-                  placeholder="+91 98201 44521"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
+                  type="text"
+                  placeholder="e.g. Flat 402, Green Park, Indore"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                 />
               </div>
 
