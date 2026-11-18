@@ -1,5 +1,5 @@
 import { connectDB } from "./connect";
-import { isFutureAppointment } from "@/lib/appointmentTime";
+import { getScheduledAppointmentEnd, isFutureAppointment } from "@/lib/appointmentTime";
 import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import FeeModel from "./models/Fee";
@@ -117,6 +117,35 @@ export async function seedSampleDataForDoctor(dentistEmail: string, doctorName =
   };
 }
 
+async function readAppointments(dentistEmail: string): Promise<Appointment[]> {
+  const filter = { dentistEmail };
+  const appointments = await AppointmentModel.find(filter).lean().exec() as Appointment[];
+  const now = Date.now();
+  const expired = appointments.filter((appointment) => (getScheduledAppointmentEnd(appointment) ?? Infinity) <= now);
+  if (!expired.length) return appointments;
+
+  try {
+    await AppointmentModel.bulkWrite(expired.map((appointment) => ({
+      updateOne: {
+        filter: {
+          ...filter,
+          _id: appointment._id,
+          status: "scheduled",
+          date: appointment.date,
+          time: appointment.time,
+          durationMinutes: appointment.durationMinutes ?? null,
+        },
+        update: { $set: { status: "missed" } },
+      },
+    })));
+    // Read back the stored status in case someone updated or moved a visit concurrently.
+    return await AppointmentModel.find(filter).lean().exec() as Appointment[];
+  } catch (error) {
+    console.error("Could not update expired appointments:", error);
+    return appointments;
+  }
+}
+
 export async function getClinicData(dentistEmail?: string): Promise<{
   patients: Patient[];
   appointments: Appointment[];
@@ -146,14 +175,14 @@ export async function getClinicData(dentistEmail?: string): Promise<{
 
       const [patients, appointments, fees, payments, profileDoc] = await Promise.all([
         PatientModel.find(filter).lean().exec(),
-        AppointmentModel.find(filter).lean().exec(),
+        readAppointments(normalized),
         FeeModel.find(filter).lean().exec(),
         PaymentModel.find(filter).lean().exec(),
         ClinicProfileModel.findOne(filter).lean().exec(),
       ]);
 
       const mappedPatients = (patients as any[]).map((p) => ({ ...p, _id: String(p._id) }));
-      const mappedAppointments = (appointments as any[]).map((a) => ({ ...a, _id: String(a._id) }));
+      const mappedAppointments = appointments.map((a) => ({ ...a, _id: String(a._id) }));
       const mappedFees = (fees as any[]).map((f) => ({ ...f, _id: String(f._id) }));
       const mappedPayments = (payments as any[]).map((p) => ({ ...p, _id: String(p._id) }));
 
@@ -199,6 +228,14 @@ export async function getClinicData(dentistEmail?: string): Promise<{
   }
 
   const mem = getOrCreateMemoryStore(normalized);
+  if (!isDbConfigured()) {
+    const now = Date.now();
+    mem.appointments = mem.appointments.map((appointment) =>
+      (getScheduledAppointmentEnd(appointment) ?? Infinity) <= now
+        ? { ...appointment, status: "missed" }
+        : appointment
+    );
+  }
   return {
     patients: mem.patients,
     appointments: mem.appointments,
@@ -273,6 +310,7 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
 }
 
 export class AppointmentTimeError extends Error {}
+export class AppointmentNotFoundError extends Error {}
 
 function requireFutureAppointment(date: string, time: string) {
   if (!isFutureAppointment(date, time)) {
@@ -287,21 +325,29 @@ export async function saveAppointment(appointment: Appointment, dentistEmail?: s
   const aptToSave = { ...appointment, dentistEmail: email };
 
   const mem = getOrCreateMemoryStore(email);
-  mem.appointments = [aptToSave, ...mem.appointments.filter((a) => a._id !== aptToSave._id)];
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
 
-  try {
-    const conn = await ensureDbInitialized();
-    if (conn) {
-      await AppointmentModel.findOneAndUpdate(
-        { _id: aptToSave._id, dentistEmail: email },
-        aptToSave,
-        { upsert: true, new: true }
-      );
+  const sourceId = appointment.followUpOfAppointmentId;
+  if (sourceId !== undefined) {
+    if (typeof sourceId !== "string" || !sourceId || sourceId === appointment._id || typeof appointment.patientId !== "string") {
+      throw new AppointmentNotFoundError("Completed visit for this patient was not found.");
     }
-  } catch (err) {
-    console.error("Error saving appointment to MongoDB:", err);
+    const source = conn
+      ? await AppointmentModel.exists({ _id: sourceId, dentistEmail: email, patientId: appointment.patientId, status: "completed" })
+      : mem.appointments.some((visit) => visit._id === sourceId && visit.patientId === appointment.patientId && visit.status === "completed");
+    if (!source) throw new AppointmentNotFoundError("Completed visit for this patient was not found.");
   }
 
+  if (conn) {
+    await AppointmentModel.findOneAndUpdate(
+      { _id: aptToSave._id, dentistEmail: email },
+      aptToSave,
+      { upsert: true, new: true }
+    );
+  }
+
+  mem.appointments = [aptToSave, ...mem.appointments.filter((a) => a._id !== aptToSave._id)];
   return mem.appointments;
 }
 
@@ -313,52 +359,61 @@ export async function updateAppointmentStatus(
 ) {
   const email = (dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment update");
+  if (typeof appointmentId !== "string" || !appointmentId) throw new AppointmentNotFoundError("Appointment not found.");
+
   const mem = getOrCreateMemoryStore(email);
-  const targetApt = mem.appointments.find((a) => a._id === appointmentId);
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
 
-  mem.appointments = mem.appointments.map((a) =>
-    a._id === appointmentId
-      ? {
-          ...a,
-          status,
-          notes: reason ? `${a.notes || ""} [${status === "cancelled" ? "Cancelled" : "Missed"}: ${reason}]`.trim() : a.notes,
-        }
-      : a
-  );
+  const filter = { _id: appointmentId, dentistEmail: email };
+  const changes: Partial<Appointment> = { status };
+  const cached = mem.appointments.find((appointment) => appointment._id === appointmentId);
+  if (reason) {
+    const existing = conn ? await AppointmentModel.findOne(filter).select("notes").lean().exec() as Appointment | null : cached;
+    const label = status.charAt(0).toUpperCase() + status.slice(1);
+    changes.notes = `${existing?.notes || ""} [${label}: ${reason}]`.trim();
+  }
 
-  // If appointment is marked completed, update patient's lastVisit
-  if (status === "completed" && targetApt) {
-    mem.patients = mem.patients.map((p) =>
-      p._id === targetApt.patientId
-        ? { ...p, lastVisit: targetApt.date }
-        : p
+  const previous = conn
+    ? await AppointmentModel.findOneAndUpdate(filter, { $set: changes }, { returnDocument: "before" }).lean().exec() as Appointment | null
+    : cached;
+  if (!previous) throw new AppointmentNotFoundError("Appointment not found.");
+
+  const updated: Appointment = { ...previous, ...changes };
+  mem.appointments = cached
+    ? mem.appointments.map((appointment) => appointment._id === appointmentId ? updated : appointment)
+    : [...mem.appointments, updated];
+
+  const patientFilter = { _id: previous.patientId, dentistEmail: email };
+  if (status === "completed") {
+    if (conn) await PatientModel.updateOne(patientFilter, { $max: { lastVisit: previous.date } });
+    mem.patients = mem.patients.map((patient) =>
+      patient._id === previous.patientId && (!patient.lastVisit || patient.lastVisit < previous.date)
+        ? { ...patient, lastVisit: previous.date }
+        : patient
+    );
+  } else if (status === "missed" && previous.status === "completed") {
+    const completed = { dentistEmail: email, patientId: previous.patientId, status: "completed" };
+    const latest = conn
+      ? await AppointmentModel.findOne(completed).sort({ date: -1 }).select("date").lean().exec() as Pick<Appointment, "date"> | null
+      : mem.appointments.reduce<Appointment | undefined>((latest, appointment) =>
+        appointment.patientId === previous.patientId && appointment.status === "completed" && (!latest || appointment.date > latest.date)
+          ? appointment
+          : latest, undefined);
+    if (conn) {
+      await PatientModel.updateOne(
+        { ...patientFilter, lastVisit: previous.date },
+        latest ? { $set: { lastVisit: latest.date } } : { $unset: { lastVisit: "" } },
+      );
+    }
+    mem.patients = mem.patients.map((patient) =>
+      patient._id === previous.patientId && patient.lastVisit === previous.date
+        ? { ...patient, lastVisit: latest?.date }
+        : patient
     );
   }
 
-  try {
-    const conn = await ensureDbInitialized();
-    if (conn) {
-      const existing = await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email });
-      const finalNotes = reason && existing
-        ? `${existing.notes || ""} [${status === "cancelled" ? "Cancelled" : "Missed"}: ${reason}]`.trim()
-        : existing?.notes;
-      await AppointmentModel.updateOne(
-        { _id: appointmentId, dentistEmail: email },
-        { status, ...(finalNotes !== undefined ? { notes: finalNotes } : {}) }
-      );
-
-      if (status === "completed" && existing?.patientId) {
-        await PatientModel.updateOne(
-          { _id: existing.patientId, dentistEmail: email },
-          { lastVisit: existing.date }
-        );
-      }
-    }
-  } catch (err) {
-    console.error("Error updating appointment status in MongoDB:", err);
-  }
-
-  return mem.appointments;
+  return updated;
 }
 
 export async function rescheduleAppointment(

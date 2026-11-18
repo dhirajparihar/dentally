@@ -42,6 +42,7 @@ export interface Appointment {
   _id: string;
   dentistEmail?: string;
   patientId: string;
+  followUpOfAppointmentId?: string;
   patientName: string;
   patientPhone: string;
   date: string; // YYYY-MM-DD

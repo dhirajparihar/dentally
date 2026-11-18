@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CreditCard,
   Plus,
   Search,
+  ChevronDown,
   CheckCircle2,
   Printer,
   X,
@@ -25,6 +26,171 @@ import {
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
+
+const procedurePresets = [
+  { name: "Consultation & Diagnostic X-Ray", price: 500 },
+  { name: "Composite Restoration / Filling", price: 1500 },
+  { name: "Root Canal Treatment (Molar RCT)", price: 4500 },
+  { name: "Zirconia Crown (Permanent)", price: 8000 },
+  { name: "Scaling & Root Planing (Cleaning)", price: 1200 },
+  { name: "Simple Tooth Extraction", price: 1500 },
+  { name: "Ceramic Laminate Veneer", price: 9000 },
+];
+const customTreatment = "custom";
+const normalizeTreatmentName = (name: string) => name.trim().replace(/\s+/g, " ");
+const treatmentKey = (name: string) => `treatment:${normalizeTreatmentName(name).toLowerCase()}`;
+
+function PatientPicker({ patients, value, onChange }: {
+  patients: Patient[];
+  value: string;
+  onChange: (patientId: string) => void;
+}) {
+  const id = useId();
+  const listId = `${id}-patients`;
+  const input = useRef<HTMLInputElement>(null);
+  const [search, setSearch] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [activePatientId, setActivePatientId] = useState<string | null>(null);
+  const selected = patients.find((patient) => patient._id === value);
+  const query = (search ?? "").trim().toLowerCase();
+  const matches = patients.filter((patient) => patient.name.toLowerCase().includes(query));
+  const activeIndex = matches.findIndex((patient) => patient._id === activePatientId);
+  const activeOption = expanded && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
+  const needsSelection = !expanded && search !== null && !selected;
+
+  useEffect(() => {
+    if (activeOption) document.getElementById(activeOption)?.scrollIntoView({ block: "nearest" });
+  }, [activeOption]);
+
+  const open = (target: HTMLInputElement | null) => {
+    if (search === null) target?.select();
+    setExpanded(true);
+  };
+
+  const close = () => {
+    setExpanded(false);
+    setActivePatientId(null);
+  };
+
+  const selectPatient = (patient: Patient) => {
+    onChange(patient._id);
+    setSearch(null);
+    close();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    switch (event.key) {
+      case "ArrowDown":
+      case "ArrowUp": {
+        event.preventDefault();
+        setExpanded(true);
+        if (!matches.length) return;
+        const down = event.key === "ArrowDown";
+        const next = activeIndex < 0
+          ? down ? 0 : matches.length - 1
+          : Math.max(0, Math.min(matches.length - 1, activeIndex + (down ? 1 : -1)));
+        setActivePatientId(matches[next]._id);
+        break;
+      }
+      case "Enter": {
+        event.preventDefault();
+        if (!expanded) {
+          setExpanded(true);
+          return;
+        }
+        const match = matches[activeIndex] ?? (matches.length === 1 ? matches[0] : undefined);
+        if (match) selectPatient(match);
+        break;
+      }
+      case "Escape":
+        if (expanded) {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        }
+        break;
+    }
+  };
+
+  return (
+    <div className="space-y-1.5" onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) close();
+    }}>
+      <label htmlFor={id} className="block font-semibold text-[#111C3A]">Patient *</label>
+      <div className="fee-patient-picker">
+        <div className="workspace-search fee-patient-field">
+          <Search size={15} aria-hidden="true" />
+          <input
+            ref={input}
+            id={id}
+            type="text"
+            role="combobox"
+            autoComplete="off"
+            aria-autocomplete="list"
+            aria-expanded={expanded}
+            aria-controls={expanded ? listId : undefined}
+            aria-activedescendant={activeOption}
+            aria-describedby={needsSelection ? `${id}-selection` : undefined}
+            required
+            placeholder="Type a patient name"
+            value={search ?? selected?.name ?? ""}
+            onFocus={(event) => open(event.currentTarget)}
+            onClick={(event) => open(event.currentTarget)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setActivePatientId(null);
+              setExpanded(true);
+              if (value) onChange("");
+            }}
+            onKeyDown={handleKeyDown}
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={expanded ? "Close patient list" : "Show patient list"}
+            aria-expanded={expanded}
+            aria-controls={expanded ? listId : undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              if (expanded) close();
+              else {
+                input.current?.focus();
+                open(input.current);
+              }
+            }}
+          >
+            <ChevronDown size={15} className={expanded ? "rotate-180" : undefined} aria-hidden="true" />
+          </button>
+        </div>
+        {expanded && (
+          <div className="fee-patient-dropdown">
+            <ul id={listId} role="listbox" aria-label="Matching patients">
+              {matches.map((patient, index) => (
+                <li
+                  key={patient._id}
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={patient._id === value}
+                  data-active={index === activeIndex}
+                  className="fee-patient-option"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectPatient(patient)}
+                >
+                  <span className="min-w-0 break-words font-semibold">{patient.name}</span>
+                  <span className="break-all text-[11px] text-[#64748B]">{patient.phone || patient._id}</span>
+                </li>
+              ))}
+            </ul>
+            {matches.length === 0 && <p role="status" className="p-3 text-[#64748B]">No matching patients.</p>}
+          </div>
+        )}
+      </div>
+      {selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
+      {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">Select a patient from the list.</p>}
+    </div>
+  );
+}
 
 export default function FeesPage() {
   const {
@@ -50,26 +216,38 @@ export default function FeesPage() {
   const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
   const router = useRouter();
 
-  // Common Procedure Pricing Presets
-  const procedurePresets = [
-    { name: "Consultation & Diagnostic X-Ray", price: 500 },
-    { name: "Composite Restoration / Filling", price: 1500 },
-    { name: "Root Canal Treatment (Molar RCT)", price: 4500 },
-    { name: "Zirconia Crown (Permanent)", price: 8000 },
-    { name: "Scaling & Root Planing (Cleaning)", price: 1200 },
-    { name: "Simple Tooth Extraction", price: 1500 },
-    { name: "Ceramic Laminate Veneer", price: 9000 },
-  ];
+  const treatments = useMemo(() => {
+    const options = new Map<string, { name: string; price?: number }>(
+      procedurePresets.map((preset) => [treatmentKey(preset.name), preset])
+    );
+    const recentFees = [...fees].sort((a, b) =>
+      (b.date || "").localeCompare(a.date || "") || b._id.localeCompare(a._id, undefined, { numeric: true })
+    );
+    for (const fee of recentFees) {
+      const name = normalizeTreatmentName(fee.procedureName || "");
+      const key = treatmentKey(name);
+      if (name && !options.has(key)) {
+        const price = Number.isFinite(fee.amount) && fee.amount >= 0 ? fee.amount : undefined;
+        options.set(key, { name, price });
+      }
+    }
+    return options;
+  }, [fees]);
 
   // Add Fee Form State
   const [feeForm, setFeeForm] = useState({
     patientId: patients[0]?._id || "",
-    procedureName: procedurePresets[2].name,
+    treatment: treatmentKey(procedurePresets[2].name),
+    newTreatmentName: "",
     tooth: "46",
     amount: procedurePresets[2].price.toString(),
     discount: "0",
     notes: "",
   });
+  const addingTreatment = feeForm.treatment === customTreatment;
+  const procedureName = addingTreatment
+    ? normalizeTreatmentName(feeForm.newTreatmentName)
+    : treatments.get(feeForm.treatment)?.name ?? "";
 
   // Record Payment Form State
   const [paymentForm, setPaymentForm] = useState({
@@ -132,16 +310,19 @@ export default function FeesPage() {
   const handleAddFeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const patient = patients.find((p) => p._id === feeForm.patientId);
-    if (!patient) return;
+    if (!patient || !procedureName || !feeForm.amount.trim()) return;
     const gross = Number(feeForm.amount);
     const disc = Number(feeForm.discount || 0);
+    if (!Number.isFinite(gross) || gross < 0 || !Number.isFinite(disc)) return;
+
+    const key = treatmentKey(procedureName);
 
     const newFee: FeeItem = {
       _id: `fee_${Date.now()}`,
       patientId: patient._id,
       patientName: patient.name,
       date: todayStr,
-      procedureName: feeForm.procedureName,
+      procedureName: treatments.get(key)?.name ?? procedureName,
       tooth: feeForm.tooth ? `Tooth #${feeForm.tooth}` : undefined,
       amount: gross,
       discount: disc,
@@ -151,6 +332,7 @@ export default function FeesPage() {
     };
 
     await addFee(newFee);
+    setFeeForm((previous) => ({ ...previous, treatment: key, newTreatmentName: "" }));
     setIsAddFeeOpen(false);
   };
 
@@ -318,7 +500,7 @@ export default function FeesPage() {
                   Add Fee
                 </h3>
                 <p className="text-[11px] text-[#64748B] mt-0.5">
-                  Select a treatment or enter a custom charge.
+                  Select a procedure or enter a custom charge.
                 </p>
               </div>
               <button
@@ -331,60 +513,51 @@ export default function FeesPage() {
             </div>
 
             <form onSubmit={handleAddFeeSubmit} className="mt-4 space-y-4">
-              {/* Common Dental Pricing Presets */}
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1.5">
-                  Treatment Presets
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {procedurePresets.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setFeeForm((prev) => ({
-                          ...prev,
-                          procedureName: preset.name,
-                          amount: preset.price.toString(),
-                        }));
+              <PatientPicker
+                patients={patients}
+                value={feeForm.patientId}
+                onChange={(patientId) => setFeeForm((previous) => ({ ...previous, patientId }))}
+              />
+
+              <div className="grid grid-cols-1 items-start gap-3 min-[400px]:grid-cols-3">
+                <div className="min-w-0 space-y-3 min-[400px]:col-span-2">
+                  <div>
+                    <label htmlFor="fee-treatment" className="mb-1 block font-semibold text-[#111C3A]">Procedure Name *</label>
+                    <select
+                      id="fee-treatment"
+                      required
+                      value={addingTreatment || treatments.has(feeForm.treatment) ? feeForm.treatment : ""}
+                      onChange={(event) => {
+                        const treatment = event.target.value;
+                        const amount = treatments.get(treatment)?.price?.toString() ?? "";
+                        setFeeForm((previous) => ({ ...previous, treatment, amount }));
                       }}
-                      className={`text-[11px] px-2.5 py-1 rounded-xl border transition-all text-left ${
-                        feeForm.procedureName === preset.name
-                          ? "bg-[#0089A8] text-white border-[#0089A8] font-semibold"
-                          : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
-                      }`}
+                      className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 outline-none focus:border-[#0089A8]"
                     >
-                      {preset.name} (₹{preset.price.toLocaleString()})
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <option value="" disabled>Select a procedure</option>
+                      {Array.from(treatments, ([key, { name, price }]) => (
+                        <option key={key} value={key}>
+                          {name}{price === undefined ? "" : ` (₹${price.toLocaleString("en-IN")})`}
+                        </option>
+                      ))}
+                      <option value={customTreatment}>+ Add new procedure</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Select Patient *</label>
-                <select
-                  value={feeForm.patientId}
-                  onChange={(e) => setFeeForm({ ...feeForm, patientId: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
-                >
-                  {patients.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} ({p.phone})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 min-[400px]:grid-cols-3 gap-3">
-                <div className="min-[400px]:col-span-2">
-                  <label className="font-semibold text-[#111C3A] block mb-1">Procedure Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={feeForm.procedureName}
-                    onChange={(e) => setFeeForm({ ...feeForm, procedureName: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
-                  />
+                  {addingTreatment && (
+                    <div>
+                      <label htmlFor="fee-new-treatment" className="mb-1 block font-semibold text-[#111C3A]">New Procedure Name *</label>
+                      <input
+                        id="fee-new-treatment"
+                        type="text"
+                        required
+                        placeholder="Enter the procedure name"
+                        value={feeForm.newTreatmentName}
+                        onChange={(event) => setFeeForm({ ...feeForm, newTreatmentName: event.target.value })}
+                        className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 outline-none focus:border-[#0089A8]"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -405,6 +578,8 @@ export default function FeesPage() {
                   <input
                     type="number"
                     required
+                    min={0}
+                    step="0.01"
                     value={feeForm.amount}
                     onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono font-bold bg-[#FAFBFC]"
@@ -443,9 +618,10 @@ export default function FeesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs"
+                  disabled={!feeForm.patientId || !procedureName}
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Save Treatment Fee
+                  Save Fee
                 </button>
               </div>
             </form>
@@ -476,20 +652,11 @@ export default function FeesPage() {
             </div>
 
             <form onSubmit={handleRecordPaymentSubmit} className="mt-4 space-y-3">
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Patient *</label>
-                <select
-                  value={paymentForm.patientId}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, patientId: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none bg-[#FAFBFC]"
-                >
-                  {patients.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} ({p.phone})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <PatientPicker
+                patients={patients}
+                value={paymentForm.patientId}
+                onChange={(patientId) => setPaymentForm((previous) => ({ ...previous, patientId }))}
+              />
 
               <div>
                 <label className="font-semibold text-[#111C3A] block mb-1">Amount Paid (₹) *</label>
@@ -543,7 +710,8 @@ export default function FeesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs"
+                  disabled={!paymentForm.patientId}
+                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Save Payment
                 </button>

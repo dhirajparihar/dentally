@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   Plus,
@@ -14,7 +14,6 @@ import {
   User,
   ArrowRight,
   Send,
-  Check,
   MoreHorizontal,
 } from "lucide-react";
 import {
@@ -23,7 +22,9 @@ import {
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
-import { getAppointmentClock, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { useMinuteClock } from "@/lib/useMinuteClock";
+import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -34,10 +35,9 @@ interface AppointmentActionsProps {
   onReopen: () => void;
   canReopen: boolean;
   onCancel: () => void;
-  onMarkMissed: () => void;
 }
 
-function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, canReopen, onCancel, onMarkMissed }: AppointmentActionsProps) {
+function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, canReopen, onCancel }: AppointmentActionsProps) {
   return (
     <details className="appointment-menu" onToggle={(event) => {
       if (!event.currentTarget.open) return;
@@ -53,13 +53,22 @@ function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onResch
         <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
         <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
         {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
-        {appointment.status === "scheduled" && <button type="button" onClick={onMarkMissed} className="text-amber-700"><AlertCircle size={15} />Mark as Missed</button>}
         {canReopen && appointment.status !== "scheduled" && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
         {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
       </div>
     </details>
   );
 }
+
+const emptyBookingForm = (date: string) => ({
+  patientName: "",
+  patientPhone: "",
+  date,
+  time: "",
+  durationMinutes: 30,
+  procedure: "Root Canal Treatment (RCT)",
+  notes: "",
+});
 
 export default function AppointmentsPage() {
   const {
@@ -69,14 +78,12 @@ export default function AppointmentsPage() {
     loading,
     addPatient,
     bookAppointment,
-    completeAppointment,
     cancelAppointment,
-    missAppointment,
     rescheduleAppointment,
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
-  const [clock, setClock] = useState(getAppointmentClock);
+  const clock = getAppointmentClock(useMinuteClock());
   const [selectedDate, setSelectedDate] = useState(clock.date);
   const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
@@ -90,16 +97,7 @@ export default function AppointmentsPage() {
   const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
   const [bookingError, setBookingError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const updateClock = () => {
-      setClock(getAppointmentClock());
-      timer = setTimeout(updateClock, 60_000 - Date.now() % 60_000);
-    };
-    updateClock();
-    return () => clearTimeout(timer);
-  }, []);
+  const handledCalendarLink = useRef(false);
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
@@ -133,15 +131,23 @@ export default function AppointmentsPage() {
   ];
 
   // Book Appointment Form State
-  const [form, setForm] = useState({
-    patientName: "",
-    patientPhone: "",
-    date: selectedDate,
-    time: "",
-    durationMinutes: 30,
-    procedure: "Root Canal Treatment (RCT)",
-    notes: "",
-  });
+  const [form, setForm] = useState(() => emptyBookingForm(selectedDate));
+
+  useEffect(() => {
+    if (loading || handledCalendarLink.current) return;
+    handledCalendarLink.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const visitId = params.get("visit");
+    const requestedId = visitId || params.get("followUp");
+    if (!requestedId) return;
+    const visit = appointments.find((record) => record._id === requestedId);
+    if (!visit) {
+      setBookingError("This appointment is unavailable.");
+      return;
+    }
+    const query = visitId ? "visit" : "followUp";
+    router.replace(`/dashboard/patients/${encodeURIComponent(visit.patientId)}?${query}=${encodeURIComponent(visit._id)}`);
+  }, [appointments, loading, router]);
 
   // Reschedule Form State
   const [rescheduleData, setRescheduleData] = useState({
@@ -150,52 +156,9 @@ export default function AppointmentsPage() {
     reason: "",
   });
 
-  // Dynamically generate slots from ClinicProfile settings
-  const workingHours = useMemo(() => {
-    const sMin = parseAppointmentTime(clinicProfile.workingHoursStart) ?? 600;
-    const eMin = parseAppointmentTime(clinicProfile.workingHoursEnd) ?? 1140;
-    const step = Math.max(15, clinicProfile.slotDuration || 30);
-    const slots: string[] = [];
-
-    for (let m = sMin; m + step <= eMin; m += step) {
-      let h = Math.floor(m / 60);
-      const min = m % 60;
-      const period = h >= 12 ? "PM" : "AM";
-      if (h > 12) h -= 12;
-      if (h === 0) h = 12;
-      const hStr = h.toString().padStart(2, "0");
-      const mStr = min.toString().padStart(2, "0");
-      slots.push(`${hStr}:${mStr} ${period}`);
-    }
-
-    if (slots.length === 0) {
-      return ["10:00 AM", "10:30 AM", "11:15 AM", "12:00 PM", "02:00 PM", "02:45 PM", "03:30 PM", "04:15 PM", "05:00 PM", "05:45 PM", "06:30 PM"];
-    }
-    return slots;
-  }, [clinicProfile.workingHoursStart, clinicProfile.workingHoursEnd, clinicProfile.slotDuration]);
-
-  const findSlotConflict = (
-    date: string,
-    time: string,
-    durationMinutes = 30,
-    excludeAptId?: string
-  ) => {
-    const slotStart = parseAppointmentTime(time);
-    if (slotStart === null) return;
-    const slotEnd = slotStart + durationMinutes;
-
-    return appointments.find((apt) => {
-      if (apt._id === excludeAptId) return false;
-      if (apt.date !== date) return false;
-      if (apt.status === "cancelled" || apt.status === "missed") return false;
-
-      const aptStart = parseAppointmentTime(apt.time);
-      if (aptStart === null) return false;
-      const aptEnd = aptStart + (apt.durationMinutes || 30);
-
-      return slotStart < aptEnd && slotEnd > aptStart;
-    });
-  };
+  const workingHours = useMemo(() => getClinicAppointmentSlots(clinicProfile), [clinicProfile]);
+  const findSlotConflict = (date: string, time: string, durationMinutes = 30, excludeId?: string) =>
+    findAppointmentConflict(appointments, date, time, durationMinutes, excludeId);
 
   const futureSlots = (date: string, currentClock = clock) =>
     workingHours.filter((slot) => isFutureAppointment(date, slot, currentClock));
@@ -228,31 +191,30 @@ export default function AppointmentsPage() {
   // Date Navigator Helpers
   const shiftDate = (days: number) => setSelectedDate((date) => shiftAppointmentDate(date, days));
 
-  // Status Handlers
-  const handleMarkStatus = async (id: string, newStatus: Appointment["status"]) => {
-    const appointment = appointments.find((entry) => entry._id === id);
-    const currentClock = getAppointmentClock();
-    if (!appointment || appointment.date < currentClock.date) return;
-    if (newStatus === "completed") {
-      completeAppointment(id);
-    } else if (newStatus === "scheduled") {
-      if (!isFutureAppointment(appointment.date, appointment.time, currentClock)) return;
-      setBookingError("");
-      const saved = await bookAppointment({ ...appointment, status: "scheduled" });
-      if (!saved) {
-        setBookingError("Could not reopen the appointment. Check the time and try again.");
-      }
-    } else if (newStatus === "cancelled") {
-      cancelAppointment(id);
-    } else if (newStatus === "missed") {
-      missAppointment(id);
-    }
+  const handleReopen = async (appointment: Appointment) => {
+    if (!isFutureAppointment(appointment.date, appointment.time)) return;
+    setBookingError("");
+    const saved = await bookAppointment({ ...appointment, status: "scheduled" });
+    if (!saved) setBookingError("Could not reopen the appointment. Check the time and try again.");
+  };
+
+  const handleCancel = async (appointment: Appointment) => {
+    if (appointment.date < getAppointmentClock().date || !confirm(`Cancel appointment for ${appointment.patientName}?`)) return;
+    setBookingError("");
+    const saved = await cancelAppointment(appointment._id);
+    if (!saved) setBookingError("Could not cancel the appointment. Try again.");
   };
 
   // Open Dossier for Patient
   const handleOpenPatientDossier = (patientId: string, patientName: string) => {
     const found = patients.find((p) => p._id === patientId || p.name === patientName);
     router.push(`/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`);
+  };
+
+  const closeBooking = () => {
+    if (isSubmitting) return;
+    setIsBookModalOpen(false);
+    setBookingError("");
   };
 
   // Booking submit
@@ -268,14 +230,13 @@ export default function AppointmentsPage() {
     const trimmedPhone = form.patientPhone.trim();
     if (!trimmedName) return;
 
+    const matched = patients.find((patient) =>
+      patient.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
+      (trimmedPhone && patient.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
+    );
+
     setBookingError("");
     setIsSubmitting(true);
-
-    const matched = patients.find(
-      (p) =>
-        p.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
-        (trimmedPhone && p.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
-    );
 
     let resolvedPatientId = matched?._id;
     let resolvedPhone = trimmedPhone || matched?.phone || "";
@@ -331,15 +292,7 @@ export default function AppointmentsPage() {
     setIsBookModalOpen(false);
     setEmergencyOverride(false);
     setBookedSuccessApt(newApt);
-    setForm({
-      patientName: "",
-      patientPhone: "",
-      date: selectedDate,
-      time: "",
-      durationMinutes: 30,
-      procedure: "Root Canal Treatment (RCT)",
-      notes: "",
-    });
+    setForm(emptyBookingForm(selectedDate));
   };
 
   // Reschedule submit
@@ -464,7 +417,7 @@ export default function AppointmentsPage() {
       <section aria-labelledby="appointments-list-heading" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="appointments-list-heading" className="text-sm font-semibold">{viewMode === "list" ? "All Bookings" : isToday ? "Today's Appointments" : "Appointments"} <span className="ml-1 text-xs font-normal text-[#64748B]">({visibleAppointments.length})</span></h2>
-          {viewMode === "timeline" && <p className="text-xs text-[#64748B]">{dayAppointments.filter((appointment) => appointment.status === "scheduled").length} scheduled &middot; {dayAppointments.filter((appointment) => appointment.status === "completed").length} completed</p>}
+          {viewMode === "timeline" && <p className="text-xs text-[#64748B]">{dayAppointments.filter((appointment) => appointment.status === "scheduled").length} scheduled &middot; {dayAppointments.filter((appointment) => appointment.status === "completed").length} completed &middot; {dayAppointments.filter((appointment) => appointment.status === "missed").length} missed</p>}
           {viewMode === "list" && (
             <select aria-label="Filter appointments by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="appointment-status-filter">
               {(["all", "scheduled", "completed", "missed", "cancelled"] as const).map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.charAt(0).toUpperCase() + status.slice(1)} ({status === "all" ? appointments.length : appointments.filter((appointment) => appointment.status === status).length})</option>)}
@@ -492,9 +445,19 @@ export default function AppointmentsPage() {
                   )}
                 </div>
                 <div className="appointment-card-controls">
-                  <span className={`appointment-status ${appointment.status}`}>{appointment.status === "completed" && <Check size={13} aria-hidden="true" />}{appointment.status}</span>
-                  {appointment.date >= clock.date && <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => openReschedule(appointment)} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} canReopen={isFutureAppointment(appointment.date, appointment.time, clock)} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} onMarkMissed={() => handleMarkStatus(appointment._id, "missed")} />}
-                  {appointment.date >= clock.date && appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
+                  <AppointmentStatusControl appointment={appointment} />
+                  {appointment.date >= clock.date && (
+                    <AppointmentActions
+                      appointment={appointment}
+                      reminderUrl={getWhatsAppReminderUrl(appointment)}
+                      careUrl={getWhatsAppPostOpUrl(appointment)}
+                      onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)}
+                      onReschedule={() => openReschedule(appointment)}
+                      onReopen={() => handleReopen(appointment)}
+                      canReopen={isFutureAppointment(appointment.date, appointment.time, clock)}
+                      onCancel={() => handleCancel(appointment)}
+                    />
+                  )}
                 </div>
               </article>
             ))}
@@ -505,16 +468,16 @@ export default function AppointmentsPage() {
       {/* ================= SMART BOOKING MODAL FOR SINGLE DENTIST ================= */}
       {isBookModalOpen && (
         <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs my-auto animate-in fade-in zoom-in-95">
+          <div role="dialog" aria-modal="true" aria-labelledby="booking-heading" className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs my-auto animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
-                <h3 className="font-bold text-lg text-[#111C3A]">
+                <h3 id="booking-heading" className="font-bold text-lg text-[#111C3A]">
                   Book Appointment
                 </h3>
-
               </div>
               <button
-                onClick={() => setIsBookModalOpen(false)}
+                onClick={closeBooking}
+                disabled={isSubmitting}
                 aria-label="Close booking form"
                 className="p-1 rounded-lg text-[#8291A7] hover:text-[#111C3A]"
               >
@@ -711,7 +674,8 @@ export default function AppointmentsPage() {
               <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
-                  onClick={() => setIsBookModalOpen(false)}
+                  onClick={closeBooking}
+                  disabled={isSubmitting}
                   className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
                 >
                   Cancel

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { getScheduledAppointmentEnd } from "@/lib/appointmentTime";
 import {
   Patient,
   Appointment,
@@ -29,9 +30,9 @@ export interface ClinicContextType {
   addPatient: (patient: Patient) => Promise<void>;
   updatePatient: (patient: Patient) => Promise<void>;
   bookAppointment: (appointment: Appointment) => Promise<boolean>;
-  completeAppointment: (appointmentId: string) => Promise<void>;
-  cancelAppointment: (appointmentId: string, reason?: string) => Promise<void>;
-  missAppointment: (appointmentId: string, reason?: string) => Promise<void>;
+  completeAppointment: (appointmentId: string) => Promise<boolean>;
+  cancelAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
+  missAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
   rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<boolean>;
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
@@ -47,6 +48,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Always initialize with empty clean state - NEVER flash demo data while loading
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const appointmentRevision = useRef(0);
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,13 +71,15 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [session?.user]);
 
   // Fetch current state from backend scoped to the doctor's email
-  const refreshClinic = useCallback(async () => {
+  const refreshClinic = useCallback(async (appointmentsOnly = false) => {
+    const revisionAtStart = appointmentRevision.current;
     try {
       const res = await fetch("/api/clinic", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        if (revisionAtStart === appointmentRevision.current) setAppointments(data.appointments || []);
+        if (appointmentsOnly) return;
         setPatients(data.patients || []);
-        setAppointments(data.appointments || []);
         setFees(data.fees || []);
         setPayments(data.payments || []);
         if (data.clinicProfile) {
@@ -93,11 +97,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       console.warn("Clinic fetch error:", err);
     } finally {
-      setLoading(false);
+      if (!appointmentsOnly) setLoading(false);
     }
   }, [session?.user?.name, userEmail]);
 
-  // Initial load when session resolves + revalidate on tab focus (NOT a blind 15s timer)
+  // Initial load when session resolves and revalidate on tab focus.
   useEffect(() => {
     if (status === "loading") return;
     refreshClinic();
@@ -114,6 +118,27 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => window.removeEventListener("focus", onFocus);
   }, [status, refreshClinic]);
 
+  useEffect(() => {
+    if (status !== "authenticated" || loading) return;
+    const nextEnd = appointments.reduce((earliest, appointment) =>
+      Math.min(earliest, getScheduledAppointmentEnd(appointment) ?? Infinity), Infinity);
+    if (!Number.isFinite(nextEnd)) return;
+
+    const retryDelay = 30_000;
+    const remaining = nextEnd - Date.now();
+    const delay = remaining <= 0 ? retryDelay : Math.min(remaining, 2_147_483_647);
+    let disposed = false;
+    const syncExpiredVisits = async () => {
+      await refreshClinic(true);
+      if (!disposed) timer = window.setTimeout(syncExpiredVisits, retryDelay);
+    };
+    let timer = window.setTimeout(syncExpiredVisits, delay);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [appointments, loading, refreshClinic, status]);
+
   // Generic helper to post mutations scoped to current doctor
   const postMutation = async (payload: Record<string, any>) => {
     try {
@@ -126,7 +151,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!res.ok) return false;
       const data = await res.json();
       if (data.patients) setPatients(data.patients);
-      if (data.appointments) setAppointments(data.appointments);
+      if (data.appointments) {
+        appointmentRevision.current += 1;
+        setAppointments(data.appointments);
+      }
       if (data.fees) setFees(data.fees);
       if (data.payments) setPayments(data.payments);
       return true;
@@ -159,42 +187,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return postMutation({ action: "book_appointment", data: scoped });
   };
 
-  const completeAppointment = async (appointmentId: string) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a._id === appointmentId ? { ...a, status: "completed" as const } : a))
-    );
-    await postMutation({ action: "complete_appointment", appointmentId });
-  };
+  const completeAppointment = (appointmentId: string) => postMutation({ action: "complete_appointment", appointmentId });
 
-  const cancelAppointment = async (appointmentId: string, reason?: string) => {
-    setAppointments((prev) =>
-      prev.map((a) =>
-        a._id === appointmentId
-          ? {
-              ...a,
-              status: "cancelled" as const,
-              notes: `${a.notes || ""} [Cancelled: ${reason || "Patient request"}]`.trim(),
-            }
-          : a
-      )
-    );
-    await postMutation({ action: "cancel_appointment", appointmentId, reason });
-  };
+  const cancelAppointment = (appointmentId: string, reason?: string) => postMutation({ action: "cancel_appointment", appointmentId, reason });
 
-  const missAppointment = async (appointmentId: string, reason?: string) => {
-    setAppointments((prev) =>
-      prev.map((a) =>
-        a._id === appointmentId
-          ? {
-              ...a,
-              status: "missed" as const,
-              notes: `${a.notes || ""} [Missed: ${reason || "No-show at operatory"}]`.trim(),
-            }
-          : a
-      )
-    );
-    await postMutation({ action: "miss_appointment", appointmentId, reason });
-  };
+  const missAppointment = (appointmentId: string, reason?: string) => postMutation({ action: "miss_appointment", appointmentId, reason });
 
   const rescheduleAppointment = async (
     appointmentId: string,

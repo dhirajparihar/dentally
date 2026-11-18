@@ -530,14 +530,12 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       const apt = appointmentsState.find((a) => a._id === args.appointmentId);
       if (!apt) return { error: `Appointment ID '${args.appointmentId}' not found.` };
 
-      apt.status = "cancelled";
-      if (args.reason) apt.notes = `${apt.notes || ""} [Cancelled: ${args.reason}]`.trim();
-      await updateAppointmentStatus(apt._id, "cancelled", email);
+      const updated = await updateAppointmentStatus(apt._id, "cancelled", email, args.reason);
 
       return {
         success: true,
         message: `Appointment for ${apt.patientName} on ${apt.date} has been cancelled.`,
-        appointment: apt,
+        appointment: updated,
       };
     }
 
@@ -545,27 +543,28 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       const apt = appointmentsState.find((a) => a._id === args.appointmentId);
       if (!apt) return { error: `Appointment ID '${args.appointmentId}' not found.` };
 
-      apt.status = "completed";
-      if (args.notes) apt.notes = `${apt.notes || ""} [Completed: ${args.notes}]`.trim();
-      await updateAppointmentStatus(apt._id, "completed", email);
+      const updated = await updateAppointmentStatus(apt._id, "completed", email, args.notes);
 
       // Update patient last visit
-      const patient = findPatientHelper(apt.patientId);
-      if (patient) {
-        patient.lastVisit = apt.date;
-        patient.history.unshift({
+      const patient = patientsState.find((record) => record._id === apt.patientId);
+      if (patient && apt.status !== "completed") {
+        const treatment = {
           date: apt.date,
           procedure: apt.procedure,
           doctor: clinicProfile.dentistName,
           notes: args.notes || "Completed as scheduled.",
-        });
-        await savePatient(patient, email);
+        };
+        await savePatient({
+          ...patient,
+          lastVisit: patient.lastVisit && patient.lastVisit > apt.date ? patient.lastVisit : apt.date,
+          history: [treatment, ...patient.history],
+        }, email);
       }
 
       return {
         success: true,
         message: `Appointment for ${apt.patientName} marked completed.`,
-        appointment: apt,
+        appointment: updated,
       };
     }
 

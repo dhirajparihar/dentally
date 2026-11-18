@@ -6,6 +6,7 @@ const AppointmentSchema = new Schema<Appointment>(
     _id: { type: String, required: true },
     dentistEmail: { type: String, required: true, index: true },
     patientId: { type: String, required: true, index: true },
+    followUpOfAppointmentId: { type: String },
     patientName: { type: String, required: true },
     patientPhone: { type: String, required: true },
     time: { type: String, required: true },

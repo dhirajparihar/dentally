@@ -24,40 +24,22 @@ import {
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import { Patient, Appointment } from "@/lib/mockData";
-import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import {
+  findAppointmentConflict,
+  findBookedFollowUp,
+  getAppointmentClock,
+  getClinicAppointmentSlots,
+  getScheduledAppointmentEnd,
+  isFutureAppointment,
+  parseAppointmentTime,
+  shiftAppointmentDate,
+} from "@/lib/appointmentTime";
+import { useMinuteClock } from "@/lib/useMinuteClock";
+import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
 
 const patientUrl = (id: string) => `/dashboard/patients/${encodeURIComponent(id)}`;
 const money = (amount: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
-
-const clinicSlots = [
-  "10:00 AM",
-  "10:30 AM",
-  "11:15 AM",
-  "12:00 PM",
-  "12:45 PM",
-  "02:00 PM",
-  "02:45 PM",
-  "03:30 PM",
-  "04:15 PM",
-  "05:00 PM",
-  "05:45 PM",
-  "06:30 PM",
-  "07:15 PM",
-  "08:00 PM",
-];
-
-function parseTimeToMinutes(timeStr: string): number {
-  if (!timeStr) return 0;
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-  if (!match) return 0;
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3]?.toUpperCase();
-  if (period === "PM" && hours < 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  return hours * 60 + minutes;
-}
 
 export default function DashboardOverviewPage() {
   const {
@@ -67,9 +49,7 @@ export default function DashboardOverviewPage() {
     payments,
     clinicProfile,
     loading,
-    completeAppointment,
     cancelAppointment,
-    missAppointment,
     bookAppointment,
     addPatient,
     recordPayment,
@@ -80,16 +60,19 @@ export default function DashboardOverviewPage() {
   const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
   const [isRecordingQrPayment, setIsRecordingQrPayment] = useState(false);
 
-  const clock = getAppointmentClock();
+  const now = useMinuteClock();
+  const clock = getAppointmentClock(now);
   const todayStr = clock.date;
   const currentMinutes = clock.minutes;
 
   // Operatory Schedule Date Navigation
-  const [scheduleDate, setScheduleDate] = useState(() => todayStr);
+  const [selectedScheduleDate, setScheduleDate] = useState<string>();
+  const scheduleDate = selectedScheduleDate ?? todayStr;
   const isViewingToday = scheduleDate === todayStr;
 
   const shiftScheduleDate = (days: number) => {
-    setScheduleDate((prev) => shiftAppointmentDate(prev, days));
+    const nextDate = shiftAppointmentDate(scheduleDate, days);
+    setScheduleDate(nextDate === todayStr ? undefined : nextDate);
   };
 
   const formatScheduleHeaderDate = (dateStr: string) => {
@@ -109,18 +92,26 @@ export default function DashboardOverviewPage() {
     patientName: "",
     patientPhone: "",
     procedure: "Toothache / Emergency Exam",
-    time: "11:30 AM",
+    time: "",
     durationMinutes: 30,
     notes: "Emergency walk-in",
   });
 
+  const walkInSlots = getClinicAppointmentSlots(clinicProfile).filter((slot) =>
+    isFutureAppointment(scheduleDate, slot, clock)
+  );
+  const isWalkInSlotTaken = (time: string, duration: number) =>
+    Boolean(findAppointmentConflict(appointments, scheduleDate, time, duration));
+  const canBookWalkIn = scheduleDate >= todayStr;
+
   const openWalkInModal = () => {
-    const validSlots = clinicSlots.filter((slot) => isFutureAppointment(scheduleDate, slot, clock));
+    if (!canBookWalkIn) return;
+    const firstAvailableSlot = walkInSlots.find((slot) => !isWalkInSlotTaken(slot, 30));
     setWalkInForm({
       patientName: "",
       patientPhone: "",
       procedure: "Toothache / Emergency Exam",
-      time: validSlots[0] || clinicSlots[0],
+      time: firstAvailableSlot ?? "",
       durationMinutes: 30,
       notes: "Emergency walk-in",
     });
@@ -129,34 +120,37 @@ export default function DashboardOverviewPage() {
   };
 
   // Next 7 days boundary for practical recalls
-  const weekAhead = new Date();
-  weekAhead.setDate(weekAhead.getDate() + 7);
-  const weekAheadStr = weekAhead.toISOString().split("T")[0];
+  const weekAheadStr = shiftAppointmentDate(todayStr, 7);
 
-  // Chronologically sorted schedule for the selected date
-  const scheduleList = appointments
-    .filter((a) => a.date === scheduleDate)
-    .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
-
-  // Live operatory chair indicators (only evaluated when viewing today)
+  const scheduleOrder = { inProgress: 0, upcoming: 1, history: 2 } as const;
+  const todaySchedule = appointments
+    .filter((appointment) => appointment.date === todayStr)
+    .map((appointment) => {
+      const start = parseAppointmentTime(appointment.time);
+      let priority: number = scheduleOrder.history;
+      if (start !== null && appointment.status === "scheduled") {
+        const end = getScheduledAppointmentEnd(appointment);
+        if (start > currentMinutes) priority = scheduleOrder.upcoming;
+        else if (end !== null && now.getTime() < end) priority = scheduleOrder.inProgress;
+      }
+      return { appointment, priority, start: start ?? 0 };
+    })
+    .sort((a, b) => a.priority - b.priority || (
+      a.priority === scheduleOrder.inProgress ? b.start - a.start : a.start - b.start
+    ));
+  const todayList = todaySchedule.map(({ appointment }) => appointment);
+  const scheduleList = isViewingToday ? todayList : appointments
+    .filter((appointment) => appointment.date === scheduleDate)
+    .sort((a, b) => (parseAppointmentTime(a.time) ?? 0) - (parseAppointmentTime(b.time) ?? 0));
   const inOperatoryApt = isViewingToday
-    ? scheduleList.find((a) => {
-        if (a.status !== "scheduled") return false;
-        const start = parseTimeToMinutes(a.time);
-        const end = start + (a.durationMinutes || 30);
-        return currentMinutes >= start && currentMinutes <= end;
-      })
+    ? todaySchedule.find(({ priority }) => priority === scheduleOrder.inProgress)?.appointment
     : undefined;
-
   const nextUpApt = isViewingToday
-    ? scheduleList.find((a) => {
-        if (a.status !== "scheduled") return false;
-        const start = parseTimeToMinutes(a.time);
-        return start > currentMinutes;
-      })
+    ? todaySchedule.find(({ priority }) => priority === scheduleOrder.upcoming)?.appointment
     : undefined;
 
-  const todayPayments = payments.filter((p) => p.date === todayStr && !p.isRefund);
+  const paymentDate = now.toISOString().slice(0, 10);
+  const todayPayments = payments.filter((p) => p.date === paymentDate && !p.isRefund);
   const totalDailyCollection = todayPayments.reduce((s, p) => s + p.amount, 0);
 
   // Payment breakdown
@@ -206,10 +200,11 @@ export default function DashboardOverviewPage() {
   };
 
   // WhatsApp link generators
-  const getWhatsAppTodayReminderUrl = (apt: Appointment) => {
+  const getWhatsAppAppointmentReminderUrl = (apt: Appointment) => {
     const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const msg = `Hello ${apt.patientName}, this is a reminder for your dental appointment today at ${apt.time} (${apt.procedure}) with ${clinicProfile.dentistName} at ${clinicProfile.name}.\n\nPlease let us know when you arrive. See you soon!`;
+    const visitDay = apt.date === todayStr ? "today" : `on ${apt.date}`;
+    const msg = `Hello ${apt.patientName}, this is a reminder for your dental appointment ${visitDay} at ${apt.time} (${apt.procedure}) with ${clinicProfile.dentistName} at ${clinicProfile.name}.\n\nPlease let us know when you arrive. See you soon!`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -243,8 +238,14 @@ export default function DashboardOverviewPage() {
       return;
     }
 
-    if (!isFutureAppointment(scheduleDate, walkInForm.time, clock)) {
+    if (!isFutureAppointment(scheduleDate, walkInForm.time)) {
       setWalkInError(`The selected time (${walkInForm.time}) is in the past for ${scheduleDate}. Please pick an upcoming slot.`);
+      return;
+    }
+
+    const durationMinutes = walkInForm.durationMinutes;
+    if (isWalkInSlotTaken(walkInForm.time, durationMinutes)) {
+      setWalkInError("This time overlaps another appointment. Choose an available slot.");
       return;
     }
 
@@ -289,44 +290,34 @@ export default function DashboardOverviewPage() {
       const newApt: Appointment = {
         _id: `apt_${Date.now()}`,
         patientId: resolvedPatientId!,
-        patientName: trimmedName,
+        patientName: matched?.name || trimmedName,
         patientPhone: resolvedPhone,
         date: scheduleDate,
         time: walkInForm.time,
-        durationMinutes: Number(walkInForm.durationMinutes) || 30,
+        durationMinutes,
         procedure: walkInForm.procedure,
         status: "scheduled",
         notes: walkInForm.notes || "Emergency Walk-In",
       };
 
       const success = await bookAppointment(newApt);
-      if (success === false) {
+      if (!success) {
         setWalkInError("Could not book the appointment. Check that the slot is available and in the future.");
         return;
       }
       setIsWalkInOpen(false);
-    } catch (err: any) {
-      setWalkInError(err?.message || "Failed to schedule walk-in.");
+    } catch (err) {
+      setWalkInError(err instanceof Error ? err.message : "Failed to schedule walk-in.");
     } finally {
       setIsSubmittingWalkIn(false);
     }
   };
 
-  const formattedDate = new Date(`${clock.date}T00:00:00Z`).toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-
-  const todayAppointments = appointments.filter((a) => a.date === todayStr);
-
   const metrics = [
     {
       label: "Today's Appointments",
-      value: todayAppointments.length,
-      detail: `${todayAppointments.filter((a) => a.status === "scheduled").length} scheduled / ${todayAppointments.filter((a) => a.status === "completed").length} completed`,
+      value: todayList.length,
+      detail: `${todayList.filter((a) => a.status === "scheduled").length} scheduled / ${todayList.filter((a) => a.status === "completed").length} completed / ${todayList.filter((a) => a.status === "missed").length} missed`,
       icon: Calendar,
       tone: "blue",
       href: "/dashboard/appointments",
@@ -360,9 +351,13 @@ export default function DashboardOverviewPage() {
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-20 bg-white rounded-2xl border border-[#E4E9F0] p-6 flex flex-col justify-center space-y-2">
-          <div className="h-5 w-48 bg-slate-200 rounded" />
-          <div className="h-4 w-72 bg-slate-100 rounded" />
+        <div className="welcome-card space-y-2" aria-hidden="true">
+          <div className="h-6 w-72 max-w-full rounded bg-slate-200 sm:h-8" />
+          <div className="h-3.5 w-64 max-w-full rounded bg-slate-100" />
+          <div className="flex gap-2 pt-2">
+            <div className="h-9 w-36 rounded-full bg-slate-200" />
+            <div className="h-9 w-32 rounded-full bg-slate-100" />
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -380,59 +375,56 @@ export default function DashboardOverviewPage() {
 
   return (
     <div className="overview space-y-6 sm:space-y-8">
-      {/* ================= COMPACT CLINICAL GREETING & DESK TOOLBAR ================= */}
-      <section className="bg-white rounded-3xl border border-[#E4E9F0] p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full bg-[#EDF7FA] text-[#00738E] border border-[#CDEBF2]">
-              {formattedDate}
-            </span>
-            <span className="text-xs text-[#64748B] font-mono">Chair 1 Operatory</span>
-          </div>
-          <h1 className="mt-1.5 text-2xl sm:text-3xl font-bold tracking-tight text-[#111C3A]">
-            Good day, {clinicProfile.dentistName}
-          </h1>
-          <p className="mt-0.5 text-xs text-[#52627A]">
-            {clinicProfile.name} &middot; {todayAppointments.filter((a) => a.status === "scheduled").length} patients on schedule today
-          </p>
+      <section aria-labelledby="welcome-heading" className="welcome-card">
+        <div className="welcome-art" aria-hidden="true">
+          <svg viewBox="0 0 160 160" fill="none" className="h-24 w-24 sm:h-36 sm:w-36">
+            <path d="M78 37C60 22 40 28 35 47c-7 25 8 42 12 64 3 18 8 24 15 20 8-5 5-34 17-34s10 29 18 34c8 4 13-5 16-23 4-23 18-40 10-61-7-20-29-24-45-10Z" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="m78 37 15 8" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+            <path d="M126 40v30m-15-15h30" stroke="#FAFBFC" strokeWidth="16" strokeLinecap="round" />
+            <path d="M126 40v30m-15-15h30" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+          </svg>
         </div>
-
-        {/* Rapid Desk Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/dashboard/appointments"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-colors shadow-xs"
-          >
-            <Calendar size={15} />
-            <span>Book Visit</span>
-          </Link>
-          <Link
-            href="/dashboard/patients"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAFBFC] hover:bg-[#EDF7FA] border border-[#E4E9F0] text-[#111C3A] font-semibold text-xs transition-colors"
-          >
-            <Plus size={15} />
-            <span>Add Patient</span>
-          </Link>
-          <Link
-            href="/dashboard/fees"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAFBFC] hover:bg-[#EDF7FA] border border-[#E4E9F0] text-[#111C3A] font-semibold text-xs transition-colors"
-          >
-            <IndianRupee size={15} />
-            <span>Record Payment</span>
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              setQrModalData({ amount: 500 });
-              setSelectedQrPatientId(patients[0]?._id || "");
-              setQrRecordedSuccess(null);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#EDF7FA] hover:bg-[#DDF1F6] border border-[#C2E4ED] text-[#00738E] font-semibold text-xs transition-colors"
-            title="Open Instant Chairside UPI QR for walk-in patient"
-          >
-            <QrCode size={15} />
-            <span>Desk QR</span>
-          </button>
+        <div className="relative flex flex-wrap items-end justify-between gap-3 sm:gap-4">
+          <div className="w-full min-w-0 sm:w-auto">
+            <h2 id="welcome-heading" className="break-words text-lg font-bold leading-tight text-[#111C3A] min-[360px]:text-xl sm:text-3xl">
+              Good Day, {clinicProfile.dentistName}
+            </h2>
+            <p className="mt-1 max-w-64 text-[11px] leading-snug text-[#52627A] sm:max-w-none sm:text-sm">
+              Manage your appointments, patients and payments with ease.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 sm:mt-4 sm:gap-3">
+              <Link href="/dashboard/appointments" className="action-primary">
+                <Calendar size={16} aria-hidden="true" />
+                Book Appointment
+              </Link>
+              <Link href="/dashboard/fees" className="action-secondary">
+                <IndianRupee size={16} aria-hidden="true" />
+                Record Payment
+              </Link>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/patients"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#D4E9EE] bg-white/80 px-3 py-2 text-xs font-semibold text-[#111C3A] transition-colors hover:bg-[#EDF7FA]"
+            >
+              <Plus size={15} aria-hidden="true" />
+              Add Patient
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setQrModalData({ amount: 500 });
+                setSelectedQrPatientId(patients[0]?._id || "");
+                setQrRecordedSuccess(null);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#C2E4ED] bg-[#EDF7FA] px-3 py-2 text-xs font-semibold text-[#00738E] transition-colors hover:bg-[#DDF1F6]"
+              title="Open Instant Chairside UPI QR for walk-in patient"
+            >
+              <QrCode size={15} aria-hidden="true" />
+              Desk QR
+            </button>
+          </div>
         </div>
       </section>
 
@@ -476,7 +468,7 @@ export default function DashboardOverviewPage() {
               {!isViewingToday && (
                 <button
                   type="button"
-                  onClick={() => setScheduleDate(todayStr)}
+                  onClick={() => setScheduleDate(undefined)}
                   className="px-2 py-0.5 text-[11px] font-semibold text-[#0089A8] hover:bg-[#EDF7FA] rounded-md transition-colors"
                 >
                   Today
@@ -495,14 +487,16 @@ export default function DashboardOverviewPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openWalkInModal}
-              className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
-            >
-              <UserPlus size={14} />
-              <span>+ Quick Walk-In</span>
-            </button>
+            {canBookWalkIn && (
+              <button
+                type="button"
+                onClick={openWalkInModal}
+                className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <UserPlus size={14} />
+                <span>+ Quick Walk-In</span>
+              </button>
+            )}
             <Link href="/dashboard/appointments" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
               Full Calendar <ArrowRight size={14} />
             </Link>
@@ -517,13 +511,15 @@ export default function DashboardOverviewPage() {
             </h3>
             <p className="text-xs text-[#64748B]">No appointments booked for this schedule.</p>
             <div className="flex items-center justify-center gap-3 pt-1">
-              <button
-                type="button"
-                onClick={openWalkInModal}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline"
-              >
-                <Plus size={13} /> Book Walk-In
-              </button>
+              {canBookWalkIn && (
+                <button
+                  type="button"
+                  onClick={openWalkInModal}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline"
+                >
+                  <Plus size={13} /> Book Walk-In
+                </button>
+              )}
               <Link
                 href="/dashboard/appointments"
                 className="inline-flex items-center gap-1 text-xs font-semibold text-[#64748B] hover:underline"
@@ -536,7 +532,8 @@ export default function DashboardOverviewPage() {
           <div className="space-y-3">
             {scheduleList.map((apt) => {
               const isCurrentChair = inOperatoryApt?._id === apt._id;
-              const isNext = !inOperatoryApt && nextUpApt?._id === apt._id;
+              const isNext = nextUpApt?._id === apt._id;
+              const followUp = apt.status === "completed" ? findBookedFollowUp(appointments, apt._id) : undefined;
 
               return (
                 <article
@@ -574,6 +571,15 @@ export default function DashboardOverviewPage() {
                       {apt.procedure}
                       {apt.notes && <span className="text-[#64748B] font-normal italic"> &middot; {apt.notes}</span>}
                     </p>
+                    {followUp && (
+                      <Link href={`${patientUrl(apt.patientId)}?visit=${encodeURIComponent(followUp._id)}`} className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-xs font-semibold text-[#00738E] hover:underline">
+                        <Calendar size={14} aria-hidden="true" />
+                        {followUp.status === "completed" ? "Follow-up completed" : "Follow-up booked"} &middot;{" "}
+                        <time dateTime={followUp.date}>{new Date(`${followUp.date}T12:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</time>
+                        at {followUp.time}
+                        <ArrowRight size={13} aria-hidden="true" />
+                      </Link>
+                    )}
                   </div>
 
                   <a
@@ -585,10 +591,7 @@ export default function DashboardOverviewPage() {
                   </a>
 
                   <div className="schedule-status flex items-center justify-end">
-                    <span className={`status-pill ${apt.status}`}>
-                      {apt.status === "completed" && <Check size={13} aria-hidden="true" />}
-                      {apt.status}
-                    </span>
+                    <AppointmentStatusControl appointment={apt} />
                   </div>
 
                   <div className="schedule-actions flex flex-wrap items-center gap-2">
@@ -596,7 +599,7 @@ export default function DashboardOverviewPage() {
                       Dossier
                     </Link>
                     <a
-                      href={getWhatsAppTodayReminderUrl(apt)}
+                      href={getWhatsAppAppointmentReminderUrl(apt)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="small-outline text-xs text-emerald-700 hover:text-emerald-800"
@@ -606,38 +609,19 @@ export default function DashboardOverviewPage() {
                       <span>WhatsApp</span>
                     </a>
                     {apt.status === "scheduled" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => completeAppointment(apt._id)}
-                          className="small-outline complete-action text-xs font-semibold"
-                          title="Mark visit complete"
-                        >
-                          <Check size={13} />
-                          <span>Complete</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => missAppointment(apt._id, "Marked missed at chairside")}
-                          className="small-outline text-xs text-amber-700 hover:bg-amber-50 hover:border-amber-300 font-semibold"
-                          title="Mark missed / no-show"
-                        >
-                          <Clock size={13} />
-                          <span>Missed</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => cancelAppointment(apt._id, "Cancelled from dashboard")}
-                          className="small-outline text-xs text-rose-700 hover:bg-rose-50 hover:border-rose-300 font-semibold"
-                          title="Cancel appointment"
-                        >
-                          <X size={13} />
-                          <span>Cancel</span>
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => cancelAppointment(apt._id, "Cancelled from dashboard")}
+                        className="small-outline text-xs text-rose-700 hover:bg-rose-50 hover:border-rose-300 font-semibold"
+                        title="Cancel appointment"
+                      >
+                        <X size={13} />
+                        <span>Cancel</span>
+                      </button>
                     )}
                     {(apt.status === "missed" || apt.status === "cancelled") && (
-                      isFutureAppointment(apt.date, apt.time, clock) ? (
+                      isFutureAppointment(apt.date, apt.time, clock) &&
+                      !findAppointmentConflict(appointments, apt.date, apt.time, apt.durationMinutes, apt._id) ? (
                         <button
                           type="button"
                           onClick={() => bookAppointment({ ...apt, status: "scheduled" })}
@@ -657,6 +641,12 @@ export default function DashboardOverviewPage() {
                           <span>Reschedule</span>
                         </Link>
                       )
+                    )}
+                    {apt.status === "completed" && !followUp && (
+                      <Link href={`${patientUrl(apt.patientId)}?followUp=${encodeURIComponent(apt._id)}`} className="small-outline schedule-follow-up-action">
+                        <Calendar size={15} aria-hidden="true" />
+                        Book Follow-Up
+                      </Link>
                     )}
                   </div>
                 </article>
@@ -915,7 +905,7 @@ export default function DashboardOverviewPage() {
                         _id: `pay_${Date.now()}`,
                         patientId: patientObj?._id || "walk_in",
                         patientName: patientObj?.name || qrModalData.patientName || "Walk-In Patient",
-                        date: todayStr,
+                        date: paymentDate,
                         time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
                         amount: qrModalData.amount,
                         paymentMethod: "UPI",
@@ -1021,17 +1011,11 @@ export default function DashboardOverviewPage() {
                     }}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
                   >
-                    {(() => {
-                      const futureSlots = clinicSlots.filter((slot) => isFutureAppointment(scheduleDate, slot, clock));
-                      if (futureSlots.length === 0) {
-                        return <option value="">No future slots on this date</option>;
-                      }
-                      return futureSlots.map((slot) => (
-                        <option key={slot} value={slot}>
-                          {slot}
-                        </option>
-                      ));
-                    })()}
+                    <option value="" disabled>{walkInSlots.length ? "Choose a time slot" : "No future slots on this date"}</option>
+                    {walkInSlots.map((slot) => {
+                      const taken = isWalkInSlotTaken(slot, walkInForm.durationMinutes);
+                      return <option key={slot} value={slot} disabled={taken}>{slot}{taken ? " (Busy)" : ""}</option>;
+                    })}
                   </select>
                 </div>
               </div>
@@ -1089,7 +1073,7 @@ export default function DashboardOverviewPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingWalkIn || !walkInForm.time || !isFutureAppointment(scheduleDate, walkInForm.time, clock)}
+                  disabled={isSubmittingWalkIn || !walkInSlots.includes(walkInForm.time) || isWalkInSlotTaken(walkInForm.time, walkInForm.durationMinutes)}
                   className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Check size={14} />

@@ -169,14 +169,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
               <LogOut className="w-4 h-4" />
             </button>
           </div>
-
-          <div className="mt-3 pt-3 border-t border-[#E4E9F0] flex items-center justify-between text-[11px] font-mono">
-            <span className="flex items-center gap-1.5 text-[#00738E]">
-              <span className="w-2 h-2 rounded-full bg-[#BEE3E9] animate-pulse" />
-              ChatGPT MCP
-            </span>
-            <span className="text-[#00738E]">Google Auth</span>
-          </div>
         </div>
       </aside>
     </>

@@ -48,29 +48,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-bold text-sm min-[400px]:text-base sm:text-xl text-[#111C3A] tracking-tight font-sans">
-              {pageTitle}
-            </h1>
-            <p className="text-[11px] text-[#52627A] font-medium hidden sm:block">
-              {clinicProfile.name} • {userName}&apos;s Operatory
-            </p>
-          </div>
+          <h1 className="min-w-0 truncate font-bold text-sm min-[400px]:text-base sm:text-xl text-[#111C3A] tracking-tight font-sans">
+            {pageTitle}
+          </h1>
         </div>
 
         {/* Right Actions */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          {/* Live MCP Connection Indicator Pill */}
           <Link
             href="/dashboard/mcp"
-            className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#EDF7FA] border border-[#D4EDF3] text-[#111C3A] text-xs font-mono font-medium hover:bg-[#BEE3E9]/30 transition-colors"
-            title="MCP Server active & two-way synced with ChatGPT"
+            aria-label={isSyncing ? "ChatGPT MCP Hub, syncing clinic data" : "ChatGPT MCP Hub"}
+            className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#D4EDF3] bg-[#EDF7FA] transition-colors hover:bg-[#BEE3E9]/30 xl:flex"
           >
-            <span className="flex h-2 w-2 relative">
+            <span className="flex h-2 w-2 relative" aria-hidden="true">
               <span className={`absolute inline-flex h-full w-full rounded-full bg-[#0089A8] ${isSyncing ? "animate-ping opacity-100" : "animate-pulse opacity-75"}`}></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0089A8]"></span>
             </span>
-            <span>ChatGPT MCP: {isSyncing ? "Syncing..." : "Synced & Active"}</span>
           </Link>
 
           {/* Quick Schedule Button */}

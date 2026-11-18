@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   X,
@@ -12,29 +12,26 @@ import {
   CreditCard,
   FileText,
   CheckCircle2,
-  Send,
   Plus,
   IndianRupee,
   Share2,
   Sparkles,
   Receipt,
-  Activity,
+  User,
   Droplet,
   Edit3,
   Printer,
-  Trash2,
 } from "lucide-react";
 import {
   Patient,
   FeeItem,
   PaymentTransaction,
   Appointment,
-  ToothCondition,
   calculateFeeSettlements,
 } from "@/lib/mockData";
-import { ToothMap } from "@/components/odontogram/ToothMap";
 import { useClinic } from "@/context/ClinicContext";
-import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { useMinuteClock } from "@/lib/useMinuteClock";
 
 interface PatientDetailsProps {
   patient: Patient | null;
@@ -46,6 +43,9 @@ interface PatientDetailsProps {
   onAddPayment: (payment: PaymentTransaction) => void;
   onAddFee: (fee: FeeItem) => void;
   onBookAppointment?: (appointment: Appointment) => Promise<boolean>;
+  openVisits?: boolean;
+  initialFollowUpSource?: Appointment;
+  focusedVisitId?: string;
 }
 
 export const PatientDetails: React.FC<PatientDetailsProps> = ({
@@ -58,11 +58,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   onAddPayment,
   onAddFee,
   onBookAppointment,
+  openVisits,
+  initialFollowUpSource,
+  focusedVisitId,
 }) => {
   const { clinicProfile } = useClinic();
-  // Clinical Note State
-  const [newNoteText, setNewNoteText] = useState("");
-  const [activeTab, setActiveTab] = useState<"clinical" | "odontogram" | "financials" | "appointments">("clinical");
+  const [activeTab, setActiveTab] = useState<"overview" | "financials" | "appointments">(openVisits ? "appointments" : "overview");
 
   // Profile Editing State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
@@ -81,36 +82,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
   // Selected treatment invoice for official view/print
   const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
-
-  // Dental Rx Generator State
-  const [isRxModalOpen, setIsRxModalOpen] = useState(false);
-  const [rxMedicines, setRxMedicines] = useState<
-    { name: string; dosage: string; duration: string; instructions: string }[]
-  >([]);
-  const [rxDiagnosis, setRxDiagnosis] = useState("Acute Pulpitis / Post-operative care");
-  const [rxAdvice, setRxAdvice] = useState("Avoid chewing hard foods. Maintain good oral hygiene. Warm saline rinses after 24 hrs.");
-
-  // Allergy warning confirmation state
-  const [allergyAlert, setAllergyAlert] = useState<{
-    drugName: string;
-    allergen: string;
-    reason: string;
-    alternative: { name: string; dosage: string; duration: string; instructions: string };
-    pendingPreset: { name: string; dosage: string; duration: string; instructions: string };
-  } | null>(null);
-
-  const standardDentalRxPresets = [
-    { name: "Amoxicillin 500mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Complete full antibiotic course." },
-    { name: "Augmentin 625mg (Amox+Clav)", dosage: "1 tab BD (Twice a day)", duration: "5 days", instructions: "With food. For severe odontogenic infection." },
-    { name: "Clindamycin 300mg (Penicillin-Allergic Alternative)", dosage: "1 cap TID (Three times a day)", duration: "5 days", instructions: "With a full glass of water. Safe for penicillin-allergic patients." },
-    { name: "Azithromycin 500mg", dosage: "1 tab OD (Once a day)", duration: "3 days", instructions: "1 hr before or 2 hrs after meals. Macrolide alternative." },
-    { name: "Metronidazole 400mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Avoid alcohol during course." },
-    { name: "Ibuprofen 400mg + Paracetamol 325mg", dosage: "1 tab TID (Three times a day)", duration: "3 days", instructions: "After food for pain and swelling." },
-    { name: "Ketorolac 10mg (Dispersible)", dosage: "1 tab SOS (When needed)", duration: "2 days", instructions: "Dissolve in half glass water. Max 40mg/day." },
-    { name: "Paracetamol 650mg", dosage: "1 tab TID (Three times a day)", duration: "3 days", instructions: "After food. Safe non-NSAID analgesic." },
-    { name: "Chlorhexidine 0.2% Mouthwash", dosage: "10 ml rinse BD (Twice a day)", duration: "7 days", instructions: "Rinse for 30s after brushing. Do not swallow." },
-    { name: "Pantoprazole 40mg", dosage: "1 tab OD (Once a day)", duration: "5 days", instructions: "30 mins before breakfast." },
-  ];
 
   const handleEditProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,65 +115,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     });
   };
 
-  const handleAddRxMedicine = (preset: typeof standardDentalRxPresets[0], force = false) => {
-    if (!force && patient) {
-      const lowerAlerts = patient.medicalAlerts.map((a) => a.toLowerCase()).join(" ");
-      const isPenicillinAlert = lowerAlerts.includes("penicillin") || lowerAlerts.includes("amox") || lowerAlerts.includes("beta-lactam") || lowerAlerts.includes("ampicillin");
-      const isNsaidAlert = lowerAlerts.includes("nsaid") || lowerAlerts.includes("aspirin") || lowerAlerts.includes("ibuprofen");
-
-      if (isPenicillinAlert && (preset.name.includes("Amoxicillin") || preset.name.includes("Augmentin"))) {
-        setAllergyAlert({
-          drugName: preset.name,
-          allergen: "Penicillin",
-          reason: "Patient has a documented Penicillin Allergy. Prescribing beta-lactam antibiotics risks fatal anaphylaxis or acute hypersensitivity.",
-          alternative: standardDentalRxPresets[2], // Clindamycin
-          pendingPreset: preset,
-        });
-        return;
-      }
-
-      if (isNsaidAlert && (preset.name.includes("Ibuprofen") || preset.name.includes("Ketorolac"))) {
-        setAllergyAlert({
-          drugName: preset.name,
-          allergen: "NSAID / Aspirin",
-          reason: "Patient has a documented NSAID sensitivity. May trigger bronchospasm, gastrointestinal ulceration, or bleeding.",
-          alternative: standardDentalRxPresets[7], // Paracetamol 650mg
-          pendingPreset: preset,
-        });
-        return;
-      }
-    }
-    setRxMedicines((prev) => [...prev, { ...preset }]);
-  };
-
-  const handleRemoveRxMedicine = (index: number) => {
-    setRxMedicines((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSaveRxToNotes = () => {
-    if (!patient || rxMedicines.length === 0) return;
-    const rxText = [
-      `[PRESCRIPTION (Rx) by ${clinicProfile.dentistName}]`,
-      `Diagnosis: ${rxDiagnosis}`,
-      ...rxMedicines.map((m, i) => `${i + 1}. ${m.name} - ${m.dosage} for ${m.duration} (${m.instructions})`),
-      `Advice: ${rxAdvice}`,
-    ].join("\n");
-
-    const noteObj = {
-      id: `note_${Date.now()}`,
-      date: new Date().toISOString().split("T")[0],
-      text: rxText,
-      doctor: clinicProfile.dentistName,
-    };
-
-    onUpdatePatient({
-      ...patient,
-      notes: [noteObj, ...patient.notes],
-      lastVisit: new Date().toISOString().split("T")[0],
-    });
-    setIsRxModalOpen(false);
-  };
-
   // Inline Payment State
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [payAmount, setPayAmount] = useState("");
@@ -217,32 +129,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const [feeDiscount, setFeeDiscount] = useState("0");
 
   // Chairside Recall / Follow-up Booking State
-  const [showRecallForm, setShowRecallForm] = useState(false);
+  const [followUpSource, setFollowUpSource] = useState(initialFollowUpSource);
+  const [showRecallForm, setShowRecallForm] = useState(Boolean(initialFollowUpSource));
   const [recallDate, setRecallDate] = useState(() => shiftAppointmentDate(getAppointmentClock().date, 7));
-  const [recallTime, setRecallTime] = useState("11:15 AM");
-  const [recallProcedure, setRecallProcedure] = useState("Crown Cementation");
-  const [recallDuration, setRecallDuration] = useState(30);
+  const [recallTime, setRecallTime] = useState("");
+  const [recallProcedure, setRecallProcedure] = useState(initialFollowUpSource ? "Follow-Up Visit" : "Crown Cementation");
+  const [recallDuration, setRecallDuration] = useState(initialFollowUpSource ? clinicProfile.slotDuration || 30 : 30);
+  const [followUpReason, setFollowUpReason] = useState("");
   const [recallSuccessApt, setRecallSuccessApt] = useState<Appointment | null>(null);
   const [recallError, setRecallError] = useState("");
   const [isBookingRecall, setIsBookingRecall] = useState(false);
-  const recallClock = getAppointmentClock();
+  const recallClock = getAppointmentClock(useMinuteClock());
+  const recallForm = useRef<HTMLFormElement>(null);
+  const recallSlots = getClinicAppointmentSlots(clinicProfile)
+    .filter((slot) => isFutureAppointment(recallDate, slot, recallClock));
+  const recallConflict = findAppointmentConflict(appointments, recallDate, recallTime, recallDuration);
 
-  const recallHours = [
-    "10:00 AM",
-    "10:30 AM",
-    "11:15 AM",
-    "12:00 PM",
-    "12:45 PM",
-    "02:00 PM",
-    "02:45 PM",
-    "03:30 PM",
-    "04:15 PM",
-    "05:00 PM",
-    "05:45 PM",
-    "06:30 PM",
-  ];
+  useEffect(() => {
+    if (activeTab !== "appointments") return;
+    if (showRecallForm) {
+      if (followUpSource) recallForm.current?.scrollIntoView({ block: "start" });
+    } else if (focusedVisitId) {
+      document.getElementById(`patient-visit-${focusedVisitId}`)?.scrollIntoView({ block: "start" });
+    }
+  }, [activeTab, focusedVisitId, followUpSource, showRecallForm]);
 
   const recallProcedurePresets = [
+    ...(followUpSource ? [{ name: "Follow-Up Visit", duration: clinicProfile.slotDuration || 30 }] : []),
     { name: "Crown Cementation", duration: 30 },
     { name: "RCT Sitting 2 (Obturation)", duration: 45 },
     { name: "Suture Removal & Review", duration: 15 },
@@ -250,41 +163,60 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     { name: "Composite Restoration", duration: 30 },
   ];
 
-  const handleRecallDateChange = (newDate: string) => {
-    setRecallDate(newDate);
+  const changeRecallDate = (date: string) => {
+    setRecallDate(date);
     setRecallError("");
-    const slots = recallHours.filter((slot) =>
-      isFutureAppointment(newDate, slot, getAppointmentClock())
-    );
-    if (slots.length > 0 && !slots.includes(recallTime)) {
-      setRecallTime(slots[0]);
+    if (followUpSource) {
+      setRecallTime("");
+    } else {
+      const clock = getAppointmentClock();
+      const availableSlots = getClinicAppointmentSlots(clinicProfile).filter((slot) =>
+        isFutureAppointment(date, slot, clock) && !findAppointmentConflict(appointments, date, slot, recallDuration)
+      );
+      setRecallTime(availableSlots.includes(recallTime) ? recallTime : availableSlots[0] ?? "");
     }
   };
 
   const handleSetRecallOffset = (days: number) => {
-    const nextDate = shiftAppointmentDate(getAppointmentClock().date, days);
-    handleRecallDateChange(nextDate);
+    changeRecallDate(shiftAppointmentDate(getAppointmentClock().date, days));
+  };
+
+  const closeRecallForm = () => {
+    setShowRecallForm(false);
+    setRecallError("");
+    if (followUpSource) {
+      setFollowUpSource(undefined);
+      setFollowUpReason("");
+      setRecallProcedure("Crown Cementation");
+      setRecallDuration(30);
+      setRecallTime("");
+    }
   };
 
   const handleConfirmRecall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onBookAppointment || !patient || isBookingRecall) return;
-    if (!isFutureAppointment(recallDate, recallTime, getAppointmentClock())) {
+    if (!recallSlots.includes(recallTime) || !isFutureAppointment(recallDate, recallTime)) {
       setRecallError("Choose a future time to book this visit.");
+      return;
+    }
+    if (recallConflict) {
+      setRecallError("This time overlaps another appointment. Choose an available slot.");
       return;
     }
 
     const newApt: Appointment = {
       _id: `apt_${Date.now()}`,
       patientId: patient._id,
+      followUpOfAppointmentId: followUpSource?._id,
       patientName: patient.name,
-      patientPhone: patient.phone,
+      patientPhone: patient.phone?.trim() || followUpSource?.patientPhone || "",
       date: recallDate,
       time: recallTime,
       durationMinutes: recallDuration,
       procedure: recallProcedure,
       status: "scheduled",
-      notes: `Chairside recall booked by ${clinicProfile.dentistName}`,
+      notes: followUpSource ? followUpReason.trim() || undefined : `Chairside recall booked by ${clinicProfile.dentistName}`,
     };
 
     setRecallError("");
@@ -295,12 +227,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       setRecallError("Could not book the visit. Check the date and time and try again.");
       return;
     }
-    onUpdatePatient({
-      ...patient,
-      followUpDue: recallDate,
-    });
+    if (!followUpSource) {
+      onUpdatePatient({ ...patient, followUpDue: recallDate });
+    }
     setRecallSuccessApt(newApt);
-    setShowRecallForm(false);
+    closeRecallForm();
   };
 
   const getRecallWhatsAppUrl = (apt: Appointment) => {
@@ -331,38 +262,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       .filter((a) => a.status === "scheduled" && a.date >= recallClock.date)
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ||
     patientAppts.find((a) => a.status === "scheduled");
-
-  // Fast Clinical Note Phrases for busy chairside dentists
-  const quickPhrases = [
-    "RCT dressing given, advised soft diet",
-    "Crown prep completed, shade A2",
-    "Permanent crown cemented",
-    "Composite restoration done, occlusion checked",
-    "Scaling & root planing completed",
-    "Sutures removed, healing satisfactory",
-    "2% Lignocaine with Adrenaline administered",
-  ];
-
-  const handleInsertPhrase = (phrase: string) => {
-    setNewNoteText((prev) => (prev ? `${prev}. ${phrase}` : phrase));
-  };
-
-  const handleSaveNote = () => {
-    if (!newNoteText.trim()) return;
-    const noteObj = {
-      id: `note_${Date.now()}`,
-      date: new Date().toISOString().split("T")[0],
-      text: newNoteText.trim(),
-      doctor: clinicProfile.dentistName,
-    };
-    const updated = {
-      ...patient,
-      notes: [noteObj, ...patient.notes],
-      lastVisit: new Date().toISOString().split("T")[0],
-    };
-    onUpdatePatient(updated);
-    setNewNoteText("");
-  };
 
   const handleRecordPaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -434,12 +333,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const medicalAlerts = patient.medicalAlerts.filter((alert) => alert.trim() && alert.trim().toLowerCase() !== "none");
   const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
   const tabs = [
-    { id: "clinical", label: "Notes", icon: FileText },
-    { id: "odontogram", label: "Teeth Chart", icon: Activity },
+    { id: "overview", label: "Overview", icon: User },
     { id: "financials", label: "Billing", icon: CreditCard },
     { id: "appointments", label: "Visits", icon: Calendar },
   ] as const;
-  const presetLabels = ["RCT dressing", "Crown prep", "Crown cemented", "Restoration", "Scaling", "Suture removal", "Local anesthesia"];
 
   return (
     <div className="patient-detail patient-workspace min-w-0 space-y-4">
@@ -510,144 +407,73 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       </div>
 
       <div id={`patient-panel-${activeTab}`} role="tabpanel" aria-labelledby={`patient-tab-${activeTab}`} tabIndex={0} className="patient-tab-content">
-        {activeTab === "clinical" && (
+        {activeTab === "overview" && (
           <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-5">
-            <div className="min-w-0 space-y-4">
-              <section className="detail-card consultation-card" aria-labelledby="consultation-heading">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 id="consultation-heading" className="text-base font-bold">New Consultation</h3>
-                  <div className="flex items-center gap-2">
+            <section className="detail-card patient-information" aria-labelledby="patient-information-heading">
+              <h3 id="patient-information-heading" className="text-sm font-semibold">Patient information</h3>
+              <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                <div><dt>Registered</dt><dd>{patient.registeredDate}</dd></div>
+                <div><dt>Last visit</dt><dd>{patient.lastVisit || "Not recorded"}</dd></div>
+                <div className="sm:col-span-2">
+                  <dt>Follow-up / Recall Due</dt>
+                  <dd className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold text-[#111C3A] font-mono mr-1.5">
+                      {patient.followUpDue || "Not set"}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setIsRxModalOpen(true)}
-                      className="px-2.5 py-1 rounded-xl bg-[#EDF7FA] text-[#00738E] border border-[#CDEBF2] hover:bg-[#DDF1F6] text-xs font-semibold flex items-center gap-1 transition-colors"
-                      title="Generate and print dental prescription on clinic letterhead"
+                      onClick={() => handleQuickSetRecall(1)}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
                     >
-                      <FileText size={13} />
-                      <span>Write Rx</span>
+                      +1 Mo
                     </button>
-                    <span className="consultation-date"><Calendar size={14} aria-hidden="true" />{new Date().toISOString().split("T")[0]}</span>
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSetRecall(3)}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                    >
+                      +3 Mo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSetRecall(6)}
+                      className="px-2 py-0.5 rounded-lg border border-[#CDEBF2] bg-[#EDF7FA] text-[10px] font-mono hover:bg-[#DDF1F6] text-[#00738E] font-bold"
+                    >
+                      +6 Mo (Checkup)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSetRecall(12)}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                    >
+                      +1 Yr
+                    </button>
+                  </dd>
                 </div>
-                <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium text-[#64748B]">Quick presets</p>
-                  <div className="flex flex-wrap gap-2">
-                    {quickPhrases.map((phrase, i) => <button key={phrase} type="button" onClick={() => handleInsertPhrase(phrase)} title={phrase} aria-label={`Add preset: ${phrase}`} className="note-preset"><Plus size={13} aria-hidden="true" />{presetLabels[i]}</button>)}
-                  </div>
-                </div>
-                <label htmlFor="consultation-note" className="mb-2 mt-4 block text-xs font-semibold text-[#52627A]">Clinical notes</label>
-                <textarea id="consultation-note" rows={5} value={newNoteText} onChange={(event) => setNewNoteText(event.target.value)} placeholder="Diagnosis, tooth, treatment, or prescription..." className="consultation-input" />
-                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                  <div className="flex items-center gap-2">
-                    {newNoteText && <button type="button" onClick={() => setNewNoteText("")} className="detail-button secondary">Clear</button>}
-                    <button type="button" onClick={handleSaveNote} disabled={!newNoteText.trim()} className="detail-button primary"><Send size={15} aria-hidden="true" />Save Note</button>
-                  </div>
-                </div>
-              </section>
-              <details className="detail-card patient-information" open>
-                <summary className="cursor-pointer text-sm font-semibold flex items-center justify-between">
-                  <span>Patient information</span>
-                  <span className="text-[11px] font-normal text-[#0089A8]">Quick Recall & Info</span>
-                </summary>
-                <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-                  <div><dt>Registered</dt><dd>{patient.registeredDate}</dd></div>
-                  <div><dt>Last visit</dt><dd>{patient.lastVisit || "Not recorded"}</dd></div>
-                  <div className="sm:col-span-2">
-                    <dt>Follow-up / Recall Due</dt>
-                    <dd className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="font-semibold text-[#111C3A] font-mono mr-1.5">
-                        {patient.followUpDue || "Not set"}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickSetRecall(1)}
-                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
-                      >
-                        +1 Mo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickSetRecall(3)}
-                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
-                      >
-                        +3 Mo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickSetRecall(6)}
-                        className="px-2 py-0.5 rounded-lg border border-[#CDEBF2] bg-[#EDF7FA] text-[10px] font-mono hover:bg-[#DDF1F6] text-[#00738E] font-bold"
-                      >
-                        +6 Mo (Checkup)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickSetRecall(12)}
-                        className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
-                      >
-                        +1 Yr
-                      </button>
-                    </dd>
-                  </div>
-                  <div className="sm:col-span-2"><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
-                </dl>
-              </details>
-            </div>
-            <section className="min-w-0 space-y-3" aria-labelledby="previous-notes-heading">
-              <h3 id="previous-notes-heading" className="flex items-center gap-2 text-sm font-semibold">Previous Notes <span className="section-count">{patient.notes.length}</span></h3>
-              {patient.notes.length === 0 ? <p className="detail-card text-sm text-[#64748B]">No notes yet.</p> : patient.notes.map((note) => (
-                <article key={note.id} className="detail-card note-card">
-                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"><time className="font-semibold text-[#52627A]">{note.date}</time><span className="text-[#64748B]">{note.doctor}</span></div>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#111C3A]">{note.text}</p>
-                </article>
-              ))}
+                <div className="sm:col-span-2"><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
+              </dl>
             </section>
-          </div>
-        )}
 
-        {activeTab === "odontogram" && (
-          <div className="min-w-0 space-y-4">
-            <ToothMap
-                readOnly={false}
-                teeth={patient.teeth}
-                patientName={patient.name}
-                onUpdateTooth={(tooth: ToothCondition) => {
-                  const updatedTeeth = {
-                    ...(patient.teeth || {}),
-                    [tooth.id]: tooth,
-                  };
-                  const newEntry = {
-                    date: new Date().toISOString().split("T")[0],
-                    procedure: `${tooth.status.toUpperCase()}: ${tooth.name}${tooth.surfaces?.length ? ` (${tooth.surfaces.join(", ")})` : ""}`,
-                    tooth: `#${tooth.id}`,
-                    doctor: clinicProfile.dentistName,
-                    notes: tooth.notes || `Tooth #${tooth.id} marked as ${tooth.status}`,
-                  };
-                  onUpdatePatient({
-                    ...patient,
-                    teeth: updatedTeeth,
-                    history: [newEntry, ...patient.history],
-                  });
-                }}
-              />
-            <section aria-labelledby="treatment-history-heading" className="space-y-3">
+            <section aria-labelledby="treatment-history-heading" className="detail-card min-w-0 space-y-3">
               <h3 id="treatment-history-heading" className="text-sm font-semibold">Treatment History</h3>
-              {patient.history.length === 0 ? <p className="detail-card text-sm text-[#64748B]">No treatments recorded.</p> : (
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {patient.history.length === 0 ? <p className="text-xs text-[#64748B]">No treatments recorded.</p> : (
+                <ul className="divide-y divide-[#E4E9F0]">
                   {patient.history.map((entry, i) => (
-                    <article key={i} className="detail-card note-card">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold text-[#0089A8]">{entry.tooth || "General"}</span><time className="text-[#64748B]">{entry.date}</time></div>
-                      <h4 className="mt-2 text-sm font-semibold">{entry.procedure}</h4>
-                      {entry.notes && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[#52627A]">{entry.notes}</p>}
-                      <p className="mt-2 text-xs text-[#64748B]">{entry.doctor}</p>
-                    </article>
+                    <li key={i} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h4 className="text-sm font-semibold">{entry.procedure}</h4>
+                        <time dateTime={entry.date} className="text-xs text-[#64748B]">{entry.date}</time>
+                      </div>
+                      <p className="mt-1 text-xs text-[#64748B]">{[entry.tooth, entry.doctor].filter(Boolean).join(" · ")}</p>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </section>
           </div>
         )}
 
-          {/* ================= TAB 3: FEES & FINANCIALS ================= */}
+          {/* Fees and financials */}
           {activeTab === "financials" && (
             <div className="space-y-5">
               {/* Top Financial Stat Cards */}
@@ -1026,7 +852,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </div>
           )}
 
-          {/* ================= TAB 4: APPOINTMENTS ================= */}
+          {/* Appointments */}
           {activeTab === "appointments" && (
             <div className="space-y-5">
               {/* Top Banner: Header + Book Next Visit Trigger */}
@@ -1040,7 +866,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setShowRecallForm(!showRecallForm)}
+                  onClick={showRecallForm ? closeRecallForm : () => setShowRecallForm(true)}
+                  disabled={isBookingRecall}
                   className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all self-start sm:self-auto"
                 >
                   <Plus className="w-4 h-4" />
@@ -1080,24 +907,27 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               {/* CHAIRSIDE RECALL STUDIO FORM */}
               {showRecallForm && (
                 <form
+                  ref={recallForm}
                   onSubmit={handleConfirmRecall}
-                  className="p-5 rounded-2xl bg-white border border-[#0089A8] shadow-card-subtle space-y-4 animate-in fade-in"
+                  aria-labelledby="visit-booking-heading"
+                  className="scroll-mt-24 p-5 rounded-2xl bg-white border border-[#0089A8] shadow-card-subtle space-y-4 animate-in fade-in"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E4E9F0]">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-[#0089A8]" />
-                      <h4 className="font-bold text-sm text-[#111C3A]">
-                        Book Visit
+                      <h4 id="visit-booking-heading" className="font-bold text-sm text-[#111C3A]">
+                        {followUpSource ? "Book Follow-Up" : "Book Visit"}
                       </h4>
                     </div>
                     <span className="text-[11px] font-mono text-[#8291A7]">
-                      Phone: {patient.phone}
+                      Phone: {patient.phone || followUpSource?.patientPhone}
                     </span>
                   </div>
+                  {followUpSource && <p className="text-xs text-[#52627A]">Follow-up for {followUpSource.procedure}</p>}
 
                   {/* 1. Date Fast Presets */}
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-mono text-[#64748B] uppercase block">
+                    <label htmlFor="visit-date" className="text-[11px] font-mono text-[#64748B] uppercase block">
                       Date
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -1118,11 +948,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       ))}
 
                       <input
+                        id="visit-date"
                         type="date"
                         required
                         min={recallClock.date}
                         value={recallDate}
-                        onChange={(e) => handleRecallDateChange(e.target.value)}
+                        onChange={(e) => changeRecallDate(e.target.value)}
                         className="p-1.5 px-3 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
                       />
                     </div>
@@ -1141,6 +972,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                           onClick={() => {
                             setRecallProcedure(proc.name);
                             setRecallDuration(proc.duration);
+                            setRecallError("");
                           }}
                           className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
                             recallProcedure === proc.name
@@ -1166,73 +998,77 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                      {(() => {
-                        const availableSlots = recallHours.filter((slot) => isFutureAppointment(recallDate, slot, recallClock));
-                        if (availableSlots.length === 0) {
+                      {recallSlots.length === 0 && (
+                        <p className="col-span-full p-4 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] text-center text-xs text-[#64748B]">
+                          No future times available for {recallDate}. Choose another date.
+                        </p>
+                      )}
+                      {recallSlots.map((slot) => {
+                        const isBooked = findAppointmentConflict(appointments, recallDate, slot, recallDuration);
+                        const isSelected = recallTime === slot;
+
+                        if (isBooked) {
                           return (
-                            <div className="col-span-full p-4 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] text-center text-xs text-[#64748B]">
-                              No remaining slots available for {recallDate}. Please pick a future date.
+                            <div
+                              key={slot}
+                              className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
+                              title="Slot already booked"
+                            >
+                              <div className="line-through">{slot}</div>
+                              <span className="text-[9px]">Busy</span>
                             </div>
                           );
                         }
-                        return availableSlots.map((slot) => {
-                          const isBooked = appointments.some(
-                            (a) => a.date === recallDate && a.time === slot && a.status !== "cancelled" && a.status !== "missed"
-                          );
-                          const isSelected = recallTime === slot;
 
-                          if (isBooked) {
-                            return (
-                              <div
-                                key={slot}
-                                className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
-                                title="Slot already booked"
-                              >
-                                <div className="line-through">{slot}</div>
-                                <span className="text-[9px]">Busy</span>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => setRecallTime(slot)}
-                              className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
-                                isSelected
-                                  ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
-                                  : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
-                              }`}
-                            >
-                              <div>{slot}</div>
-                              <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
-                                {isSelected ? "Selected" : "Open"}
-                              </span>
-                            </button>
-                          );
-                        });
-                      })()}
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => {
+                              setRecallTime(slot);
+                              setRecallError("");
+                            }}
+                            className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
+                              isSelected
+                                ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
+                                : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
+                            }`}
+                          >
+                            <div>{slot}</div>
+                            <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
+                              {isSelected ? "Selected" : "Open"}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
+
+                  {followUpSource && (
+                    <div className="space-y-1.5">
+                      <label htmlFor="visit-reason" className="block text-xs font-semibold text-[#52627A]">Follow-Up Reason (Optional)</label>
+                      <input id="visit-reason" type="text" value={followUpReason} onChange={(event) => setFollowUpReason(event.target.value)} className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 text-xs outline-none focus:border-[#0089A8]" />
+                    </div>
+                  )}
 
                   {/* Submit Bar */}
                   {recallError && <p role="alert" className="text-xs text-rose-700 font-medium">{recallError}</p>}
                   <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
                     <button
                       type="button"
-                      onClick={() => setShowRecallForm(false)}
+                      onClick={closeRecallForm}
+                      disabled={isBookingRecall}
                       className="px-3.5 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={isBookingRecall || !isFutureAppointment(recallDate, recallTime, recallClock)}
+                      disabled={isBookingRecall || !recallSlots.includes(recallTime) || Boolean(recallConflict)}
                       className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isBookingRecall ? "Booking..." : "Book Visit"}</span>
+                      <span>{isBookingRecall ? "Booking..." : followUpSource ? "Book Follow-Up" : "Book Visit"}</span>
                     </button>
                   </div>
                 </form>
@@ -1248,7 +1084,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   {patientAppts.map((a) => (
                     <div
                       key={a._id}
-                      className="p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle space-y-2.5"
+                      id={`patient-visit-${a._id}`}
+                      className={`scroll-mt-24 p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle space-y-2.5${focusedVisitId === a._id ? " ring-2 ring-[#0089A8]/60" : ""}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1">
@@ -1413,221 +1250,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ================= DENTAL PRESCRIPTION (Rx) GENERATOR MODAL ================= */}
-      {isRxModalOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
-            {/* Letterhead Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-serif text-3xl font-bold text-[#0089A8]">℞</span>
-                  <div>
-                    <h3 className="font-bold text-base text-[#111C3A]">{clinicProfile.name}</h3>
-                    <p className="text-[11px] text-[#64748B]">
-                      Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; DCI Reg: {clinicProfile.regNo}
-                    </p>
-                    <p className="text-[10px] text-[#8291A7] mt-0.5 font-mono">
-                      {clinicProfile.address} &middot; Ph: {clinicProfile.phone}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRxModalOpen(false)}
-                aria-label="Close prescription form"
-                className="text-[#8291A7] hover:text-[#111C3A] print-hide"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Patient Header Strip */}
-            <div className="p-3 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div>
-                <span className="text-[#64748B]">Patient: </span>
-                <strong className="text-[#111C3A] font-semibold">{patient.name}</strong> ({patient.age}y / {patient.gender})
-              </div>
-              <div>
-                <span className="text-[#64748B]">Date: </span>
-                <strong className="font-mono text-[#111C3A]">{new Date().toISOString().split("T")[0]}</strong>
-              </div>
-              {medicalAlerts.length > 0 && (
-                <div className="w-full flex items-center gap-1.5 pt-1 text-rose-700 font-semibold text-[11px]">
-                  <AlertTriangle size={13} />
-                  <span>Allergies: {medicalAlerts.join(", ")}</span>
-                </div>
-              )}
-            </div>
-
-            {/* ALLERGY CONTRAINDICATION ALERT DIALOG */}
-            {allergyAlert && (
-              <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-400 text-rose-900 space-y-2 animate-in fade-in">
-                <div className="flex items-center gap-2 font-bold text-sm text-rose-700">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
-                  <span>CRITICAL ALLERGY ALERT: {allergyAlert.allergen}</span>
-                </div>
-                <p className="text-xs text-rose-800 leading-relaxed font-sans">
-                  <strong>{allergyAlert.drugName}</strong> is contraindicated. {allergyAlert.reason}
-                </p>
-                <div className="pt-1 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleAddRxMedicine(allergyAlert.alternative, true);
-                      setAllergyAlert(null);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs"
-                  >
-                    Switch to Safe Choice: {allergyAlert.alternative.name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAllergyAlert(null)}
-                    className="px-3 py-1.5 rounded-xl border border-rose-300 text-rose-800 hover:bg-rose-100 font-semibold text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleAddRxMedicine(allergyAlert.pendingPreset, true);
-                      setAllergyAlert(null);
-                    }}
-                    className="px-2 py-1 text-[11px] text-rose-600 hover:underline ml-auto"
-                  >
-                    Override with Warning
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Fast Drug Presets */}
-            <div className="space-y-1.5 print-hide">
-              <label className="text-xs font-semibold text-[#111C3A] block">
-                Quick Dental Medication Presets
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {standardDentalRxPresets.map((preset) => (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() => handleAddRxMedicine(preset)}
-                    className="px-2.5 py-1 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] border border-[#CDEBF2] text-[#00738E] text-[11px] font-semibold flex items-center gap-1 transition-colors"
-                  >
-                    <Plus size={12} />
-                    <span>{preset.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Prescribed Drugs Table */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#111C3A] block">
-                Prescribed Medications ({rxMedicines.length})
-              </label>
-              {rxMedicines.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-[#8291A7] print-hide">
-                  Click the presets above or enter custom medications.
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {rxMedicines.map((med, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <strong className="text-[#111C3A] font-semibold">{idx + 1}. {med.name}</strong>
-                        <div className="text-[11px] text-[#64748B] flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                          <span>Dosage: <strong>{med.dosage}</strong></span>
-                          <span>Duration: <strong>{med.duration}</strong></span>
-                          <span>Note: <em>{med.instructions}</em></span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRxMedicine(idx)}
-                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 print-hide"
-                        title="Remove drug"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Diagnosis & Advice */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Clinical Diagnosis</label>
-                <input
-                  type="text"
-                  value={rxDiagnosis}
-                  onChange={(e) => setRxDiagnosis(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Post-Op Advice / Instructions</label>
-                <input
-                  type="text"
-                  value={rxAdvice}
-                  onChange={(e) => setRxAdvice(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-            </div>
-
-            {/* Doctor Signature Block for Print */}
-            <div className="pt-6 hidden print:flex items-end justify-between border-t border-slate-300 mt-6">
-              <div className="text-[10px] text-slate-500 font-mono">
-                Prescription valid for 7 days &middot; Keep out of reach of children
-              </div>
-              <div className="text-right">
-                <div className="w-40 border-b border-slate-700 mb-1"></div>
-                <strong className="text-xs text-slate-900 font-bold block">Dr. {clinicProfile.dentistName}</strong>
-                <span className="text-[10px] text-slate-600 font-mono">Authorized Dental Surgeon &middot; {clinicProfile.regNo}</span>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] print-hide">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1.5 text-[#52627A]"
-              >
-                <Printer size={14} />
-                <span>Print Rx Letterhead</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRxModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveRxToNotes}
-                  disabled={rxMedicines.length === 0}
-                  className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs disabled:opacity-50 shadow-xs"
-                >
-                  Save Rx to Clinical Notes
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
