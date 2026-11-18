@@ -1,11 +1,42 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
-import { Calendar, CreditCard, CheckCircle2, AlertCircle, User, ArrowRight, IndianRupee, Plus, Sparkles, Phone, RefreshCw } from "lucide-react";
+import {
+  Calendar,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
+  User,
+  ArrowRight,
+  IndianRupee,
+  Plus,
+  Phone,
+  RefreshCw,
+  Share2,
+  QrCode,
+  X,
+  Clock,
+  Check,
+} from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
+import { Patient, Appointment } from "@/lib/mockData";
 
 const patientUrl = (id: string) => `/dashboard/patients/${encodeURIComponent(id)}`;
-const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+const money = (amount: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+
+function parseTimeToMinutes(timeStr: string): number {
+  if (!timeStr) return 0;
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return 0;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3]?.toUpperCase();
+  if (period === "PM" && hours < 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
 
 export default function DashboardOverviewPage() {
   const {
@@ -18,17 +49,45 @@ export default function DashboardOverviewPage() {
     completeAppointment,
   } = useClinic();
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const [qrModalData, setQrModalData] = useState<{ patientName?: string; amount: number } | null>(null);
 
-  const todayList = appointments.filter((a) => a.date === todayStr);
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Next 7 days boundary for practical recalls
+  const weekAhead = new Date();
+  weekAhead.setDate(weekAhead.getDate() + 7);
+  const weekAheadStr = weekAhead.toISOString().split("T")[0];
+
+  // Chronologically sorted daily schedule
+  const todayList = appointments
+    .filter((a) => a.date === todayStr)
+    .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
+
+  // Live operatory chair indicators
+  const inOperatoryApt = todayList.find((a) => {
+    if (a.status !== "scheduled") return false;
+    const start = parseTimeToMinutes(a.time);
+    const end = start + (a.durationMinutes || 30);
+    return currentMinutes >= start && currentMinutes <= end;
+  });
+
+  const nextUpApt = todayList.find((a) => {
+    if (a.status !== "scheduled") return false;
+    const start = parseTimeToMinutes(a.time);
+    return start > currentMinutes;
+  });
+
   const todayPayments = payments.filter((p) => p.date === todayStr && !p.isRefund);
   const totalDailyCollection = todayPayments.reduce((s, p) => s + p.amount, 0);
 
-  // Payment method breakdown
+  // Payment breakdown
   const upiToday = todayPayments.filter((p) => p.paymentMethod === "UPI").reduce((s, p) => s + p.amount, 0);
   const cashToday = todayPayments.filter((p) => p.paymentMethod === "Cash").reduce((s, p) => s + p.amount, 0);
+  const cardToday = todayPayments.filter((p) => p.paymentMethod === "Card").reduce((s, p) => s + p.amount, 0);
 
-  // Patients with pending fees
+  // Patients with pending balance
   const patientsWithPending = patients
     .map((p) => {
       const pFees = fees.filter((f) => f.patientId === p._id);
@@ -38,134 +97,507 @@ export default function DashboardOverviewPage() {
     })
     .filter((p) => p.balance > 0);
 
-  // Patients due for follow up
-  const dueForFollowUp = patients.filter((p) => p.followUpDue);
+  // Practical Recalls: Only patients due on/before today or in the next 7 days
+  const dueForFollowUp = patients
+    .filter((p) => p.followUpDue && p.followUpDue <= weekAheadStr)
+    .sort((a, b) => (a.followUpDue || "").localeCompare(b.followUpDue || ""));
 
+  const getFollowUpBadge = (dateStr: string) => {
+    if (dateStr < todayStr) {
+      const diffTime = Math.abs(new Date(todayStr).getTime() - new Date(dateStr).getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return { label: `Overdue ${diffDays}d`, color: "bg-rose-50 text-rose-700 border-rose-200" };
+    }
+    if (dateStr === todayStr) {
+      return { label: "Due Today", color: "bg-amber-50 text-amber-800 border-amber-200 font-semibold" };
+    }
+    const diffTime = Math.abs(new Date(dateStr).getTime() - new Date(todayStr).getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return { label: `In ${diffDays}d`, color: "bg-teal-50 text-teal-800 border-teal-200" };
+  };
 
+  // WhatsApp link generators
+  const getWhatsAppTodayReminderUrl = (apt: Appointment) => {
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const msg = `Hello ${apt.patientName}, this is a reminder for your dental appointment today at ${apt.time} (${apt.procedure}) with ${clinicProfile.dentistName} at ${clinicProfile.name}.\n\nPlease let us know when you arrive. See you soon!`;
+    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
+  };
+
+  const getWhatsAppRecallUrl = (patient: Patient) => {
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const msg = `Hello ${patient.name}, greetings from ${clinicProfile.name}!\n\nDr. ${clinicProfile.dentistName} recommends a periodic follow-up / checkup for your dental health (Due: ${patient.followUpDue}).\n\nWould you like to reserve a convenient slot this week? Reply here or call us at ${clinicProfile.phone}.`;
+    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
+  };
+
+  const getWhatsAppBillUrl = (patient: Patient, balance: number) => {
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const doctorUpi = clinicProfile.upiId || "dentally@upi";
+    const msg = `Hello ${patient.name}, greetings from ${clinicProfile.name}.\n\nYour account has an outstanding balance of ₹${balance.toLocaleString()} for recent dental treatment.\n\nYou can pay directly via UPI: ${doctorUpi}, or scan our QR code on your next visit.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
+    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
+  };
+
+  const formattedDate = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
   const metrics = [
-    { label: "Today's Appointments", value: todayList.length, detail: `${todayList.filter((a) => a.status === "scheduled").length} scheduled / ${todayList.filter((a) => a.status === "completed").length} completed`, icon: Calendar, tone: "blue", href: "/dashboard/appointments" },
-    { label: "Today's Collection", value: money(totalDailyCollection), detail: `UPI ${money(upiToday)} / Cash ${money(cashToday)}`, icon: IndianRupee, tone: "green", href: "/dashboard/fees" },
-    { label: "Unpaid Dues", value: patientsWithPending.length, detail: "Patients with a balance due", icon: AlertCircle, tone: "rose", href: "/dashboard/fees" },
-    { label: "Due for Recall", value: dueForFollowUp.length, detail: "Patients ready for follow-up", icon: RefreshCw, tone: "teal", href: "/dashboard/patients" },
+    {
+      label: "Today's Appointments",
+      value: todayList.length,
+      detail: `${todayList.filter((a) => a.status === "scheduled").length} scheduled / ${todayList.filter((a) => a.status === "completed").length} completed`,
+      icon: Calendar,
+      tone: "blue",
+      href: "/dashboard/appointments",
+    },
+    {
+      label: "Today's Collection",
+      value: money(totalDailyCollection),
+      detail: `UPI ${money(upiToday)} / Cash ${money(cashToday)}${cardToday > 0 ? ` / Card ${money(cardToday)}` : ""}`,
+      icon: IndianRupee,
+      tone: "green",
+      href: "/dashboard/fees",
+    },
+    {
+      label: "Unpaid Dues",
+      value: patientsWithPending.length,
+      detail: `${money(patientsWithPending.reduce((s, p) => s + p.balance, 0))} total pending`,
+      icon: AlertCircle,
+      tone: "rose",
+      href: "/dashboard/fees",
+    },
+    {
+      label: "Due for Recall",
+      value: dueForFollowUp.length,
+      detail: `${dueForFollowUp.filter((p) => (p.followUpDue || "") < todayStr).length} overdue / ${dueForFollowUp.filter((p) => p.followUpDue === todayStr).length} today`,
+      icon: RefreshCw,
+      tone: "teal",
+      href: "/dashboard/patients",
+    },
   ];
 
   if (loading) {
     return (
-      <div className="space-y-8 animate-pulse">
-        <div className="h-28 bg-white rounded-2xl border border-[#E4E9F0] p-6 flex flex-col justify-center space-y-3">
-          <div className="h-6 w-56 bg-slate-200 rounded-lg" />
-          <div className="h-4 w-96 bg-slate-100 rounded-lg" />
+      <div className="space-y-6 animate-pulse">
+        <div className="h-20 bg-white rounded-2xl border border-[#E4E9F0] p-6 flex flex-col justify-center space-y-2">
+          <div className="h-5 w-48 bg-slate-200 rounded" />
+          <div className="h-4 w-72 bg-slate-100 rounded" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 bg-white rounded-2xl border border-[#E4E9F0] p-5 space-y-3">
-              <div className="h-4 w-24 bg-slate-200 rounded" />
-              <div className="h-8 w-16 bg-slate-300 rounded" />
-              <div className="h-3 w-32 bg-slate-100 rounded" />
+            <div key={i} className="h-28 bg-white rounded-2xl border border-[#E4E9F0] p-4 space-y-2">
+              <div className="h-4 w-20 bg-slate-200 rounded" />
+              <div className="h-7 w-16 bg-slate-300 rounded" />
+              <div className="h-3 w-28 bg-slate-100 rounded" />
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 h-72 bg-white rounded-2xl border border-[#E4E9F0]" />
-          <div className="h-72 bg-white rounded-2xl border border-[#E4E9F0]" />
-        </div>
+        <div className="h-64 bg-white rounded-2xl border border-[#E4E9F0]" />
       </div>
     );
   }
 
   return (
-    <div className="overview space-y-8 sm:space-y-10">
-      <section className="welcome-card">
-        <div className="relative z-10 max-w-2xl">
-          <p className="text-base text-[#52627A] sm:text-lg">Welcome back,</p>
-          <h2 className="mt-1 text-3xl font-bold tracking-tight text-[#111C3A] sm:text-4xl">{clinicProfile.dentistName}</h2>
-          <p className="mt-3 max-w-md text-sm leading-7 text-[#52627A] sm:text-base">Manage your appointments, patients and payments with ease.</p>
-          <div className="mt-6 flex flex-col gap-3 min-[440px]:flex-row">
-            <Link href="/dashboard/appointments" className="action-primary"><Calendar size={19} />Book Appointment</Link>
-            <Link href="/dashboard/fees" className="action-secondary"><IndianRupee size={20} />Record Payment</Link>
+    <div className="overview space-y-6 sm:space-y-8">
+      {/* ================= COMPACT CLINICAL GREETING & DESK TOOLBAR ================= */}
+      <section className="bg-white rounded-3xl border border-[#E4E9F0] p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full bg-[#EDF7FA] text-[#00738E] border border-[#CDEBF2]">
+              {formattedDate}
+            </span>
+            <span className="text-xs text-[#64748B] font-mono">Chair 1 Operatory</span>
           </div>
+          <h1 className="mt-1.5 text-2xl sm:text-3xl font-bold tracking-tight text-[#111C3A]">
+            Good day, {clinicProfile.dentistName}
+          </h1>
+          <p className="mt-0.5 text-xs text-[#52627A]">
+            {clinicProfile.name} &middot; {todayList.filter((a) => a.status === "scheduled").length} patients on schedule today
+          </p>
         </div>
-        <div className="welcome-art" aria-hidden="true">
-          <svg viewBox="0 0 160 160" fill="none" className="h-36 w-36">
-            <path d="M78 37C60 22 40 28 35 47c-7 25 8 42 12 64 3 18 8 24 15 20 8-5 5-34 17-34s10 29 18 34c8 4 13-5 16-23 4-23 18-40 10-61-7-20-29-24-45-10Z" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="m78 37 15 8" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-            <path d="M126 40v30m-15-15h30" stroke="#FAFBFC" strokeWidth="16" strokeLinecap="round" />
-            <path d="M126 40v30m-15-15h30" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
-          </svg>
+
+        {/* Rapid Desk Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/dashboard/appointments"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-colors shadow-xs"
+          >
+            <Calendar size={15} />
+            <span>Book Visit</span>
+          </Link>
+          <Link
+            href="/dashboard/patients"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAFBFC] hover:bg-[#EDF7FA] border border-[#E4E9F0] text-[#111C3A] font-semibold text-xs transition-colors"
+          >
+            <Plus size={15} />
+            <span>Add Patient</span>
+          </Link>
+          <Link
+            href="/dashboard/fees"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAFBFC] hover:bg-[#EDF7FA] border border-[#E4E9F0] text-[#111C3A] font-semibold text-xs transition-colors"
+          >
+            <IndianRupee size={15} />
+            <span>Record Payment</span>
+          </Link>
+          <button
+            type="button"
+            onClick={() => setQrModalData({ amount: 500 })}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#EDF7FA] hover:bg-[#DDF1F6] border border-[#C2E4ED] text-[#00738E] font-semibold text-xs transition-colors"
+            title="Open Instant Chairside UPI QR for walk-in patient"
+          >
+            <QrCode size={15} />
+            <span>Desk QR</span>
+          </button>
         </div>
       </section>
 
-      {!loading && patients.length === 0 && (
-        <section className="premium-card flex flex-col justify-between gap-5 p-6 sm:flex-row sm:items-center">
-          <div><h3 className="font-semibold">Your practice starts here</h3><p className="mt-2 text-sm text-[#64748B]">Add your first patient to start managing care at {clinicProfile.name}.</p></div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard/patients" className="action-primary"><Plus size={17} />Add First Patient</Link>
-          </div>
-        </section>
-      )}
-
-      <section aria-labelledby="schedule-heading" className="space-y-4">
-        <div className="section-heading">
-          <h2 id="schedule-heading"><Calendar />Today&apos;s Schedule <span className="section-count">{todayList.length}</span></h2>
-          <Link href="/dashboard/appointments">View Full Schedule<ArrowRight size={18} /></Link>
-        </div>
-        {loading ? <div className="premium-card p-8 text-sm text-[#64748B]" role="status">Loading your schedule...</div> : todayList.length === 0 ? (
-          <div className="premium-card flex flex-col items-center gap-3 p-10 text-center">
-            <div className="metric-icon blue"><Calendar /></div>
-            <h3 className="font-semibold">A little room in your day</h3>
-            <p className="text-sm text-[#64748B]">No appointments booked for today.</p>
-            <Link href="/dashboard/appointments" className="text-sm font-semibold text-[#0089A8]">Book an appointment <span aria-hidden="true">&rarr;</span></Link>
-          </div>
-        ) : <div className="space-y-3">{todayList.map((apt) => (
-          <article key={apt._id} className="schedule-card">
-            <div className="schedule-info min-w-0">
-              <div className="flex flex-wrap items-center gap-3"><span className="time-chip">{apt.time}</span><span className="text-sm text-[#64748B]">({apt.durationMinutes} mins)</span></div>
-              <h3 className="mt-3 text-xl font-bold sm:text-2xl"><Link href={patientUrl(apt.patientId)} className="hover:text-[#0089A8]">{apt.patientName}</Link></h3>
-              <p className="mt-2 text-sm leading-6 text-[#52627A]">{apt.procedure}{apt.notes && <span className="italic"> &middot; {apt.notes}</span>}</p>
-            </div>
-            <a href={`tel:${apt.patientPhone}`} className="schedule-phone inline-flex items-center gap-2 text-sm font-medium"><Phone size={15} className="shrink-0 text-[#0089A8]" />{apt.patientPhone}</a>
-            <span className={`schedule-status status-pill ${apt.status}`}><CheckCircle2 size={15} />{apt.status}</span>
-            <div className="schedule-actions flex flex-wrap gap-2">
-              <Link href={patientUrl(apt.patientId)} className="small-outline">View Details</Link>
-              {apt.status === "scheduled" && <button onClick={() => completeAppointment(apt._id)} className="small-outline complete-action">Complete</button>}
-            </div>
-          </article>
-        ))}</div>}
-      </section>
-
+      {/* ================= HIGH-LEVEL PULSE METRICS ================= */}
       <section aria-label="Practice overview" className="grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 xl:grid-cols-4 sm:gap-4">
         {metrics.map(({ label, value, detail, icon: Icon, tone, href }) => (
           <Link key={label} href={href} className={`metric-card ${tone}`}>
-            <div className={`metric-icon ${tone}`}><Icon size={23} /></div>
-            <div className="min-w-0"><p className="text-2xl font-bold tracking-tight sm:text-3xl">{loading ? "—" : value}</p><h3 className="mt-1 text-xs font-medium sm:text-sm">{label}</h3><p className="mt-2 text-[11px] leading-5 text-[#64748B]">{detail}</p></div>
+            <div className={`metric-icon ${tone}`}><Icon size={22} /></div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tracking-tight sm:text-3xl text-[#111C3A]">{loading ? "—" : value}</p>
+              <h3 className="mt-1 text-xs font-semibold sm:text-sm text-[#111C3A]">{label}</h3>
+              <p className="mt-1 text-[11px] leading-4 text-[#64748B]">{detail}</p>
+            </div>
           </Link>
         ))}
       </section>
 
-      <section aria-labelledby="followup-heading" className="space-y-4">
-        <div className="section-heading"><h2 id="followup-heading"><RefreshCw />Patients Due for Follow-Up</h2><Link href="/dashboard/patients">View All<ArrowRight size={18} /></Link></div>
-        <div className="premium-card overflow-hidden divide-y divide-[#E4E9F0]">
-          {loading ? <p className="p-6 text-sm text-[#64748B]" role="status">Loading follow-ups...</p> : dueForFollowUp.length === 0 ? <p className="p-8 text-center text-sm text-[#64748B]">You&apos;re all caught up. No patients due for follow-up.</p> : dueForFollowUp.map((patient) => (
-            <div key={patient._id} className="patient-row">
-              <div className="patient-avatar"><User size={22} /></div>
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5 md:flex-row md:items-center md:gap-4"><Link href={patientUrl(patient._id)} className="truncate text-sm font-semibold hover:text-[#0089A8] sm:text-base">{patient.name}</Link><span className="flex items-center gap-2 text-xs text-[#64748B] sm:text-sm"><Calendar size={15} />Due: {patient.followUpDue}</span></div>
-              <Link href={patientUrl(patient._id)} className="view-pill" aria-label={`View ${patient.name}`}>View<ArrowRight size={14} className="hidden sm:block" /></Link>
-            </div>
-          ))}
+      {/* ================= TODAY'S CHRONOLOGICAL OPERATORY SCHEDULE ================= */}
+      <section aria-labelledby="schedule-heading" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 id="schedule-heading" className="text-base font-bold text-[#111C3A] flex items-center gap-2">
+              <Calendar size={18} className="text-[#0089A8]" />
+              Today&apos;s Schedule
+            </h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[#EDF7FA] font-bold text-[#00738E] border border-[#CDEBF2]">
+              {todayList.length} visits
+            </span>
+          </div>
+          <Link href="/dashboard/appointments" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
+            Open Full Calendar <ArrowRight size={14} />
+          </Link>
         </div>
+
+        {todayList.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-[#E4E9F0] p-8 text-center space-y-2">
+            <Calendar size={28} className="mx-auto text-[#0089A8]" />
+            <h3 className="font-semibold text-sm text-[#111C3A]">Chair 1 is open for today</h3>
+            <p className="text-xs text-[#64748B]">No appointments booked on today&apos;s schedule.</p>
+            <Link
+              href="/dashboard/appointments"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#0089A8] hover:underline pt-1"
+            >
+              Book an appointment &rarr;
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {todayList.map((apt) => {
+              const isCurrentChair = inOperatoryApt?._id === apt._id;
+              const isNext = !inOperatoryApt && nextUpApt?._id === apt._id;
+
+              return (
+                <article
+                  key={apt._id}
+                  className={`schedule-card transition-all ${
+                    isCurrentChair
+                      ? "ring-2 ring-[#0089A8] bg-[#F7FCFD] shadow-xs"
+                      : "hover:border-[#CCE5EC]"
+                  }`}
+                >
+                  <div className="schedule-info min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="time-chip font-bold text-sm sm:text-base">{apt.time}</span>
+                      <span className="text-xs text-[#64748B]">({apt.durationMinutes} mins)</span>
+                      {isCurrentChair && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                          In Operatory
+                        </span>
+                      )}
+                      {isNext && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                          <Clock size={11} /> Next Up
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="mt-2 text-lg font-bold text-[#111C3A]">
+                      <Link href={patientUrl(apt.patientId)} className="hover:text-[#0089A8]">
+                        {apt.patientName}
+                      </Link>
+                    </h3>
+
+                    <p className="mt-0.5 text-xs font-medium text-[#00738E]">
+                      {apt.procedure}
+                      {apt.notes && <span className="text-[#64748B] font-normal italic"> &middot; {apt.notes}</span>}
+                    </p>
+                  </div>
+
+                  <a
+                    href={`tel:${apt.patientPhone}`}
+                    className="schedule-phone inline-flex items-center gap-1.5 text-xs font-mono text-[#52627A] hover:text-[#111C3A]"
+                  >
+                    <Phone size={13} className="text-[#0089A8]" />
+                    {apt.patientPhone}
+                  </a>
+
+                  <div className="schedule-status flex items-center justify-end">
+                    <span className={`status-pill ${apt.status}`}>
+                      {apt.status === "completed" && <Check size={13} aria-hidden="true" />}
+                      {apt.status}
+                    </span>
+                  </div>
+
+                  <div className="schedule-actions flex flex-wrap items-center gap-2">
+                    <Link href={patientUrl(apt.patientId)} className="small-outline text-xs">
+                      Dossier
+                    </Link>
+                    <a
+                      href={getWhatsAppTodayReminderUrl(apt)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="small-outline text-xs text-emerald-700 hover:text-emerald-800"
+                      title="Send WhatsApp appointment ping / reminder"
+                    >
+                      <Share2 size={13} />
+                      <span>WhatsApp</span>
+                    </a>
+                    {apt.status === "scheduled" && (
+                      <button
+                        type="button"
+                        onClick={() => completeAppointment(apt._id)}
+                        className="small-outline complete-action text-xs font-semibold"
+                      >
+                        <Check size={13} />
+                        <span>Complete</span>
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
-      <section aria-labelledby="balances-heading" className="space-y-4">
-        <div className="section-heading"><h2 id="balances-heading"><CreditCard />Outstanding Balances</h2><Link href="/dashboard/fees">View All<ArrowRight size={18} /></Link></div>
-        <div className="premium-card overflow-hidden divide-y divide-[#E4E9F0]">
-          {loading ? <p className="p-6 text-sm text-[#64748B]" role="status">Loading balances...</p> : patientsWithPending.length === 0 ? <p className="p-8 text-center text-sm text-[#64748B]">No outstanding patient balances.</p> : patientsWithPending.map((patient) => (
-            <Link key={patient._id} href={patientUrl(patient._id)} className="patient-row hover:bg-[#F8FAFC]">
-              <div className="patient-avatar"><User size={22} /></div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold sm:text-base">{patient.name}</h3><p className="mt-1 text-xs text-[#64748B]">{patient.phone}</p></div><span className="text-sm font-semibold text-rose-700">{money(patient.balance)}</span><ArrowRight size={17} className="text-[#8291A7]" />
+      {/* ================= LOWER TWO-COLUMN SPLIT: RECALLS & OUTSTANDING BALANCES ================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* PRACTICAL RECALL ENGINE */}
+        <section aria-labelledby="followup-heading" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="followup-heading" className="text-sm font-bold text-[#111C3A] flex items-center gap-2">
+              <RefreshCw size={16} className="text-[#0089A8]" />
+              Due for Recall & Follow-Up
+            </h2>
+            <Link href="/dashboard/patients" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
+              View All <ArrowRight size={13} />
             </Link>
-          ))}
+          </div>
+
+          <div className="bg-white rounded-3xl border border-[#E4E9F0] overflow-hidden divide-y divide-[#E4E9F0]">
+            {dueForFollowUp.length === 0 ? (
+              <p className="p-6 text-center text-xs text-[#64748B]">
+                All patient recalls caught up. No follow-ups due this week.
+              </p>
+            ) : (
+              dueForFollowUp.slice(0, 5).map((patient) => {
+                const badge = getFollowUpBadge(patient.followUpDue!);
+                return (
+                  <div key={patient._id} className="patient-row flex items-center justify-between p-3.5 hover:bg-[#FAFBFC] transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="patient-avatar shrink-0"><User size={18} /></div>
+                      <div className="min-w-0">
+                        <Link href={patientUrl(patient._id)} className="truncate text-xs font-bold text-[#111C3A] hover:text-[#0089A8] block">
+                          {patient.name}
+                        </Link>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-mono ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                          <span className="text-[10px] font-mono text-[#8291A7]">{patient.followUpDue}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={getWhatsAppRecallUrl(patient)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-xs flex items-center gap-1 font-semibold"
+                        title="Send WhatsApp recall reminder"
+                      >
+                        <Share2 size={13} />
+                        <span className="hidden sm:inline text-[11px]">Recall</span>
+                      </a>
+                      <Link href={patientUrl(patient._id)} className="p-1.5 rounded-xl border border-[#E4E9F0] text-[#52627A] hover:text-[#111C3A] hover:bg-slate-100">
+                        <ArrowRight size={14} />
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        {/* OUTSTANDING BALANCES & CHAIRSIDE COLLECTION */}
+        <section aria-labelledby="balances-heading" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="balances-heading" className="text-sm font-bold text-[#111C3A] flex items-center gap-2">
+              <CreditCard size={16} className="text-[#0089A8]" />
+              Outstanding Balances
+            </h2>
+            <Link href="/dashboard/fees" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
+              View All <ArrowRight size={13} />
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-[#E4E9F0] overflow-hidden divide-y divide-[#E4E9F0]">
+            {patientsWithPending.length === 0 ? (
+              <p className="p-6 text-center text-xs text-[#64748B]">
+                No pending balances across accounts. All settled.
+              </p>
+            ) : (
+              patientsWithPending.slice(0, 5).map((patient) => (
+                <div key={patient._id} className="patient-row flex items-center justify-between p-3.5 hover:bg-[#FAFBFC] transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="patient-avatar shrink-0"><User size={18} /></div>
+                    <div className="min-w-0">
+                      <Link href={patientUrl(patient._id)} className="truncate text-xs font-bold text-[#111C3A] hover:text-[#0089A8] block">
+                        {patient.name}
+                      </Link>
+                      <p className="text-[10px] font-mono text-[#8291A7] mt-0.5">{patient.phone}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <div className="text-xs font-bold font-mono text-rose-700">{money(patient.balance)}</div>
+                      <span className="text-[9px] uppercase font-mono text-[#8291A7]">due</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setQrModalData({ patientName: patient.name, amount: patient.balance })}
+                      className="p-1.5 rounded-xl border border-[#0089A8] text-[#0089A8] bg-[#EDF7FA] hover:bg-[#D8EEF3]"
+                      title="Generate instant UPI QR for this patient's balance"
+                    >
+                      <QrCode size={14} />
+                    </button>
+
+                    <a
+                      href={getWhatsAppBillUrl(patient, patient.balance)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                      title="Send WhatsApp payment reminder with doctor's UPI"
+                    >
+                      <Share2 size={14} />
+                    </a>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* ================= INSTANT CHAIRSIDE DESK UPI QR MODAL ================= */}
+      {qrModalData && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-center space-y-4 animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E4E9F0]">
+              <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1.5">
+                <QrCode className="w-4 h-4" /> Chairside Desk UPI QR
+              </span>
+              <button
+                onClick={() => setQrModalData(null)}
+                aria-label="Close QR code"
+                className="text-[#8291A7] hover:text-[#111C3A]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h4 className="font-bold text-base text-[#111C3A]">{clinicProfile.name}</h4>
+              <p className="text-xs text-[#64748B]">{clinicProfile.dentistName}</p>
+            </div>
+
+            {/* Quick Amount Presets */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {[500, 1500, 2500, 5000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setQrModalData((prev) => ({ ...prev, amount: amt }))}
+                  className={`text-[11px] px-2.5 py-1 rounded-xl border font-mono font-semibold transition-all ${
+                    qrModalData.amount === amt
+                      ? "bg-[#0089A8] text-white border-[#0089A8]"
+                      : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
+                  }`}
+                >
+                  ₹{amt.toLocaleString()}
+                </button>
+              ))}
+            </div>
+
+            {/* Real Dynamic UPI QR Graphic */}
+            <div className="p-3 bg-[#FAFBFC] rounded-2xl border border-[#E4E9F0] inline-block shadow-inner mx-auto">
+              <div className="w-44 h-44 bg-white rounded-xl border border-slate-300 p-2 flex flex-col items-center justify-center relative overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    `upi://pay?pa=${clinicProfile.upiId || "dentally@upi"}&pn=${encodeURIComponent(
+                      clinicProfile.name
+                    )}&am=${qrModalData.amount}&cu=INR`
+                  )}`}
+                  alt="UPI QR Code"
+                  width={160}
+                  height={160}
+                  className="rounded-lg"
+                />
+              </div>
+              <div className="mt-1.5 text-[11px] font-mono text-[#586B67]">
+                Scan with GPay &middot; PhonePe &middot; Paytm
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              {qrModalData.patientName && (
+                <span className="text-xs text-[#64748B] block">Patient: <strong>{qrModalData.patientName}</strong></span>
+              )}
+              <div className="text-2xl font-bold font-mono tracking-tight text-[#111C3A]">
+                ₹{qrModalData.amount.toLocaleString()}
+              </div>
+              <span className="text-[10px] font-mono text-[#8291A7] block">
+                UPI ID: {clinicProfile.upiId || "dentally@upi"}
+              </span>
+            </div>
+
+            <div className="pt-2 border-t border-[#E4E9F0]">
+              <button
+                type="button"
+                onClick={() => setQrModalData(null)}
+                className="w-full py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
+              >
+                Done / Received
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
+      )}
     </div>
   );
 }
