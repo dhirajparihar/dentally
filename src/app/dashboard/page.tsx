@@ -101,9 +101,20 @@ export default function DashboardOverviewPage() {
     })
     .filter((p) => p.balance > 0);
 
-  // Practical Recalls: Only patients due on/before today or in the next 7 days
+  // Practical Recalls: Only patients due on/before today or in the next 7 days,
+  // excluding those who have already visited since their recall date or already have an upcoming appointment scheduled.
   const dueForFollowUp = patients
-    .filter((p) => p.followUpDue && p.followUpDue <= weekAheadStr)
+    .filter((p) => {
+      if (!p.followUpDue || p.followUpDue > weekAheadStr) return false;
+      // If patient already visited on or after this recall date, the recall was attended
+      if (p.lastVisit && p.lastVisit >= p.followUpDue) return false;
+      // If patient already has an upcoming scheduled appointment, they are already on the calendar
+      const hasUpcoming = appointments.some(
+        (a) => a.patientId === p._id && a.status === "scheduled" && a.date >= todayStr
+      );
+      if (hasUpcoming) return false;
+      return true;
+    })
     .sort((a, b) => (a.followUpDue || "").localeCompare(b.followUpDue || ""));
 
   const getFollowUpBadge = (dateStr: string) => {
@@ -407,7 +418,7 @@ export default function DashboardOverviewPage() {
               <RefreshCw size={16} className="text-[#0089A8]" />
               Due for Recall & Follow-Up
             </h2>
-            <Link href="/dashboard/patients" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
+            <Link href="/dashboard/patients?sort=recall" className="text-xs font-semibold text-[#0089A8] hover:underline flex items-center gap-1">
               View All <ArrowRight size={13} />
             </Link>
           </div>

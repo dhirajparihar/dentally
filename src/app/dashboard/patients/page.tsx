@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   Search,
@@ -12,6 +12,7 @@ import {
   Share2,
   AlertTriangle,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import {
   Patient,
@@ -30,7 +31,16 @@ export default function PatientsPage() {
   } = useClinic();
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered">("recent");
+  const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered" | "recall">("recent");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const paramSort = new URLSearchParams(window.location.search).get("sort");
+      if (paramSort === "recall") {
+        setSortBy("recall");
+      }
+    }
+  }, []);
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -70,6 +80,12 @@ export default function PatientsPage() {
       );
     })
     .sort((a, b) => {
+      if (sortBy === "recall") {
+        if (!a.followUpDue && !b.followUpDue) return 0;
+        if (!a.followUpDue) return 1;
+        if (!b.followUpDue) return -1;
+        return a.followUpDue.localeCompare(b.followUpDue);
+      }
       if (sortBy === "due") return getBalance(b._id) - getBalance(a._id);
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "registered") return (b.registeredDate || "").localeCompare(a.registeredDate || "");
@@ -162,6 +178,7 @@ export default function PatientsPage() {
           className="h-11 px-3 rounded-xl border border-[#E4E9F0] bg-white text-xs font-semibold text-[#111C3A] outline-none focus:border-[#0089A8]"
         >
           <option value="recent">Sort: Recent Visits</option>
+          <option value="recall">Sort: Recall Due</option>
           <option value="due">Sort: Highest Dues</option>
           <option value="name">Sort: Name (A-Z)</option>
           <option value="registered">Sort: Newest Registered</option>
@@ -206,6 +223,12 @@ export default function PatientsPage() {
                     <a href={`tel:${patient.phone}`} className="inline-flex items-center gap-1.5 font-medium text-[#111C3A]"><Phone size={13} className="shrink-0 text-[#0089A8]" />{patient.phone}</a>
                     <span className="inline-flex items-center gap-1.5"><Calendar size={13} className="shrink-0" />Last visit: {patient.lastVisit || "New"}</span>
                   </div>
+                  {patient.followUpDue && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#00738E] bg-[#EDF7FA] px-2 py-0.5 rounded-lg border border-[#D4EDF3] w-fit">
+                      <RefreshCw size={11} className="shrink-0 text-[#0089A8]" />
+                      <span>Follow-Up Due: <strong>{patient.followUpDue}</strong></span>
+                    </div>
+                  )}
                   {(patient.email || (patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None")) && (
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                       {patient.email && <p className="flex min-w-0 flex-[1_1_160px] items-center gap-1.5"><Mail size={13} className="shrink-0" /><span className="break-all">{patient.email}</span></p>}

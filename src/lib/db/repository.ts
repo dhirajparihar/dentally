@@ -304,6 +304,8 @@ export async function updateAppointmentStatus(
   const email = (dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment update");
   const mem = getOrCreateMemoryStore(email);
+  const targetApt = mem.appointments.find((a) => a._id === appointmentId);
+
   mem.appointments = mem.appointments.map((a) =>
     a._id === appointmentId
       ? {
@@ -313,6 +315,15 @@ export async function updateAppointmentStatus(
         }
       : a
   );
+
+  // If appointment is marked completed, update patient's lastVisit
+  if (status === "completed" && targetApt) {
+    mem.patients = mem.patients.map((p) =>
+      p._id === targetApt.patientId
+        ? { ...p, lastVisit: targetApt.date }
+        : p
+    );
+  }
 
   try {
     const conn = await ensureDbInitialized();
@@ -325,6 +336,13 @@ export async function updateAppointmentStatus(
         { _id: appointmentId, dentistEmail: email },
         { status, ...(finalNotes !== undefined ? { notes: finalNotes } : {}) }
       );
+
+      if (status === "completed" && existing?.patientId) {
+        await PatientModel.updateOne(
+          { _id: existing.patientId, dentistEmail: email },
+          { lastVisit: existing.date }
+        );
+      }
     }
   } catch (err) {
     console.error("Error updating appointment status in MongoDB:", err);
