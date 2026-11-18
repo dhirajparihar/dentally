@@ -31,6 +31,7 @@ export interface ClinicContextType {
   bookAppointment: (appointment: Appointment) => Promise<void>;
   completeAppointment: (appointmentId: string) => Promise<void>;
   cancelAppointment: (appointmentId: string, reason?: string) => Promise<void>;
+  missAppointment: (appointmentId: string, reason?: string) => Promise<void>;
   rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<void>;
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
@@ -180,6 +181,21 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "cancel_appointment", appointmentId, reason });
   };
 
+  const missAppointment = async (appointmentId: string, reason?: string) => {
+    setAppointments((prev) =>
+      prev.map((a) =>
+        a._id === appointmentId
+          ? {
+              ...a,
+              status: "missed" as const,
+              notes: `${a.notes || ""} [Missed: ${reason || "No-show at operatory"}]`.trim(),
+            }
+          : a
+      )
+    );
+    await postMutation({ action: "miss_appointment", appointmentId, reason });
+  };
+
   const rescheduleAppointment = async (
     appointmentId: string,
     date: string,
@@ -236,6 +252,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         bookAppointment,
         completeAppointment,
         cancelAppointment,
+        missAppointment,
         rescheduleAppointment,
         addFee,
         recordPayment,

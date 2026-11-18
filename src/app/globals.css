@@ -439,3 +439,62 @@
   .mcp-tool-category { display: none; }
   .mcp-inspector { scroll-margin-top: 90px; }
 }
+
+/* ================= CLINICAL DOCUMENT PRINT STYLES ================= */
+@media print {
+  /* Hide all dashboard navigation, sidebar, headers, and UI chrome */
+  header,
+  aside,
+  nav,
+  button,
+  .print-hide,
+  .no-print,
+  .overview,
+  .appointments-workspace,
+  .fees-workspace,
+  .patient-summary,
+  .patient-tabs,
+  .patient-tab-content,
+  .detail-back {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111c3a !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Reset modal overlay containers so they print cleanly on white paper */
+  .mobile-dialog {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    inset: auto !important;
+    z-index: auto !important;
+  }
+
+  .printable-document {
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    border-radius: 8px !important;
+    padding: 24px !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

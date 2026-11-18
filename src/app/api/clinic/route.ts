@@ -117,6 +117,11 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case "miss_appointment": {
+        await updateAppointmentStatus(appointmentId, "missed", email);
+        break;
+      }
+
       case "reschedule_appointment": {
         await rescheduleAppointment(appointmentId, date, time, reason, email);
         break;

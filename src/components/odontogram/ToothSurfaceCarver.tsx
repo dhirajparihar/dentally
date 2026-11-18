@@ -42,6 +42,46 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
   };
 
   const isAnterior = [11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43].includes(tooth.id);
+  const isUpper = tooth.quadrant === 1 || tooth.quadrant === 2;
+  const isRightSide = tooth.quadrant === 1 || tooth.quadrant === 4; // Patient right: midline is toward the right of the tooth
+
+  // Clinical Anatomical Surface Names & Labels
+  const occlusalLabel = isAnterior ? "Incisal (I)" : "Occlusal (O)";
+  const occlusalCode = isAnterior ? "I" : "O";
+  const buccalLabel = isAnterior ? "Facial / Labial (F)" : "Buccal (B)";
+  const buccalCode = isAnterior ? "F" : "B";
+  const lingualLabel = isUpper ? "Palatal (P)" : "Lingual (L)";
+  const lingualCode = isUpper ? "P" : "L";
+
+  // Left & Right Trapezoids depending on midline position:
+  // Patient Right (Q1, Q4): Midline is to the right -> Left is Distal, Right is Mesial
+  // Patient Left (Q2, Q3): Midline is to the left -> Left is Mesial, Right is Distal
+  const leftSurfaceKey: SurfaceType = isRightSide ? "distal" : "mesial";
+  const leftSurfaceCode = isRightSide ? "D" : "M";
+  const rightSurfaceKey: SurfaceType = isRightSide ? "mesial" : "distal";
+  const rightSurfaceCode = isRightSide ? "M" : "D";
+
+  const getClinicalSurfaceName = (s: SurfaceType) => {
+    switch (s) {
+      case "occlusal": return occlusalLabel;
+      case "buccal": return buccalLabel;
+      case "lingual": return lingualLabel;
+      case "mesial": return "Mesial (M)";
+      case "distal": return "Distal (D)";
+    }
+  };
+
+  const getClinicalSurfaceCode = (s: SurfaceType) => {
+    switch (s) {
+      case "occlusal": return occlusalCode;
+      case "buccal": return buccalCode;
+      case "lingual": return lingualCode;
+      case "mesial": return "M";
+      case "distal": return "D";
+    }
+  };
+
+  const isWholeToothStatus = ["crown", "rct", "implant", "missing"].includes(selectedStatus);
 
   // Surface fill color depending on diagnosis
   const getSurfaceFill = (surface: SurfaceType) => {
@@ -96,65 +136,80 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
           <div className="bg-[#0B0E11] p-6 rounded-2xl border border-slate-800/90 flex flex-col md:flex-row items-center justify-between gap-6">
             {/* SVG 5-Surface Cross Section */}
             <div className="relative flex flex-col items-center">
-              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mb-2">
-                Vestibular / Buccal (B)
+              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest mb-2 font-semibold">
+                {buccalLabel}
               </span>
 
-              <div className="relative w-44 h-44 drop-shadow-xl">
-                <svg viewBox="0 0 160 160" className="w-full h-full cursor-pointer select-none">
-                  {/* Top Trapezoid: Buccal */}
-                  <polygon
-                    points="20,20 140,20 110,50 50,50"
-                    className={`transition-colors duration-150 ${getSurfaceFill("buccal")} ${getSurfaceStroke("buccal")}`}
-                    onClick={() => toggleSurface("buccal")}
-                  />
-                  {/* Bottom Trapezoid: Lingual / Palatal */}
-                  <polygon
-                    points="50,110 110,110 140,140 20,140"
-                    className={`transition-colors duration-150 ${getSurfaceFill("lingual")} ${getSurfaceStroke("lingual")}`}
-                    onClick={() => toggleSurface("lingual")}
-                  />
-                  {/* Left Trapezoid: Mesial */}
-                  <polygon
-                    points="20,20 50,50 50,110 20,140"
-                    className={`transition-colors duration-150 ${getSurfaceFill("mesial")} ${getSurfaceStroke("mesial")}`}
-                    onClick={() => toggleSurface("mesial")}
-                  />
-                  {/* Right Trapezoid: Distal */}
-                  <polygon
-                    points="140,20 140,140 110,110 110,50"
-                    className={`transition-colors duration-150 ${getSurfaceFill("distal")} ${getSurfaceStroke("distal")}`}
-                    onClick={() => toggleSurface("distal")}
-                  />
-                  {/* Center Square / Diamond: Occlusal / Incisal Pit */}
-                  <rect
-                    x="50"
-                    y="50"
-                    width="60"
-                    height="60"
-                    rx="4"
-                    className={`transition-colors duration-150 ${getSurfaceFill("occlusal")} ${getSurfaceStroke("occlusal")}`}
-                    onClick={() => toggleSurface("occlusal")}
-                  />
-                  {/* Text Labels inside surfaces */}
-                  <text x="80" y="38" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">B</text>
-                  <text x="80" y="130" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">L</text>
-                  <text x="36" y="84" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">M</text>
-                  <text x="124" y="84" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">D</text>
-                  <text x="80" y="84" textAnchor="middle" className="text-[11px] font-mono font-bold fill-slate-900 pointer-events-none">O</text>
-                </svg>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono text-slate-400 w-12 text-right">
+                  {leftSurfaceCode} ({leftSurfaceKey === "mesial" ? "Midline" : "Away"})
+                </span>
+
+                <div className="relative w-44 h-44 drop-shadow-xl">
+                  <svg viewBox="0 0 160 160" className="w-full h-full cursor-pointer select-none">
+                    {/* Top Trapezoid: Buccal / Facial */}
+                    <polygon
+                      points="20,20 140,20 110,50 50,50"
+                      className={`transition-colors duration-150 ${getSurfaceFill("buccal")} ${getSurfaceStroke("buccal")}`}
+                      onClick={() => toggleSurface("buccal")}
+                    />
+                    {/* Bottom Trapezoid: Lingual / Palatal */}
+                    <polygon
+                      points="50,110 110,110 140,140 20,140"
+                      className={`transition-colors duration-150 ${getSurfaceFill("lingual")} ${getSurfaceStroke("lingual")}`}
+                      onClick={() => toggleSurface("lingual")}
+                    />
+                    {/* Left Trapezoid: Mesial (Q2,Q3) or Distal (Q1,Q4) */}
+                    <polygon
+                      points="20,20 50,50 50,110 20,140"
+                      className={`transition-colors duration-150 ${getSurfaceFill(leftSurfaceKey)} ${getSurfaceStroke(leftSurfaceKey)}`}
+                      onClick={() => toggleSurface(leftSurfaceKey)}
+                    />
+                    {/* Right Trapezoid: Distal (Q2,Q3) or Mesial (Q1,Q4) */}
+                    <polygon
+                      points="140,20 140,140 110,110 110,50"
+                      className={`transition-colors duration-150 ${getSurfaceFill(rightSurfaceKey)} ${getSurfaceStroke(rightSurfaceKey)}`}
+                      onClick={() => toggleSurface(rightSurfaceKey)}
+                    />
+                    {/* Center Square: Occlusal / Incisal Pit */}
+                    <rect
+                      x="50"
+                      y="50"
+                      width="60"
+                      height="60"
+                      rx="4"
+                      className={`transition-colors duration-150 ${getSurfaceFill("occlusal")} ${getSurfaceStroke("occlusal")}`}
+                      onClick={() => toggleSurface("occlusal")}
+                    />
+                    {/* Text Labels inside surfaces */}
+                    <text x="80" y="38" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">{buccalCode}</text>
+                    <text x="80" y="130" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">{lingualCode}</text>
+                    <text x="36" y="84" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">{leftSurfaceCode}</text>
+                    <text x="124" y="84" textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700 pointer-events-none">{rightSurfaceCode}</text>
+                    <text x="80" y="84" textAnchor="middle" className="text-[11px] font-mono font-bold fill-slate-900 pointer-events-none">{occlusalCode}</text>
+                  </svg>
+                </div>
+
+                <span className="text-[9px] font-mono text-slate-400 w-12 text-left">
+                  {rightSurfaceCode} ({rightSurfaceKey === "mesial" ? "Midline" : "Away"})
+                </span>
               </div>
 
-              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-2">
-                Lingual / Palatal (L)
+              <span className="text-[10px] font-mono text-slate-300 uppercase tracking-widest mt-2 font-semibold">
+                {lingualLabel}
               </span>
             </div>
 
             {/* Selected Surfaces Badges & Restorative Code */}
             <div className="flex-1 space-y-3 w-full">
-              <span className="text-xs font-mono uppercase text-slate-400 block font-semibold">
-                Anatomical Surface Notation:
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono uppercase text-slate-400 block font-semibold">
+                  Anatomical Surfaces:
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {isRightSide ? "Right Quadrant (Midline → Right)" : "Left Quadrant (Left ← Midline)"}
+                </span>
+              </div>
 
               <div className="flex flex-wrap gap-1.5">
                 {(["occlusal", "mesial", "distal", "buccal", "lingual"] as const).map((s) => {
@@ -164,27 +219,34 @@ export const ToothSurfaceCarver: React.FC<ToothSurfaceCarverProps> = ({
                       key={s}
                       type="button"
                       onClick={() => toggleSurface(s)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono uppercase font-bold border transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all ${
                         active
                           ? "bg-[#2F8EAC] text-white border-[#2F8EAC] shadow-xs"
                           : "bg-[#0F1715] text-[#A7BCB7] border-[#243532] hover:border-[#2F8EAC]/50"
                       }`}
                     >
-                      {s[0].toUpperCase()} ({s})
+                      {getClinicalSurfaceCode(s)} &middot; {getClinicalSurfaceName(s)}
                     </button>
                   );
                 })}
               </div>
 
               {/* Surface Composite Code preview */}
-              <div className="p-3 rounded-xl bg-[#0F1715] border border-[#243532] text-xs font-mono">
-                <span className="text-[#A7BCB7] block text-[11px]">Clinical Shorthand:</span>
-                <span className="text-[#BDDBD1] font-bold text-sm tracking-wider">
-                  {surfaces.length === 0
+              <div className="p-3 rounded-xl bg-[#0F1715] border border-[#243532] text-xs font-mono space-y-1">
+                <span className="text-[#A7BCB7] block text-[11px]">Clinical Notation:</span>
+                <span className="text-[#BDDBD1] font-bold text-sm tracking-wider block">
+                  {isWholeToothStatus
+                    ? `${selectedStatus.toUpperCase()} (Whole Tooth Restoration / Pathology)`
+                    : surfaces.length === 0
                     ? "SOUND (Whole Crown Intact)"
-                    : surfaces.map((s) => s[0].toUpperCase()).sort().join("") +
+                    : surfaces.map((s) => getClinicalSurfaceCode(s)).sort().join("") +
                       ` (${surfaces.length}-Surface ${selectedStatus.toUpperCase()})`}
                 </span>
+                {isWholeToothStatus && (
+                  <span className="text-[10px] text-amber-400/90 block">
+                    Note: {selectedStatus.toUpperCase()} affects the full tooth / crown. Specific surfaces denote margins/cores.
+                  </span>
+                )}
               </div>
             </div>
           </div>

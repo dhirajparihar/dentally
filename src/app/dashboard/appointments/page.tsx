@@ -32,9 +32,10 @@ interface AppointmentActionsProps {
   onReschedule: () => void;
   onReopen: () => void;
   onCancel: () => void;
+  onMarkMissed: () => void;
 }
 
-function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, onCancel }: AppointmentActionsProps) {
+function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, onCancel, onMarkMissed }: AppointmentActionsProps) {
   return (
     <details className="appointment-menu" onToggle={(event) => {
       if (!event.currentTarget.open) return;
@@ -50,7 +51,8 @@ function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onResch
         <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
         <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
         {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
-        {(appointment.status === "completed" || appointment.status === "cancelled") && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+        {appointment.status === "scheduled" && <button type="button" onClick={onMarkMissed} className="text-amber-700"><AlertCircle size={15} />Mark as Missed</button>}
+        {(appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "missed") && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
         {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
       </div>
     </details>
@@ -67,6 +69,7 @@ export default function AppointmentsPage() {
     bookAppointment,
     completeAppointment,
     cancelAppointment,
+    missAppointment,
     rescheduleAppointment,
   } = useClinic();
 
@@ -194,11 +197,17 @@ export default function AppointmentsPage() {
     .filter((a) => a.date === selectedDate)
     .sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
 
-  // Filtered for list view
-  const listAppointments = appointments.filter((a) => {
-    if (statusFilter === "all") return true;
-    return a.status === statusFilter;
-  });
+  // Filtered for list view (sorted chronologically: upcoming & recent first)
+  const listAppointments = appointments
+    .filter((a) => {
+      if (statusFilter === "all") return true;
+      return a.status === statusFilter;
+    })
+    .sort((a, b) => {
+      const dComp = b.date.localeCompare(a.date);
+      if (dComp !== 0) return dComp;
+      return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+    });
 
   // Date Navigator Helpers
   const shiftDate = (days: number) => {
@@ -218,6 +227,8 @@ export default function AppointmentsPage() {
       if (appointment) bookAppointment({ ...appointment, status: "scheduled" });
     } else if (newStatus === "cancelled") {
       cancelAppointment(id);
+    } else if (newStatus === "missed") {
+      missAppointment(id);
     }
   };
 
@@ -317,7 +328,7 @@ export default function AppointmentsPage() {
 
   // WhatsApp Instant Booking Confirmation
   const getBookingConfirmationWhatsAppUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const msg = `Hello ${apt.patientName}, your dental appointment with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${apt.date} at ${apt.time} (${apt.procedure}).\n\nLocation: ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
@@ -325,7 +336,7 @@ export default function AppointmentsPage() {
 
   // WhatsApp Pre-Appointment Reminder
   const getWhatsAppReminderUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const msg = `Hello ${apt.patientName}, this is a reminder for your dental appointment on ${apt.date} at ${apt.time} (${apt.durationMinutes} mins) for ${apt.procedure} with ${clinicProfile.dentistName} at ${clinicProfile.name}.\n\nPlease let us know if you need to reschedule. See you soon!`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
@@ -333,7 +344,7 @@ export default function AppointmentsPage() {
 
   // WhatsApp Post-Op Care Instructions
   const getWhatsAppPostOpUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const msg = `Hello ${apt.patientName}, thank you for visiting ${clinicProfile.name} today.\n\nPost-procedure instructions from ${clinicProfile.dentistName}:\n1) Avoid chewing hard or crunchy foods on the treated side for 24 hours.\n2) If mild tenderness occurs, take prescribed medications as advised.\n3) Reach out directly if you experience persistent discomfort.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
@@ -415,7 +426,7 @@ export default function AppointmentsPage() {
                 </div>
                 <div className="appointment-card-controls">
                   <span className={`appointment-status ${appointment.status}`}>{appointment.status === "completed" && <Check size={13} aria-hidden="true" />}{appointment.status}</span>
-                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} />
+                  <AppointmentActions appointment={appointment} reminderUrl={getWhatsAppReminderUrl(appointment)} careUrl={getWhatsAppPostOpUrl(appointment)} onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} onReschedule={() => { setRescheduleApt(appointment); setRescheduleData({ date: appointment.date, time: appointment.time, reason: "" }); }} onReopen={() => handleMarkStatus(appointment._id, "scheduled")} onCancel={() => { if (confirm(`Cancel appointment for ${appointment.patientName}?`)) handleMarkStatus(appointment._id, "cancelled"); }} onMarkMissed={() => handleMarkStatus(appointment._id, "missed")} />
                   {appointment.status === "scheduled" && <button type="button" onClick={() => handleMarkStatus(appointment._id, "completed")} className="appointment-complete"><Check size={14} aria-hidden="true" />Complete</button>}
                 </div>
               </article>

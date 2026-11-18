@@ -78,6 +78,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   // Selected receipt for official view/print
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
+  // Selected treatment invoice for official view/print
+  const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
 
   // Dental Rx Generator State
   const [isRxModalOpen, setIsRxModalOpen] = useState(false);
@@ -87,12 +89,24 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const [rxDiagnosis, setRxDiagnosis] = useState("Acute Pulpitis / Post-operative care");
   const [rxAdvice, setRxAdvice] = useState("Avoid chewing hard foods. Maintain good oral hygiene. Warm saline rinses after 24 hrs.");
 
+  // Allergy warning confirmation state
+  const [allergyAlert, setAllergyAlert] = useState<{
+    drugName: string;
+    allergen: string;
+    reason: string;
+    alternative: { name: string; dosage: string; duration: string; instructions: string };
+    pendingPreset: { name: string; dosage: string; duration: string; instructions: string };
+  } | null>(null);
+
   const standardDentalRxPresets = [
     { name: "Amoxicillin 500mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Complete full antibiotic course." },
     { name: "Augmentin 625mg (Amox+Clav)", dosage: "1 tab BD (Twice a day)", duration: "5 days", instructions: "With food. For severe odontogenic infection." },
+    { name: "Clindamycin 300mg (Penicillin-Allergic Alternative)", dosage: "1 cap TID (Three times a day)", duration: "5 days", instructions: "With a full glass of water. Safe for penicillin-allergic patients." },
+    { name: "Azithromycin 500mg", dosage: "1 tab OD (Once a day)", duration: "3 days", instructions: "1 hr before or 2 hrs after meals. Macrolide alternative." },
     { name: "Metronidazole 400mg", dosage: "1 tab TID (Three times a day)", duration: "5 days", instructions: "After food. Avoid alcohol during course." },
     { name: "Ibuprofen 400mg + Paracetamol 325mg", dosage: "1 tab TID (Three times a day)", duration: "3 days", instructions: "After food for pain and swelling." },
     { name: "Ketorolac 10mg (Dispersible)", dosage: "1 tab SOS (When needed)", duration: "2 days", instructions: "Dissolve in half glass water. Max 40mg/day." },
+    { name: "Paracetamol 650mg", dosage: "1 tab TID (Three times a day)", duration: "3 days", instructions: "After food. Safe non-NSAID analgesic." },
     { name: "Chlorhexidine 0.2% Mouthwash", dosage: "10 ml rinse BD (Twice a day)", duration: "7 days", instructions: "Rinse for 30s after brushing. Do not swallow." },
     { name: "Pantoprazole 40mg", dosage: "1 tab OD (Once a day)", duration: "5 days", instructions: "30 mins before breakfast." },
   ];
@@ -129,7 +143,34 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     });
   };
 
-  const handleAddRxMedicine = (preset: typeof standardDentalRxPresets[0]) => {
+  const handleAddRxMedicine = (preset: typeof standardDentalRxPresets[0], force = false) => {
+    if (!force && patient) {
+      const lowerAlerts = patient.medicalAlerts.map((a) => a.toLowerCase()).join(" ");
+      const isPenicillinAlert = lowerAlerts.includes("penicillin") || lowerAlerts.includes("amox") || lowerAlerts.includes("beta-lactam") || lowerAlerts.includes("ampicillin");
+      const isNsaidAlert = lowerAlerts.includes("nsaid") || lowerAlerts.includes("aspirin") || lowerAlerts.includes("ibuprofen");
+
+      if (isPenicillinAlert && (preset.name.includes("Amoxicillin") || preset.name.includes("Augmentin"))) {
+        setAllergyAlert({
+          drugName: preset.name,
+          allergen: "Penicillin",
+          reason: "Patient has a documented Penicillin Allergy. Prescribing beta-lactam antibiotics risks fatal anaphylaxis or acute hypersensitivity.",
+          alternative: standardDentalRxPresets[2], // Clindamycin
+          pendingPreset: preset,
+        });
+        return;
+      }
+
+      if (isNsaidAlert && (preset.name.includes("Ibuprofen") || preset.name.includes("Ketorolac"))) {
+        setAllergyAlert({
+          drugName: preset.name,
+          allergen: "NSAID / Aspirin",
+          reason: "Patient has a documented NSAID sensitivity. May trigger bronchospasm, gastrointestinal ulceration, or bleeding.",
+          alternative: standardDentalRxPresets[7], // Paracetamol 650mg
+          pendingPreset: preset,
+        });
+        return;
+      }
+    }
     setRxMedicines((prev) => [...prev, { ...preset }]);
   };
 
@@ -238,7 +279,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   };
 
   const getRecallWhatsAppUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const text = `Hello ${apt.patientName}, your dental follow-up appointment with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${apt.date} at ${apt.time} (${apt.procedure}).\n\nClinic: ${clinicProfile.name}, ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
@@ -346,7 +387,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   // WhatsApp helpers
   const getWhatsAppReminderUrl = () => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const text = upcomingAppt
       ? `Hello ${patient.name}, this is a gentle reminder for your dental appointment on ${upcomingAppt.date} at ${upcomingAppt.time} for ${upcomingAppt.procedure} with ${clinicProfile.dentistName} at ${clinicProfile.name}.`
@@ -355,7 +396,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   };
 
   const getWhatsAppBillUrl = () => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const text = `Hello ${patient.name}, thank you for visiting ${clinicProfile.name}.\n\nTotal Billed: ₹${totalBilled.toLocaleString()}\nTotal Paid: ₹${totalPaid.toLocaleString()}\nBalance Due: ₹${outstandingBalance.toLocaleString()}.\n\nFeel free to reach out to us at ${clinicProfile.phone}.`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
@@ -860,21 +901,32 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                               </div>
                               <div className="text-[10px] text-[#8291A7] font-mono mt-0.5">{f.date}</div>
                             </div>
-                            <div className="text-right">
-                              <div className="font-mono font-bold text-[#111C3A]">₹{f.netAmount.toLocaleString()}</div>
-                              <span
-                                className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono uppercase font-semibold ${
-                                  status === "paid"
-                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                    : status === "partial"
-                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                    : "bg-rose-100 text-rose-800 border border-rose-200"
-                                }`}
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <div className="font-mono font-bold text-[#111C3A]">₹{f.netAmount.toLocaleString()}</div>
+                                <span
+                                  className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono uppercase font-semibold ${
+                                    status === "paid"
+                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                      : status === "partial"
+                                      ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                      : "bg-rose-100 text-rose-800 border border-rose-200"
+                                  }`}
+                                >
+                                  {status === "partial" && settlement
+                                    ? `Partial (₹${settlement.allocatedAmount.toLocaleString()} paid)`
+                                    : status}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedInvoice(f)}
+                                className="px-2.5 py-1 rounded-xl border border-[#E4E9F0] bg-white text-[#0089A8] hover:bg-[#EDF7FA] font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                                title="View & Print Official Dental Treatment Tax Invoice"
                               >
-                                {status === "partial" && settlement
-                                  ? `Partial (₹${settlement.allocatedAmount.toLocaleString()} paid)`
-                                  : status}
-                              </span>
+                                <FileText size={13} />
+                                <span>Invoice</span>
+                              </button>
                             </div>
                           </div>
                         );
@@ -1312,16 +1364,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       {/* ================= DENTAL PRESCRIPTION (Rx) GENERATOR MODAL ================= */}
       {isRxModalOpen && (
         <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
             {/* Letterhead Header */}
             <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-serif text-2xl font-bold text-[#0089A8]">℞</span>
+                  <span className="font-serif text-3xl font-bold text-[#0089A8]">℞</span>
                   <div>
                     <h3 className="font-bold text-base text-[#111C3A]">{clinicProfile.name}</h3>
                     <p className="text-[11px] text-[#64748B]">
-                      Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; Reg: {clinicProfile.regNo}
+                      Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; DCI Reg: {clinicProfile.regNo}
+                    </p>
+                    <p className="text-[10px] text-[#8291A7] mt-0.5 font-mono">
+                      {clinicProfile.address} &middot; Ph: {clinicProfile.phone}
                     </p>
                   </div>
                 </div>
@@ -1330,7 +1385,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 type="button"
                 onClick={() => setIsRxModalOpen(false)}
                 aria-label="Close prescription form"
-                className="text-[#8291A7] hover:text-[#111C3A]"
+                className="text-[#8291A7] hover:text-[#111C3A] print-hide"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1354,8 +1409,50 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               )}
             </div>
 
+            {/* ALLERGY CONTRAINDICATION ALERT DIALOG */}
+            {allergyAlert && (
+              <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-400 text-rose-900 space-y-2 animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-sm text-rose-700">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
+                  <span>CRITICAL ALLERGY ALERT: {allergyAlert.allergyType}</span>
+                </div>
+                <p className="text-xs text-rose-800 leading-relaxed font-sans">
+                  <strong>{allergyAlert.drugName}</strong> is contraindicated. {allergyAlert.reason}
+                </p>
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAddRxMedicine(allergyAlert.alternative, true);
+                      setAllergyAlert(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs"
+                  >
+                    Switch to Safe Choice: {allergyAlert.alternative.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAllergyAlert(null)}
+                    className="px-3 py-1.5 rounded-xl border border-rose-300 text-rose-800 hover:bg-rose-100 font-semibold text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAddRxMedicine(allergyAlert.pendingPreset, true);
+                      setAllergyAlert(null);
+                    }}
+                    className="px-2 py-1 text-[11px] text-rose-600 hover:underline ml-auto"
+                  >
+                    Override with Warning
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Fast Drug Presets */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 print-hide">
               <label className="text-xs font-semibold text-[#111C3A] block">
                 Quick Dental Medication Presets
               </label>
@@ -1380,7 +1477,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 Prescribed Medications ({rxMedicines.length})
               </label>
               {rxMedicines.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-[#8291A7]">
+                <div className="p-4 rounded-xl border border-dashed border-slate-300 text-center text-[#8291A7] print-hide">
                   Click the presets above or enter custom medications.
                 </div>
               ) : (
@@ -1401,7 +1498,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveRxMedicine(idx)}
-                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 print-hide"
                         title="Remove drug"
                       >
                         <Trash2 size={14} />
@@ -1434,8 +1531,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
             </div>
 
+            {/* Doctor Signature Block for Print */}
+            <div className="pt-6 hidden print:flex items-end justify-between border-t border-slate-300 mt-6">
+              <div className="text-[10px] text-slate-500 font-mono">
+                Prescription valid for 7 days &middot; Keep out of reach of children
+              </div>
+              <div className="text-right">
+                <div className="w-40 border-b border-slate-700 mb-1"></div>
+                <strong className="text-xs text-slate-900 font-bold block">Dr. {clinicProfile.dentistName}</strong>
+                <span className="text-[10px] text-slate-600 font-mono">Authorized Dental Surgeon &middot; {clinicProfile.regNo}</span>
+              </div>
+            </div>
+
             {/* Modal Actions */}
-            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0]">
+            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] print-hide">
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -1470,14 +1579,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       {/* ================= OFFICIAL PAYMENT RECEIPT MODAL ================= */}
       {selectedReceipt && (
         <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <span className="font-mono text-xs font-bold text-[#0089A8]">Official Payment Receipt</span>
               <button
                 type="button"
                 onClick={() => setSelectedReceipt(null)}
                 aria-label="Close receipt"
-                className="text-[#8291A7] hover:text-[#111C3A]"
+                className="text-[#8291A7] hover:text-[#111C3A] print-hide"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1512,7 +1621,18 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
+            {/* Doctor Signature Block for Print */}
+            <div className="pt-4 hidden print:flex items-end justify-between border-t border-slate-300">
+              <div className="text-[9px] text-slate-500 font-mono">
+                Received with thanks. Computer-generated receipt.
+              </div>
+              <div className="text-right">
+                <div className="w-28 border-b border-slate-700 mb-0.5"></div>
+                <span className="text-[10px] font-bold text-slate-800">Authorized Seal</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 print-hide">
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -1527,6 +1647,149 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= OFFICIAL DENTAL TREATMENT TAX INVOICE MODAL ================= */}
+      {selectedInvoice && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#0089A8] font-bold">
+                  Official Treatment Tax Invoice &middot; SAC 999312
+                </span>
+                <h3 className="font-bold text-lg text-[#111C3A] mt-0.5">{clinicProfile.name}</h3>
+                <p className="text-[11px] text-[#64748B]">
+                  Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; Reg: {clinicProfile.regNo}
+                </p>
+                <p className="text-[10px] font-mono text-[#8291A7] mt-0.5">
+                  {clinicProfile.address} &middot; Phone: {clinicProfile.phone}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInvoice(null)}
+                aria-label="Close invoice"
+                className="text-[#8291A7] hover:text-[#111C3A] print-hide"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Patient & Bill Info */}
+            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-[#FAFBFC] border border-[#E4E9F0] text-xs">
+              <div>
+                <span className="text-[#8291A7] font-mono text-[10px] block">PATIENT DETAILS</span>
+                <strong className="text-[#111C3A] font-semibold text-sm">{patient.name}</strong>
+                <p className="text-[#64748B] text-[11px]">{patient.age}y &middot; {patient.gender} &middot; ID: {patient._id}</p>
+                <p className="text-[#8291A7] text-[11px] font-mono">{patient.phone}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[#8291A7] font-mono text-[10px] block">INVOICE NO & DATE</span>
+                <strong className="text-[#111C3A] font-mono text-xs">INV-{selectedInvoice._id.slice(-6).toUpperCase()}</strong>
+                <p className="text-[#64748B] text-[11px] font-mono mt-0.5">Date: {selectedInvoice.date}</p>
+                <p className="text-[#0089A8] text-[10px] font-mono uppercase font-bold">SAC: 999312 (Dental)</p>
+              </div>
+            </div>
+
+            {/* Treatment Breakdown Table */}
+            <div className="border border-[#E4E9F0] rounded-2xl overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#EDF7FA] text-[#00738E] font-semibold font-mono text-[11px]">
+                  <tr>
+                    <th className="p-2.5">Treatment / Procedure</th>
+                    <th className="p-2.5 text-center">Tooth</th>
+                    <th className="p-2.5 text-right">Gross</th>
+                    <th className="p-2.5 text-right">Disc</th>
+                    <th className="p-2.5 text-right">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E4E9F0] text-[#111C3A]">
+                  <tr>
+                    <td className="p-2.5 font-medium">
+                      {selectedInvoice.procedureName}
+                      {selectedInvoice.notes && <span className="block text-[10px] text-[#64748B] italic">{selectedInvoice.notes}</span>}
+                    </td>
+                    <td className="p-2.5 text-center font-mono text-[#0089A8] font-bold">
+                      {selectedInvoice.tooth || "Arch"}
+                    </td>
+                    <td className="p-2.5 text-right font-mono text-[#64748B]">
+                      ₹{selectedInvoice.amount.toLocaleString()}
+                    </td>
+                    <td className="p-2.5 text-right font-mono text-emerald-700">
+                      ₹{selectedInvoice.discount.toLocaleString()}
+                    </td>
+                    <td className="p-2.5 text-right font-mono font-bold text-[#111C3A]">
+                      ₹{selectedInvoice.netAmount.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Settlement summary */}
+            {(() => {
+              const settlement = feeSettlements.get(selectedInvoice._id);
+              const isPaid = settlement?.status === "paid" || selectedInvoice.status === "paid";
+              return (
+                <div className="p-3 rounded-2xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#64748B] uppercase font-mono block">Settlement Status:</span>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-mono uppercase ${
+                        isPaid
+                          ? "bg-emerald-100 text-emerald-800"
+                          : settlement?.status === "partial"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {isPaid ? "Fully Settled" : settlement?.status === "partial" ? `Partial (₹${settlement.allocatedAmount.toLocaleString()} paid)` : "Unpaid / Balance Due"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-[#64748B] block">Total Payable:</span>
+                    <span className="text-base font-bold font-mono text-[#111C3A]">₹{selectedInvoice.netAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Doctor Signature Block for Print */}
+            <div className="pt-6 hidden print:flex items-end justify-between border-t border-slate-300 mt-6">
+              <div className="text-[9px] text-slate-500 font-mono">
+                Tax Exempted under Healthcare Services (SAC 999312) &middot; For Insurance Reimbursement
+              </div>
+              <div className="text-right">
+                <div className="w-36 border-b border-slate-700 mb-1"></div>
+                <strong className="text-xs text-slate-900 font-bold block">Dr. {clinicProfile.dentistName}</strong>
+                <span className="text-[10px] text-slate-600 font-mono">Authorized Signatory &middot; {clinicProfile.regNo}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] print-hide">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-2 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1.5 text-[#52627A]"
+              >
+                <Printer size={14} />
+                <span>Print Tax Invoice</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedInvoice(null)}
+                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold text-xs"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

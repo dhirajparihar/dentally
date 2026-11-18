@@ -14,6 +14,7 @@ import {
   QrCode,
   Share2,
   IndianRupee,
+  FileText,
 } from "lucide-react";
 import {
   FeeItem,
@@ -43,6 +44,7 @@ export default function FeesPage() {
   const [isAddFeeOpen, setIsAddFeeOpen] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
   const [qrModalData, setQrModalData] = useState<{ patientName: string; amount: number; procedure?: string } | null>(null);
   const router = useRouter();
 
@@ -114,7 +116,7 @@ export default function FeesPage() {
 
   // Quick WhatsApp Bill link generator
   const getWhatsAppBillUrl = (patient: Patient, outstanding: number, procedure?: string) => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const doctorUpi = clinicProfile.upiId || `${clinicProfile.dentistName.toLowerCase().replace(/[^a-z]/g, "")}@upi`;
     const msg = `Hello ${patient.name}, greeting from ${clinicProfile.name}.\n\nYour itemized account statement for recent treatment (${procedure || "Dental Procedure"}):\nOutstanding balance due: ₹${outstanding.toLocaleString()}.\n\nYou can pay directly via UPI to: ${doctorUpi}, or scan our QR code on your next visit.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
@@ -281,6 +283,13 @@ export default function FeesPage() {
                       {fee.notes && <div className="sm:col-span-2"><dt>Notes</dt><dd>{fee.notes}</dd></div>}
                     </dl>
                   </details>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInvoice(fee)}
+                    className="workspace-button secondary small finance-receipt"
+                  >
+                    <FileText size={14} />Invoice
+                  </button>
                 </article>
               );
             })}
@@ -606,10 +615,10 @@ export default function FeesPage() {
       {/* ================= OFFICIAL RECEIPT MODAL ================= */}
       {selectedReceipt && (
         <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 printable-document">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <span className="font-mono text-xs font-bold text-[#0089A8]">Official Payment Receipt</span>
-              <button onClick={() => setSelectedReceipt(null)} aria-label="Close receipt" className="text-[#8291A7] hover:text-[#111C3A]">
+              <button onClick={() => setSelectedReceipt(null)} aria-label="Close receipt" className="text-[#8291A7] hover:text-[#111C3A] print-hide">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -643,7 +652,18 @@ export default function FeesPage() {
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
+            {/* Doctor Signature Block for Print */}
+            <div className="pt-4 hidden print:flex items-end justify-between border-t border-slate-300">
+              <div className="text-[9px] text-slate-500 font-mono">
+                Received with thanks. Computer-generated receipt.
+              </div>
+              <div className="text-right">
+                <div className="w-28 border-b border-slate-700 mb-0.5"></div>
+                <span className="text-[10px] font-bold text-slate-800">Authorized Seal</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 print-hide">
               <button
                 onClick={() => window.print()}
                 className="px-3 py-1.5 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1 text-[#64748B]"
@@ -652,6 +672,144 @@ export default function FeesPage() {
               </button>
               <button
                 onClick={() => setSelectedReceipt(null)}
+                className="px-4 py-1.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= OFFICIAL TREATMENT TAX INVOICE MODAL ================= */}
+      {selectedInvoice && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 printable-document">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#0089A8] font-bold">
+                  Treatment Tax Invoice &middot; SAC 999312
+                </span>
+                <h3 className="font-bold text-lg text-[#111C3A] mt-0.5">{clinicProfile.name}</h3>
+                <p className="text-[11px] text-[#64748B]">
+                  Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; Reg: {clinicProfile.regNo}
+                </p>
+                <p className="text-[10px] font-mono text-[#8291A7] mt-0.5">
+                  {clinicProfile.address} &middot; Phone: {clinicProfile.phone}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInvoice(null)}
+                aria-label="Close invoice"
+                className="text-[#8291A7] hover:text-[#111C3A] print-hide"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Patient & Bill Info */}
+            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-[#FAFBFC] border border-[#E4E9F0] text-xs">
+              <div>
+                <span className="text-[#8291A7] font-mono text-[10px] block">PATIENT DETAILS</span>
+                <strong className="text-[#111C3A] font-semibold text-sm">{selectedInvoice.patientName}</strong>
+                <p className="text-[#64748B] text-[11px]">ID: {selectedInvoice.patientId}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[#8291A7] font-mono text-[10px] block">INVOICE NO & DATE</span>
+                <strong className="text-[#111C3A] font-mono text-xs">INV-{selectedInvoice._id.slice(-6).toUpperCase()}</strong>
+                <p className="text-[#64748B] text-[11px] font-mono mt-0.5">Date: {selectedInvoice.date}</p>
+                <p className="text-[#0089A8] text-[10px] font-mono uppercase font-bold">SAC: 999312 (Dental Healthcare)</p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="border border-[#E4E9F0] rounded-2xl overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#EDF7FA] text-[#00738E] font-semibold font-mono text-[11px]">
+                  <tr>
+                    <th className="p-2.5">Treatment / Procedure</th>
+                    <th className="p-2.5 text-center">Tooth</th>
+                    <th className="p-2.5 text-right">Gross</th>
+                    <th className="p-2.5 text-right">Disc</th>
+                    <th className="p-2.5 text-right">Net Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E4E9F0] text-[#111C3A]">
+                  <tr>
+                    <td className="p-2.5 font-medium">
+                      {selectedInvoice.procedureName}
+                      {selectedInvoice.notes && <span className="block text-[10px] text-[#64748B] italic">{selectedInvoice.notes}</span>}
+                    </td>
+                    <td className="p-2.5 text-center font-mono text-[#0089A8] font-bold">
+                      {selectedInvoice.tooth || "Arch"}
+                    </td>
+                    <td className="p-2.5 text-right font-mono text-[#64748B]">
+                      ₹{selectedInvoice.amount.toLocaleString()}
+                    </td>
+                    <td className="p-2.5 text-right font-mono text-emerald-700">
+                      ₹{selectedInvoice.discount.toLocaleString()}
+                    </td>
+                    <td className="p-2.5 text-right font-mono font-bold text-[#111C3A]">
+                      ₹{selectedInvoice.netAmount.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Settlement summary */}
+            {(() => {
+              const settlement = feeSettlements.get(selectedInvoice._id);
+              const isPaid = settlement?.status === "paid" || selectedInvoice.status === "paid";
+              return (
+                <div className="p-3 rounded-2xl bg-[#FAFBFC] border border-[#E4E9F0] flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-[#64748B] uppercase font-mono block">Settlement Status:</span>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-mono uppercase ${
+                        isPaid
+                          ? "bg-emerald-100 text-emerald-800"
+                          : settlement?.status === "partial"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {isPaid ? "Fully Settled" : settlement?.status === "partial" ? `Partial (₹${settlement.allocatedAmount.toLocaleString()} paid)` : "Unpaid / Balance Due"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-[#64748B] block">Total Payable:</span>
+                    <span className="text-base font-bold font-mono text-[#111C3A]">₹{selectedInvoice.netAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Doctor Signature Block for Print */}
+            <div className="pt-6 hidden print:flex items-end justify-between border-t border-slate-300 mt-6">
+              <div className="text-[9px] text-slate-500 font-mono">
+                Tax Exempted under Healthcare Services (SAC 999312) &middot; For Insurance Reimbursement
+              </div>
+              <div className="text-right">
+                <div className="w-36 border-b border-slate-700 mb-1"></div>
+                <strong className="text-xs text-slate-900 font-bold block">Dr. {clinicProfile.dentistName}</strong>
+                <span className="text-[10px] text-slate-600 font-mono">Authorized Signatory &middot; {clinicProfile.regNo}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-[#E4E9F0] print-hide">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-1.5 rounded-xl border border-[#E4E9F0] hover:bg-slate-50 font-semibold text-xs flex items-center gap-1.5 text-[#52627A]"
+              >
+                <Printer size={14} />
+                <span>Print Tax Invoice</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedInvoice(null)}
                 className="px-4 py-1.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
               >
                 Close

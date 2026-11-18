@@ -113,7 +113,7 @@ export default function PatientsPage() {
 
   // Quick WhatsApp link generator
   const getWhatsAppLink = (patient: Patient) => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const balance = getBalance(patient._id);
     const msg = balance > 0

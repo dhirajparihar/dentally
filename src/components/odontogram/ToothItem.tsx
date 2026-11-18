@@ -15,10 +15,22 @@ export const ToothItem: React.FC<ToothItemProps> = ({ tooth, isSelected, onClick
   const isPremolar = [15, 14, 24, 25, 45, 44, 34, 35].includes(tooth.id);
   const isCanine = [13, 23, 33, 43].includes(tooth.id);
   const isIncisor = [11, 12, 21, 22, 31, 32, 41, 42].includes(tooth.id);
+  const isAnterior = isCanine || isIncisor;
+  const isUpperArch = tooth.quadrant === 1 || tooth.quadrant === 2;
 
   // Surface status mapping
   const hasSurfaces = tooth.surfaces && tooth.surfaces.length > 0;
-  const surfaceCode = hasSurfaces ? tooth.surfaces!.map((s) => s[0].toUpperCase()).sort().join("") : "";
+  const surfaceCode = hasSurfaces
+    ? tooth.surfaces!
+        .map((s) => {
+          if (s === "occlusal") return isAnterior ? "I" : "O";
+          if (s === "buccal") return isAnterior ? "F" : "B";
+          if (s === "lingual") return isUpperArch ? "P" : "L";
+          return s[0].toUpperCase();
+        })
+        .sort()
+        .join("")
+    : "";
 
   const getStatusColor = () => {
     switch (tooth.status) {

@@ -47,9 +47,13 @@ export default function DashboardOverviewPage() {
     clinicProfile,
     loading,
     completeAppointment,
+    recordPayment,
   } = useClinic();
 
-  const [qrModalData, setQrModalData] = useState<{ patientName?: string; amount: number } | null>(null);
+  const [qrModalData, setQrModalData] = useState<{ patientId?: string; patientName?: string; amount: number } | null>(null);
+  const [selectedQrPatientId, setSelectedQrPatientId] = useState<string>("");
+  const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
+  const [isRecordingQrPayment, setIsRecordingQrPayment] = useState(false);
 
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
@@ -118,21 +122,21 @@ export default function DashboardOverviewPage() {
 
   // WhatsApp link generators
   const getWhatsAppTodayReminderUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "");
+    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const msg = `Hello ${apt.patientName}, this is a reminder for your dental appointment today at ${apt.time} (${apt.procedure}) with ${clinicProfile.dentistName} at ${clinicProfile.name}.\n\nPlease let us know when you arrive. See you soon!`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
   const getWhatsAppRecallUrl = (patient: Patient) => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const msg = `Hello ${patient.name}, greetings from ${clinicProfile.name}!\n\nDr. ${clinicProfile.dentistName} recommends a periodic follow-up / checkup for your dental health (Due: ${patient.followUpDue}).\n\nWould you like to reserve a convenient slot this week? Reply here or call us at ${clinicProfile.phone}.`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
   const getWhatsAppBillUrl = (patient: Patient, balance: number) => {
-    const cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const doctorUpi = clinicProfile.upiId || "dentally@upi";
     const msg = `Hello ${patient.name}, greetings from ${clinicProfile.name}.\n\nYour account has an outstanding balance of ₹${balance.toLocaleString()} for recent dental treatment.\n\nYou can pay directly via UPI: ${doctorUpi}, or scan our QR code on your next visit.\n\nWarm regards,\n${clinicProfile.dentistName} • ${clinicProfile.phone}`;
@@ -246,7 +250,11 @@ export default function DashboardOverviewPage() {
           </Link>
           <button
             type="button"
-            onClick={() => setQrModalData({ amount: 500 })}
+            onClick={() => {
+              setQrModalData({ amount: 500 });
+              setSelectedQrPatientId(patients[0]?._id || "");
+              setQrRecordedSuccess(null);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#EDF7FA] hover:bg-[#DDF1F6] border border-[#C2E4ED] text-[#00738E] font-semibold text-xs transition-colors"
             title="Open Instant Chairside UPI QR for walk-in patient"
           >
@@ -489,7 +497,11 @@ export default function DashboardOverviewPage() {
 
                     <button
                       type="button"
-                      onClick={() => setQrModalData({ patientName: patient.name, amount: patient.balance })}
+                      onClick={() => {
+                        setQrModalData({ patientId: patient._id, patientName: patient.name, amount: patient.balance });
+                        setSelectedQrPatientId(patient._id);
+                        setQrRecordedSuccess(null);
+                      }}
                       className="p-1.5 rounded-xl border border-[#0089A8] text-[#0089A8] bg-[#EDF7FA] hover:bg-[#D8EEF3]"
                       title="Generate instant UPI QR for this patient's balance"
                     >
@@ -575,10 +587,24 @@ export default function DashboardOverviewPage() {
             </div>
 
             <div className="space-y-1">
-              {qrModalData.patientName && (
+              {qrModalData.patientName ? (
                 <span className="text-xs text-[#64748B] block">Patient: <strong>{qrModalData.patientName}</strong></span>
+              ) : (
+                <div className="text-left pt-1">
+                  <label className="text-[10px] font-mono text-[#64748B] block mb-1">Credit Payment To Patient:</label>
+                  <select
+                    value={selectedQrPatientId}
+                    onChange={(e) => setSelectedQrPatientId(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-[#E4E9F0] text-xs bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                  >
+                    <option value="">Walk-In (General Desk Collection)</option>
+                    {patients.map((p) => (
+                      <option key={p._id} value={p._id}>{p.name} ({p.phone})</option>
+                    ))}
+                  </select>
+                </div>
               )}
-              <div className="text-2xl font-bold font-mono tracking-tight text-[#111C3A]">
+              <div className="text-2xl font-bold font-mono tracking-tight text-[#111C3A] pt-1">
                 ₹{qrModalData.amount.toLocaleString()}
               </div>
               <span className="text-[10px] font-mono text-[#8291A7] block">
@@ -586,15 +612,56 @@ export default function DashboardOverviewPage() {
               </span>
             </div>
 
-            <div className="pt-2 border-t border-[#E4E9F0]">
-              <button
-                type="button"
-                onClick={() => setQrModalData(null)}
-                className="w-full py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs"
-              >
-                Done / Received
-              </button>
-            </div>
+            {qrRecordedSuccess ? (
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-1.5 animate-in fade-in">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>{qrRecordedSuccess}</span>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-[#E4E9F0] flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={isRecordingQrPayment}
+                  onClick={async () => {
+                    setIsRecordingQrPayment(true);
+                    try {
+                      const patientObj = patients.find((p) => p._id === (qrModalData.patientId || selectedQrPatientId));
+                      await recordPayment({
+                        _id: `pay_${Date.now()}`,
+                        patientId: patientObj?._id || "walk_in",
+                        patientName: patientObj?.name || qrModalData.patientName || "Walk-In Patient",
+                        date: todayStr,
+                        time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+                        amount: qrModalData.amount,
+                        paymentMethod: "UPI",
+                        notes: "Chairside Desk UPI QR collection",
+                        receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                      });
+                      setQrRecordedSuccess(`₹${qrModalData.amount.toLocaleString()} recorded & credited to daily collections!`);
+                      setTimeout(() => {
+                        setQrModalData(null);
+                        setQrRecordedSuccess(null);
+                      }, 1600);
+                    } catch (err) {
+                      console.error("Failed to record QR payment", err);
+                    } finally {
+                      setIsRecordingQrPayment(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>{isRecordingQrPayment ? "Recording..." : `Record ₹${qrModalData.amount.toLocaleString()} as Paid`}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrModalData(null)}
+                  className="w-full py-2 rounded-xl text-[#8291A7] hover:text-[#111C3A] text-xs font-medium"
+                >
+                  Dismiss Without Recording
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
