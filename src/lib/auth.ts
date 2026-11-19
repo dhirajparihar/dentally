@@ -58,20 +58,54 @@ export const authOptions: NextAuthOptions = {
       try {
         await connectDB();
         const profile = await ClinicProfileModel.findOne({ dentistEmail: normalizedEmail }).lean();
+        // Check if this clinic account has been suspended by platform admin
         if (profile && (profile.status === "suspended" || profile.isActive === false)) {
           console.warn(`[Auth] Blocked suspended clinic login attempt: ${user.email}`);
           return false;
         }
 
-        // Update last active timestamp
-        if (profile) {
-          await ClinicProfileModel.updateOne(
-            { dentistEmail: normalizedEmail },
-            { $set: { lastActiveAt: new Date() } }
-          );
-        }
+        // Just-In-Time (JIT) Tenant Provisioning:
+        // Provision the clinic profile in MongoDB on first login if it doesn't exist,
+        // or update lastActiveAt for returning dentists.
+        const rawName = user.name?.trim() || "";
+        const doctorName = rawName
+          ? (rawName.toLowerCase().startsWith("dr.") || rawName.toLowerCase().startsWith("dr ")
+              ? rawName
+              : `Dr. ${rawName}`)
+          : "Doctor";
+        const defaultClinicName = rawName
+          ? `${rawName.replace(/^dr\.?\s+/i, "")}'s Dental Studio`
+          : "Dentally Clinic";
+
+        await ClinicProfileModel.findOneAndUpdate(
+          { dentistEmail: normalizedEmail },
+          {
+            $setOnInsert: {
+              dentistEmail: normalizedEmail,
+              dentistName: doctorName,
+              name: defaultClinicName,
+              qualification: "BDS, MDS",
+              regNo: "DCI-ONLINE",
+              phone: "+91 98200 11223",
+              email: normalizedEmail,
+              address: "Dental Operatory",
+              upiId: "dentally@upi",
+              slotDuration: 30,
+              workingHoursStart: "09:30 AM",
+              workingHoursEnd: "08:00 PM",
+              receiptFooter:
+                "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
+              isConfigured: false,
+              status: "active",
+              isActive: true,
+              tier: "pro",
+            },
+            $set: { lastActiveAt: new Date() },
+          },
+          { upsert: true, new: true }
+        );
       } catch (err) {
-        console.warn("[Auth] Failed to check clinic profile status:", err);
+        console.warn("[Auth] Failed to check or provision clinic profile:", err);
       }
 
       return true;
