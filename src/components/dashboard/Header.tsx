@@ -91,13 +91,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
             </Link>
           )}
 
-          {/* Quick Schedule Button */}
-          {onBookAppointment ? (
-            <button type="button" onClick={onBookAppointment} disabled={loading} aria-haspopup="dialog" aria-label="Book Appointment" className={`${bookingButtonClass} disabled:opacity-50`}>
-              {bookingButtonLabel}
-            </button>
-          ) : pathname !== "/dashboard/appointments" && (
-            <Link href="/dashboard/appointments" className={bookingButtonClass}>{bookingButtonLabel}</Link>
+          {/* Quick Schedule Button (hidden on appointments page to avoid duplicate CTAs) */}
+          {pathname !== "/dashboard/appointments" && (
+            onBookAppointment ? (
+              <button type="button" onClick={onBookAppointment} disabled={loading} aria-haspopup="dialog" aria-label="Book Appointment" className={`${bookingButtonClass} disabled:opacity-50`}>
+                {bookingButtonLabel}
+              </button>
+            ) : (
+              <Link href="/dashboard/appointments" className={bookingButtonClass}>{bookingButtonLabel}</Link>
+            )
           )}
 
           {/* User Profile Avatar with Google Badge & Sign Out Dropdown */}

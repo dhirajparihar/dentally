@@ -245,15 +245,6 @@ export default function DashboardOverviewPage() {
             <IndianRupee size={16} aria-hidden="true" />
             Record Payment
           </button>
-          <button
-            type="button"
-            className="workspace-button secondary small"
-            disabled={loading}
-            onClick={() => openQr(500)}
-          >
-            <QrCode size={16} aria-hidden="true" />
-            Desk QR
-          </button>
         </div>
       </section>
 

@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import {
   LayoutDashboard,
   Users,
@@ -12,7 +12,6 @@ import {
   CreditCard,
   Cpu,
   X,
-  LogOut,
   Settings,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
@@ -37,14 +36,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   const { clinicProfile } = useClinic();
 
   const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
-  const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
-  const userImage = session?.user?.image;
-  const initials = userName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <>
@@ -135,40 +126,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           })}
         </div>
 
-        {/* Solo Dentist Profile footer */}
+        {/* Practice info footer */}
         <div className="p-4 border-t border-[#E4E9F0] bg-[#FAFBFC]">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {userImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={userImage}
-                  alt={userName}
-                  className="w-8 h-8 rounded-full border border-[#BEE3E9] object-cover shrink-0"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[#0089A8] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                  {initials}
-                </div>
-              )}
-              <div className="overflow-hidden min-w-0">
-                <h5 className="text-xs font-semibold text-[#111C3A] truncate">
-                  {userName}
-                </h5>
-                <p className="text-[10px] text-[#64748B] font-mono truncate">
-                  {userEmail}
-                </p>
-              </div>
+          <Link
+            href="/dashboard/settings"
+            onClick={onClose}
+            className="flex items-center justify-between gap-2 p-1.5 -m-1.5 rounded-xl hover:bg-[#EDF7FA] transition-colors group"
+            title="Clinic settings"
+          >
+            <div className="overflow-hidden min-w-0">
+              <h5 className="text-xs font-semibold text-[#111C3A] truncate group-hover:text-[#0089A8] transition-colors">
+                {clinicProfile.name || "Dentally Practice"}
+              </h5>
+              <p className="text-[10px] text-[#64748B] font-mono truncate">
+                Dr. {clinicProfile.dentistName || userName}
+              </p>
             </div>
-
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#EDF7FA] transition-colors shrink-0"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+            <Settings className="w-3.5 h-3.5 text-[#8291A7] group-hover:text-[#0089A8] transition-colors shrink-0" />
+          </Link>
         </div>
       </aside>
     </>

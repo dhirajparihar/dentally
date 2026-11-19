@@ -344,27 +344,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             <div className="flex min-w-0 items-start gap-1.5">
               <button type="button" onClick={onBack} className="detail-back" aria-label="Back to patients"><ArrowLeft size={16} /></button>
               <h2 className="min-w-0 break-words text-xl font-bold text-[#111C3A] sm:text-2xl">{patient.name}</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditForm({
-                    name: patient.name,
-                    age: patient.age.toString(),
-                    gender: patient.gender,
-                    phone: patient.phone,
-                    email: patient.email || "",
-                    address: patient.address || "",
-                    bloodGroup: patient.bloodGroup || "O+",
-                    medicalAlerts: (patient.medicalAlerts || []).join(", "),
-                  });
-                  setIsEditProfileOpen(true);
-                }}
-                className="p-1.5 rounded-lg text-[#64748B] hover:text-[#0089A8] hover:bg-[#EDF7FA] transition-colors mt-0.5"
-                title="Edit Patient Demographics & Allergies"
-                aria-label="Edit Profile"
-              >
-                <Edit3 size={15} />
-              </button>
             </div>
             <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
               <span>{patient.age} yrs &middot; {patient.gender}</span><span className="break-all">ID: {patient._id}</span>
@@ -447,17 +426,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     <IndianRupee size={14} className="text-[#0089A8] shrink-0" />
                     <span>Record Payment</span>
                   </button>
-
-                  <a
-                    href={getWhatsAppReminderUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setIsMenuOpen(false)}
-                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                  >
-                    <Share2 size={14} className="text-[#0089A8] shrink-0" />
-                    <span>WhatsApp Patient</span>
-                  </a>
 
                   <button
                     type="button"
