@@ -282,7 +282,6 @@ export default function AppointmentsPage() {
               {availableSlots.map((slot) => <li key={slot} className="appointment-time-chip">{slot}</li>)}
             </ul>
           )}
-          )}
         </section>
       )}
 
