@@ -159,6 +159,10 @@ export interface ClinicProfile {
   status?: "active" | "suspended";
   isActive?: boolean;
   lastActiveAt?: string | Date;
+  mcpLastCalledAt?: string | Date;
+  mcpCallCount?: number;
+  mcpTokenRevokedAt?: string | Date;
+  tier?: "trial" | "pro";
   createdAt?: string | Date;
 }
 

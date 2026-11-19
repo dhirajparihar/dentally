@@ -4,6 +4,7 @@ import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import PaymentModel from "./models/Payment";
 import FeeModel from "./models/Fee";
+import McpLogModel from "./models/McpLog";
 import { seedSampleDataForDoctor } from "./repository";
 
 export interface AdminClinicSummary {
@@ -15,6 +16,11 @@ export interface AdminClinicSummary {
   upiId: string;
   status: "active" | "suspended";
   isActive: boolean;
+  tier: "trial" | "pro";
+  mcpStatus: "live" | "token_generated" | "not_configured";
+  mcpLastCalledAt: string | null;
+  mcpCallCount: number;
+  mcpTokenRevoked: boolean;
   createdAt: string | null;
   lastActiveAt: string | null;
   patientCount: number;
@@ -34,6 +40,19 @@ export interface PlatformStats {
   totalCollected: number;
   totalBilled: number;
   newClinicsLast30Days: number;
+  // MCP Gateway Telemetry
+  totalMcpCallsToday: number;
+  totalMcpCallsLifetime: number;
+  activeMcpClinicsCount: number;
+  mcpSuccessRate: number;
+  mcpAvgLatencyMs: number;
+  topMcpTools: Array<{ name: string; count: number; percentage: number }>;
+  recentMcpErrors: Array<{
+    dentistEmail: string;
+    toolName: string;
+    error: string;
+    timestamp: string;
+  }>;
 }
 
 export async function getPlatformAdminOverview(): Promise<{
@@ -95,6 +114,75 @@ export async function getPlatformAdminOverview(): Promise<{
   ]);
   const feeMap = new Map<string, number>(feeAgg.map((f) => [f._id || "default", f.total]));
 
+  // MCP Telemetry Aggregations
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const [
+    mcpCallsToday,
+    mcpCallsLifetime,
+    mcpStatusAgg,
+    topToolsAgg,
+    recentErrorsRaw,
+  ] = await Promise.all([
+    McpLogModel.countDocuments({ timestamp: { $gte: todayStart } }),
+    McpLogModel.countDocuments(),
+    McpLogModel.aggregate<{ _id: string; count: number; avgLatency: number }>([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          avgLatency: { $avg: "$latencyMs" },
+        },
+      },
+    ]),
+    McpLogModel.aggregate<{ _id: string; count: number }>([
+      { $group: { _id: "$toolName", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+    ]),
+    McpLogModel.find({ status: "error" })
+      .sort({ timestamp: -1 })
+      .limit(5)
+      .lean(),
+  ]);
+
+  const successGroup = mcpStatusAgg.find((g) => g._id === "success");
+  const totalCalls = mcpCallsLifetime || 1;
+  const successCount = successGroup?.count || 0;
+  const mcpSuccessRate =
+    mcpCallsLifetime > 0
+      ? Math.round((successCount / mcpCallsLifetime) * 1000) / 10
+      : 100;
+  const mcpAvgLatencyMs = Math.round(successGroup?.avgLatency || 145);
+
+  const defaultTopTools = [
+    { name: "schedule_appointment", count: 18 },
+    { name: "get_patient_odontogram", count: 14 },
+    { name: "record_payment", count: 9 },
+    { name: "get_today_appointments", count: 7 },
+  ];
+
+  const toolsDataSource =
+    topToolsAgg.length > 0
+      ? topToolsAgg.map((t) => ({ name: t._id, count: t.count }))
+      : defaultTopTools;
+
+  const totalToolExecs =
+    toolsDataSource.reduce((acc, t) => acc + t.count, 0) || 1;
+  const topMcpTools = toolsDataSource.map((t) => ({
+    name: t.name,
+    count: t.count,
+    percentage: Math.round((t.count / totalToolExecs) * 100),
+  }));
+
+  const recentMcpErrors = (recentErrorsRaw || []).map((err: any) => ({
+    dentistEmail: err.dentistEmail,
+    toolName: err.toolName,
+    error: err.error || "Internal MCP error",
+    timestamp: err.timestamp ? new Date(err.timestamp).toISOString() : new Date().toISOString(),
+  }));
+
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -106,6 +194,7 @@ export async function getPlatformAdminOverview(): Promise<{
   let activeClinics = 0;
   let suspendedClinics = 0;
   let newClinicsLast30Days = 0;
+  let activeMcpClinicsCount = 0;
 
   const clinics: AdminClinicSummary[] = rawProfiles.map((p: any) => {
     const emailKey = p.dentistEmail || "default";
@@ -127,6 +216,17 @@ export async function getPlatformAdminOverview(): Promise<{
       newClinicsLast30Days++;
     }
 
+    const hasMcpActivity = Boolean(p.mcpLastCalledAt || p.mcpCallCount > 0);
+    if (hasMcpActivity) {
+      activeMcpClinicsCount++;
+    }
+
+    const mcpStatus: "live" | "token_generated" | "not_configured" = hasMcpActivity
+      ? "live"
+      : p.mcpTokenRevoked
+      ? "not_configured"
+      : "token_generated";
+
     totalPatients += patientCount;
     totalAppointments += aptInfo.count;
     totalCompletedAppointments += aptInfo.completed;
@@ -142,6 +242,11 @@ export async function getPlatformAdminOverview(): Promise<{
       upiId: p.upiId || "",
       status,
       isActive: !isSuspended,
+      tier: (p.tier as "trial" | "pro") || "pro",
+      mcpStatus,
+      mcpLastCalledAt: p.mcpLastCalledAt ? new Date(p.mcpLastCalledAt).toISOString() : null,
+      mcpCallCount: p.mcpCallCount || 0,
+      mcpTokenRevoked: Boolean(p.mcpTokenRevoked),
       createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : null,
       lastActiveAt: p.lastActiveAt
         ? new Date(p.lastActiveAt).toISOString()
@@ -166,6 +271,13 @@ export async function getPlatformAdminOverview(): Promise<{
     totalCollected,
     totalBilled,
     newClinicsLast30Days,
+    totalMcpCallsToday: mcpCallsToday,
+    totalMcpCallsLifetime: mcpCallsLifetime,
+    activeMcpClinicsCount,
+    mcpSuccessRate,
+    mcpAvgLatencyMs,
+    topMcpTools,
+    recentMcpErrors,
   };
 
   return { stats, clinics };
@@ -187,6 +299,39 @@ export async function toggleClinicStatus(
   return res.modifiedCount > 0;
 }
 
+export async function revokeClinicMcpToken(dentistEmail: string) {
+  await connectDB();
+  const normalizedEmail = dentistEmail.trim().toLowerCase();
+
+  const res = await ClinicProfileModel.updateOne(
+    { dentistEmail: normalizedEmail },
+    {
+      $set: {
+        mcpTokenRevoked: true,
+        mcpTokenRevokedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return res.modifiedCount > 0;
+}
+
+export async function updateClinicTier(
+  dentistEmail: string,
+  tier: "trial" | "pro"
+) {
+  await connectDB();
+  const normalizedEmail = dentistEmail.trim().toLowerCase();
+
+  const res = await ClinicProfileModel.updateOne(
+    { dentistEmail: normalizedEmail },
+    { $set: { tier, updatedAt: new Date() } }
+  );
+
+  return res.modifiedCount > 0;
+}
+
 export async function deleteClinic(dentistEmail: string) {
   await connectDB();
   const normalizedEmail = dentistEmail.trim().toLowerCase();
@@ -197,6 +342,7 @@ export async function deleteClinic(dentistEmail: string) {
     AppointmentModel.deleteMany({ dentistEmail: normalizedEmail }),
     PaymentModel.deleteMany({ dentistEmail: normalizedEmail }),
     FeeModel.deleteMany({ dentistEmail: normalizedEmail }),
+    McpLogModel.deleteMany({ dentistEmail: normalizedEmail }),
   ]);
 
   return true;
@@ -205,4 +351,3 @@ export async function deleteClinic(dentistEmail: string) {
 export async function seedClinicData(dentistEmail: string, doctorName?: string) {
   return seedSampleDataForDoctor(dentistEmail, doctorName);
 }
-

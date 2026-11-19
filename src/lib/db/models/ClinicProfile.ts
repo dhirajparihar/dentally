@@ -17,6 +17,11 @@ export interface IClinicProfile extends Document {
   status: "active" | "suspended";
   isActive: boolean;
   lastActiveAt?: Date;
+  mcpLastCalledAt?: Date;
+  mcpCallCount?: number;
+  mcpTokenRevoked?: boolean;
+  mcpTokenRevokedAt?: Date;
+  tier?: "trial" | "pro";
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -42,6 +47,11 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
     status: { type: String, enum: ["active", "suspended"], default: "active" },
     isActive: { type: Boolean, default: true },
     lastActiveAt: { type: Date, default: Date.now },
+    mcpLastCalledAt: { type: Date, default: null },
+    mcpCallCount: { type: Number, default: 0 },
+    mcpTokenRevoked: { type: Boolean, default: false },
+    mcpTokenRevokedAt: { type: Date, default: null },
+    tier: { type: String, enum: ["trial", "pro"], default: "pro" },
   },
   { timestamps: true }
 );

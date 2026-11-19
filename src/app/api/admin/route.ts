@@ -6,6 +6,8 @@ import {
   toggleClinicStatus,
   deleteClinic,
   seedClinicData,
+  revokeClinicMcpToken,
+  updateClinicTier,
 } from "@/lib/db/adminRepository";
 import { ClinicProfileModel } from "@/lib/db/models/ClinicProfile";
 import { connectDB } from "@/lib/db/connect";
@@ -92,6 +94,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "dentistEmail is required to seed sample data." }, { status: 400 });
       }
       await seedClinicData(dentistEmail, doctorName || "Doctor");
+      const updated = await getPlatformAdminOverview();
+      return NextResponse.json({ success: true, ...updated });
+    }
+
+    if (action === "revoke_mcp_token") {
+      if (!dentistEmail) {
+        return NextResponse.json({ error: "dentistEmail is required to revoke MCP token." }, { status: 400 });
+      }
+      await revokeClinicMcpToken(dentistEmail);
+      const updated = await getPlatformAdminOverview();
+      return NextResponse.json({ success: true, ...updated });
+    }
+
+    if (action === "update_tier") {
+      if (!dentistEmail || !body.tier) {
+        return NextResponse.json({ error: "dentistEmail and tier are required." }, { status: 400 });
+      }
+      await updateClinicTier(dentistEmail, body.tier);
       const updated = await getPlatformAdminOverview();
       return NextResponse.json({ success: true, ...updated });
     }
