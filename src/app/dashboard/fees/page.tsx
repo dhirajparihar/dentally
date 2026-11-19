@@ -213,8 +213,35 @@ export default function FeesPage() {
       <div className="workspace-segments" role="group" aria-label="Financial record type">
         {([{ id: "dues", label: "Dues", count: unpaidDuesList.length }, { id: "fees", label: "Invoices", count: fees.length }, { id: "payments", label: "Payments", count: payments.length }] as const).map(({ id, label, count }) => <button key={id} type="button" aria-pressed={activeTab === id} onClick={() => setActiveTab(id)}>{label}<span>{count}</span></button>)}
       </div>
-      {loading ? <div role="status" className="workspace-empty">Loading records...</div> : activeTab === "dues" ? (
-        visibleDues.length === 0 ? <div className="workspace-empty"><CheckCircle2 size={26} className="mx-auto mb-2 text-[#0089A8]" aria-hidden="true" /><h2 className="text-sm font-semibold">{search ? "No matching balances" : "All accounts settled"}</h2><p className="mt-1 text-xs text-[#64748B]">{search ? "Try a name, phone, ID, or treatment." : "No outstanding patient balances."}</p></div> : (
+      {loading ? (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2" role="status" aria-label="Loading financial records">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="animate-pulse rounded-2xl border border-[#E4E9F0] bg-white p-5 space-y-3">
+              <div className="flex justify-between">
+                <div className="space-y-1.5">
+                  <div className="h-5 w-32 rounded bg-slate-200" />
+                  <div className="h-3 w-20 rounded bg-slate-100" />
+                </div>
+                <div className="h-6 w-16 rounded bg-slate-200" />
+              </div>
+              <div className="h-4 w-44 rounded bg-slate-100" />
+              <div className="pt-2 border-t border-[#E4E9F0] flex justify-between">
+                <div className="h-4 w-28 rounded bg-slate-100" />
+                <div className="h-8 w-16 rounded-xl bg-slate-100" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : activeTab === "dues" ? (
+        visibleDues.length === 0 ? (
+          <div className="workspace-empty">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-inner">
+              <CheckCircle2 size={24} aria-hidden="true" />
+            </div>
+            <h2 className="text-sm font-bold text-[#111C3A]">{search ? "No matching balances" : "All accounts settled"}</h2>
+            <p className="mt-1 text-xs text-[#64748B]">{search ? "Try searching by patient name, phone, or treatment." : "No outstanding patient balances at this time."}</p>
+          </div>
+        ) : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {visibleDues.map(({ patient, totalBilled, totalPaid, outstanding, latestFee }) => (
               <article key={patient._id} className="finance-due-card">
@@ -233,7 +260,27 @@ export default function FeesPage() {
           </div>
         )
       ) : activeTab === "fees" ? (
-        visibleFees.length === 0 ? <div className="workspace-empty">{search ? "No matching invoices." : "No invoices yet."}</div> : (
+        visibleFees.length === 0 ? (
+          <div className="workspace-empty">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8] shadow-inner">
+              <FileText size={22} aria-hidden="true" />
+            </div>
+            <h2 className="text-sm font-bold text-[#111C3A]">{search ? "No matching invoices" : "No treatment invoices yet"}</h2>
+            <p className="mt-1 text-xs text-[#64748B]">{search ? "Try searching by patient name or procedure." : "Create an invoice when performing procedures."}</p>
+            {!search && patients.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFeeForm((prev) => ({ ...prev, patientId: patients[0]?._id || "" }));
+                  setIsAddFeeOpen(true);
+                }}
+                className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl bg-[#0089A8] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]"
+              >
+                <Plus size={14} /> Add First Fee
+              </button>
+            )}
+          </div>
+        ) : (
           <section aria-label="Treatment invoices" className="finance-record-list">
             {visibleFees.map((fee) => {
               const status = feeStatus(fee);
@@ -281,7 +328,24 @@ export default function FeesPage() {
           </section>
         )
       ) : (
-        visiblePayments.length === 0 ? <div className="workspace-empty">{search ? "No matching payments." : "No payments yet."}</div> : (
+        visiblePayments.length === 0 ? (
+          <div className="workspace-empty">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8] shadow-inner">
+              <Receipt size={22} aria-hidden="true" />
+            </div>
+            <h2 className="text-sm font-bold text-[#111C3A]">{search ? "No matching payments" : "No payment transactions yet"}</h2>
+            <p className="mt-1 text-xs text-[#64748B]">{search ? "Try searching by patient name or receipt number." : "Recorded payments and settlements will appear here."}</p>
+            {!search && patients.length > 0 && (
+              <button
+                type="button"
+                onClick={() => openPayment()}
+                className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl bg-[#0089A8] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]"
+              >
+                <IndianRupee size={14} /> Record Payment
+              </button>
+            )}
+          </div>
+        ) : (
           <section aria-label="Payment receipts" className="finance-record-list">
             {visiblePayments.map((payment) => <article key={payment._id} className="finance-record payment-record"><div className="finance-record-main"><h2 className="text-sm font-semibold">{payment.patientName}</h2><p className="mt-1 text-xs text-[#52627A]">{payment.receiptNo} &middot; {payment.paymentMethod}{payment.isRefund && <span className="ml-2 text-rose-700">Refund</span>}</p><p className="mt-1 text-[11px] text-[#8291A7]">{payment.date} &middot; {payment.time}</p>{payment.notes && <p className="mt-2 break-words text-xs leading-5 text-[#64748B]">{payment.notes}</p>}</div><div className="finance-record-amount"><p className="text-sm font-semibold text-[#197344]">{money(payment.amount)}</p></div><button type="button" onClick={() => setSelectedReceipt(payment)} className="workspace-button secondary small finance-receipt"><Receipt size={14} />Receipt</button></article>)}
           </section>

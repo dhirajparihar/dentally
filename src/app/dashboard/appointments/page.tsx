@@ -271,10 +271,17 @@ export default function AppointmentsPage() {
             <h2 id="slots-heading" className="text-sm font-semibold">Available Slots <span className="font-normal text-[#64748B]">&middot; Chair 1</span></h2>
             <span className="text-xs text-[#64748B]">{loading ? "Loading..." : `${availableSlots.length} available`}</span>
           </div>
-          {loading ? <p role="status" className="text-xs text-[#64748B]">Loading slots...</p> : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
+          {loading ? (
+            <div className="flex flex-wrap gap-2 animate-pulse" role="status" aria-label="Loading available slots">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-9 w-24 rounded-lg bg-slate-200/60" />
+              ))}
+            </div>
+          ) : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
             <ul className="appointment-slot-list" role="list" aria-label={`Available slots on ${selectedDateLabel}`}>
               {availableSlots.map((slot) => <li key={slot} className="appointment-time-chip">{slot}</li>)}
             </ul>
+          )}
           )}
         </section>
       )}
@@ -289,8 +296,29 @@ export default function AppointmentsPage() {
             </select>
           )}
         </div>
-        {loading ? <p role="status" className="appointment-empty">Loading appointments...</p> : visibleAppointments.length === 0 ? (
-          <div className="appointment-empty"><Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" /><p className="text-sm font-medium">No appointments {viewMode === "timeline" ? "on this date" : "found"}.</p>{viewMode === "list" && <p className="mt-1 text-xs text-[#64748B]">Try another status filter.</p>}</div>
+        {loading ? (
+          <div className="space-y-3" role="status" aria-label="Loading appointments">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse rounded-2xl border border-[#E4E9F0] bg-white p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="h-5 w-24 rounded-lg bg-slate-100" />
+                  <div className="h-6 w-20 rounded-full bg-slate-100" />
+                </div>
+                <div className="h-5 w-44 rounded-lg bg-slate-200" />
+                <div className="h-4 w-32 rounded-lg bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        ) : visibleAppointments.length === 0 ? (
+          <div className="appointment-empty">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8] shadow-inner">
+              <Calendar size={22} aria-hidden="true" />
+            </div>
+            <p className="text-sm font-bold text-[#111C3A]">No appointments {viewMode === "timeline" ? "on this date" : "found"}</p>
+            <p className="mt-1 text-xs text-[#64748B]">
+              {viewMode === "list" ? "Try selecting another status filter above." : "Select a date above or book a new appointment from the top header."}
+            </p>
+          </div>
         ) : (
           <div className={viewMode === "list" ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "appointment-timeline space-y-3"}>
             {visibleAppointments.map((appointment) => {

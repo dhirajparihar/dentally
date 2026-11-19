@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle, ArrowRight, Calendar, Check, CreditCard, IndianRupee, MoreHorizontal, Phone,
-  QrCode, RefreshCw, Share2, User, X,
+  AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, CreditCard, IndianRupee, MoreHorizontal, Phone,
+  Plus, QrCode, RefreshCw, Share2, User, X,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import type { Appointment, Patient } from "@/lib/mockData";
@@ -265,11 +265,31 @@ export default function DashboardOverviewPage() {
         </div>
 
         {loading ? (
-          <p role="status" className="appointment-empty">Loading appointments…</p>
+          <div className="space-y-3" role="status" aria-label="Loading appointments">
+            {[1, 2].map((i) => (
+              <div key={i} className="animate-pulse rounded-2xl border border-[#E4E9F0] bg-white p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="h-5 w-24 rounded-lg bg-slate-100" />
+                  <div className="h-6 w-20 rounded-full bg-slate-100" />
+                </div>
+                <div className="h-5 w-40 rounded-lg bg-slate-200" />
+                <div className="h-4 w-32 rounded-lg bg-slate-100" />
+              </div>
+            ))}
+          </div>
         ) : todayAppointments.length === 0 ? (
           <div className="appointment-empty">
-            <Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" />
-            <p className="text-sm font-medium">No appointments today.</p>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8] shadow-inner">
+              <Calendar size={22} aria-hidden="true" />
+            </div>
+            <p className="text-sm font-bold text-[#111C3A]">No appointments scheduled today</p>
+            <p className="mt-1 text-xs text-[#64748B]">Your operatory schedule is clear today.</p>
+            <Link
+              href={appointmentsUrl}
+              className="mt-3.5 inline-flex items-center gap-1.5 rounded-xl bg-[#0089A8] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]"
+            >
+              <Plus size={14} /> Book Appointment
+            </Link>
           </div>
         ) : (
           <div className="appointment-timeline space-y-3">
@@ -351,11 +371,28 @@ export default function DashboardOverviewPage() {
             </Link>
           </div>
 
-          <div className="rounded-3xl border border-[#E4E9F0] bg-white">
-            {loading || recallsDue.length === 0 ? (
-              <p role="status" className="px-4 py-6 text-center text-sm text-[#64748B]">
-                {loading ? "Loading recalls…" : "All patient recalls caught up. No follow-ups due this week."}
-              </p>
+          <div className="rounded-3xl border border-[#E4E9F0] bg-white overflow-hidden">
+            {loading ? (
+              <div className="p-4 space-y-3 animate-pulse" role="status" aria-label="Loading recalls">
+                {[1, 2].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-100 shrink-0" />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 w-28 rounded bg-slate-200" />
+                      <div className="h-3 w-16 rounded bg-slate-100" />
+                    </div>
+                    <div className="h-7 w-16 rounded-xl bg-slate-100" />
+                  </div>
+                ))}
+              </div>
+            ) : recallsDue.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-6 text-center">
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8]">
+                  <CheckCircle2 size={20} aria-hidden="true" />
+                </div>
+                <p className="text-sm font-bold text-[#111C3A]">Recalls all caught up</p>
+                <p className="mt-0.5 text-xs text-[#64748B]">No patient follow-ups or checkups due this week.</p>
+              </div>
             ) : (
               <ul role="list" className="divide-y divide-[#E4E9F0]">
                 {recallsDue.slice(0, 5).map(({ patient, dueDate }) => {
@@ -403,11 +440,28 @@ export default function DashboardOverviewPage() {
             </Link>
           </div>
 
-          <div className="rounded-3xl border border-[#E4E9F0] bg-white">
-            {loading || patientsWithBalances.length === 0 ? (
-              <p role="status" className="px-4 py-6 text-center text-sm text-[#64748B]">
-                {loading ? "Loading balances…" : "No outstanding patient balances."}
-              </p>
+          <div className="rounded-3xl border border-[#E4E9F0] bg-white overflow-hidden">
+            {loading ? (
+              <div className="p-4 space-y-3 animate-pulse" role="status" aria-label="Loading balances">
+                {[1, 2].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-100 shrink-0" />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 w-28 rounded bg-slate-200" />
+                      <div className="h-3 w-16 rounded bg-slate-100" />
+                    </div>
+                    <div className="h-7 w-20 rounded-xl bg-slate-100" />
+                  </div>
+                ))}
+              </div>
+            ) : patientsWithBalances.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-6 text-center">
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                  <CheckCircle2 size={20} aria-hidden="true" />
+                </div>
+                <p className="text-sm font-bold text-[#111C3A]">All accounts settled</p>
+                <p className="mt-0.5 text-xs text-[#64748B]">No outstanding patient dues at this time.</p>
+              </div>
             ) : (
               <ul role="list" className="divide-y divide-[#E4E9F0]">
                 {patientsWithBalances.slice(0, 5).map(({ patient, balance }) => (

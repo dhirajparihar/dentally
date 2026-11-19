@@ -140,7 +140,24 @@ export default function PatientsPage() {
       </div>
 
       {loading ? (
-        <p role="status" className="py-8 text-center text-sm text-[#64748B]">Loading patients...</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3" role="status" aria-label="Loading patients">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="animate-pulse rounded-2xl border border-[#E4E9F0] bg-white p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-slate-200 shrink-0" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 w-32 rounded bg-slate-200" />
+                  <div className="h-3 w-20 rounded bg-slate-100" />
+                </div>
+              </div>
+              <div className="h-4 w-40 rounded bg-slate-100" />
+              <div className="pt-2 border-t border-[#E4E9F0] flex justify-between">
+                <div className="h-4 w-16 rounded bg-slate-100" />
+                <div className="h-7 w-16 rounded-lg bg-slate-100" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="premium-card mx-auto max-w-xl space-y-3 p-6 text-center sm:p-8">
           <Users className="mx-auto h-8 w-8 text-[#0089A8]" aria-hidden="true" />
@@ -159,7 +176,7 @@ export default function PatientsPage() {
             const detailsUrl = `/dashboard/patients/${encodeURIComponent(patient._id)}`;
 
             return (
-              <article key={patient._id} className="relative flex min-w-0 flex-col rounded-2xl border border-[#E4E9F0] bg-white p-4 transition-shadow hover:shadow-xs">
+              <article key={patient._id} className="relative flex min-w-0 flex-col rounded-2xl border border-[#E4E9F0] bg-white p-4 shadow-[0_1px_3px_rgba(17,28,58,0.03)] transition-all duration-200 hover:border-[#8DC9D7] hover:shadow-[0_8px_20px_-4px_rgba(0,137,168,0.1)] hover:-translate-y-0.5">
                 <div className="flex items-start gap-2.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#EDF7FA] text-sm font-semibold text-[#0089A8]" aria-hidden="true">{patient.name[0]}</div>
                   <div className="min-w-0 flex-1">

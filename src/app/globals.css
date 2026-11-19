@@ -84,11 +84,11 @@
 .dashboard-shell :is(button, a, input, select, textarea):focus-visible { outline: 3px solid #66bed0; outline-offset: 3px; }
 .dashboard-shell :is(input, select, textarea) { min-height: 42px; }
 .dashboard-shell button { touch-action: manipulation; }
-.premium-card { background: #fff; border: 1px solid #e4e9f0; border-radius: 22px; box-shadow: 0 2px 5px #111c3a02; }
-.action-primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 13px 22px; border-radius: 999px; font-size: 14px; font-weight: 600; line-height: 1.5; transition: background .15s, border-color .15s; }
-.action-primary { background: #0089a8; color: white; border: 1px solid #0089a8; }
-.action-primary:hover { background: #00738e; border-color: #00738e; }
-.status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600; text-transform: capitalize; border: 1px solid #dce4ed; color: #52627a; background: #f8fafc; }
+.premium-card { background: #fff; border: 1px solid #e4e9f0; border-radius: 22px; box-shadow: 0 1px 3px rgba(17, 28, 58, 0.03); transition: border-color .2s ease, box-shadow .2s ease; }
+.action-primary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 13px 22px; border-radius: 999px; font-size: 14px; font-weight: 600; line-height: 1.5; transition: background .15s, border-color .15s, transform .15s, box-shadow .15s; }
+.action-primary { background: #0089a8; color: white; border: 1px solid #0089a8; box-shadow: 0 2px 6px rgba(0, 137, 168, 0.2); }
+.action-primary:hover { background: #00738e; border-color: #00738e; transform: translateY(-0.5px); box-shadow: 0 4px 12px rgba(0, 137, 168, 0.25); }
+.status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; text-transform: capitalize; border: 1px solid #dce4ed; color: #52627a; background: #f8fafc; transition: all .15s ease; }
 .status-pill.scheduled { color: #16804c; border-color: #d1f3df; background: #edfbf2; }
 .status-pill.completed { color: #00738e; border-color: #d4edf3; background: #edf7fa; }
 .status-pill.missed, .status-pill.cancelled { color: #9f3851; border-color: #f5dce3; background: #fff3f5; }
@@ -99,7 +99,8 @@
 .appointment-outcome-error { max-width: 16ch; margin-top: 4px; font-size: 11px; color: #9f3851; }
 .small-outline { display: inline-flex; justify-content: center; align-items: center; min-height: 38px; border: 1px solid #c4e5ef; padding: 7px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #007f9e; background: #fff; }
 .small-outline:hover { background: #edf7fa; }
-.patient-row { display: flex; align-items: center; gap: 16px; padding: 18px 24px; }
+.patient-row { display: flex; align-items: center; gap: 16px; padding: 18px 24px; transition: background-color .15s ease; }
+.patient-row:hover { background-color: #f8fafc; }
 .patient-avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #e3f5fd; color: #0089a8; flex-shrink: 0; }
 .view-pill { display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #d2edf7; border-radius: 999px; background: #edf9ff; padding: 8px 18px; font-size: 13px; color: #007f9e; font-weight: 600; }
 .view-pill:hover { background: #dff3fc; }
@@ -224,22 +225,25 @@
 .appointment-view-toggle button[aria-pressed="true"] { background: #edf7fa; color: #00738e; box-shadow: 0 1px 3px #111c3a0a; }
 .appointment-slots { padding: 16px; border: 1px solid #dceef2; border-radius: 16px; background: #f4fafb; }
 .appointment-slot-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.appointment-time-chip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 8px 12px; min-height: 38px; border: 1px solid #cfe7ed; border-radius: 9px; background: #fff; color: #00738e; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.appointment-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 18px 20px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; }
+.appointment-time-chip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 6px; padding: 8px 12px; min-height: 38px; border: 1px solid #cfe7ed; border-radius: 9px; background: #fff; color: #00738e; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; transition: border-color .15s ease, background-color .15s ease; }
+.appointment-time-chip:hover { border-color: #0089a8; background: #eaf6f8; }
+.appointment-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 18px 20px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; box-shadow: 0 1px 3px rgba(17, 28, 58, 0.03); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.appointment-card:hover { border-color: #9cd4e0; box-shadow: 0 8px 22px -4px rgba(0, 137, 168, 0.1); transform: translateY(-1px); }
 .appointment-card-body { min-width: 0; }
 .appointment-card-time { display: inline-flex; align-items: center; padding: 4px 8px; background: #edf7fa; border-radius: 7px; color: #00738e; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .appointment-card-controls { display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px; }
 .appointment-menu { position: relative; justify-self: end; }
-.appointment-menu summary { list-style: none; display: flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; border: 1px solid #e4e9f0; border-radius: 9px; color: #64748b; cursor: pointer; }
+.appointment-menu summary { list-style: none; display: flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; border: 1px solid #e4e9f0; border-radius: 9px; color: #64748b; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
 .appointment-menu summary::-webkit-details-marker { display: none; }
-.appointment-menu summary:hover { background: #f1f5f9; }
+.appointment-menu summary:hover { background: #edf7fa; border-color: #bce3eb; color: #00738e; }
 .appointment-menu summary:focus-visible { outline: 3px solid #66bed0; outline-offset: 3px; }
 .appointment-menu-items { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - 64px); padding: 5px; border: 1px solid #e4e9f0; border-radius: 12px; background: #fff; box-shadow: 0 8px 25px #111c3a12; }
 .appointment-menu-items :is(button, a) { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px; padding: 9px 10px; border-radius: 7px; color: #52627a; font-size: 12px; text-align: left; }
 .appointment-menu-items :is(button, a):hover { color: #00738e; background: #edf7fa; }
 .appointment-menu-items svg { flex-shrink: 0; color: #0089a8; }
 .appointment-status-filter { padding: 7px 10px; border: 1px solid #e4e9f0; border-radius: 9px; background: #fff; color: #52627a; font-size: 12px; }
-.appointment-empty { padding: 28px 16px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; text-align: center; color: #64748b; }
+.appointment-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px 20px; border: 1px dashed #cbd5e1; border-radius: 20px; background: #fafbfc; text-align: center; color: #64748b; transition: all .2s ease; }
+.appointment-empty:hover { border-color: #9cd4e0; background: #fdfefe; }
 .appointment-success { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border: 1px solid #d5ebdf; border-radius: 12px; padding: 12px 16px; background: #f1fbf5; color: #197344; }
 .appointment-timeline { position: relative; padding-left: 24px; }
 .appointment-timeline::before { content: ''; position: absolute; top: 24px; bottom: 24px; left: 7px; width: 1px; background: #d4e4eb; }
@@ -287,7 +291,8 @@
 .workspace-search input { width: 100%; min-width: 0; min-height: 42px; background: transparent; outline: none; color: #111c3a; font-size: 13px; }
 .workspace-search input::placeholder { color: #8291a7; }
 .workspace-search button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: 32px; min-height: 36px; }
-.workspace-empty { padding: 28px 16px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; font-size: 13px; text-align: center; color: #52627a; }
+.workspace-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px 20px; border: 1px dashed #cbd5e1; border-radius: 20px; background: #fafbfc; font-size: 13px; text-align: center; color: #52627a; transition: all .2s ease; }
+.workspace-empty:hover { border-color: #9cd4e0; background: #fdfefe; }
 .finance-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .finance-toolbar .workspace-search { flex: 1 1 220px; }
 .fee-patient-picker { position: relative; }
@@ -310,7 +315,8 @@
 .workspace-segments button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 7px 10px; border-radius: 8px; color: #64748b; font-size: 12px; font-weight: 600; }
 .workspace-segments button[aria-pressed="true"] { background: #fff; color: #00738e; box-shadow: 0 1px 3px #111c3a0a; }
 .workspace-segments button span { font-size: 10px; font-weight: 500; opacity: .8; }
-.finance-due-card { min-width: 0; padding: 18px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; }
+.finance-due-card { min-width: 0; padding: 18px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; box-shadow: 0 1px 3px rgba(17, 28, 58, 0.03); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.finance-due-card:hover { border-color: #9cd4e0; box-shadow: 0 8px 22px -4px rgba(0, 137, 168, 0.08); transform: translateY(-1px); }
 .finance-record-list { overflow: hidden; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; }
 .finance-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 16px; padding: 16px 18px; }
 .finance-record + .finance-record { border-top: 1px solid #e9edf3; }
