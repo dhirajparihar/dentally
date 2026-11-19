@@ -9,10 +9,20 @@ import { useClinic } from "@/context/ClinicContext";
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
+  onBookAppointment?: () => void;
   title?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
+const bookingButtonClass = "px-3.5 sm:px-4 py-2 rounded-full bg-[#0089A8] text-white text-xs sm:text-sm font-semibold hover:bg-[#00738E] transition-all flex items-center gap-1.5 shadow-xs";
+const bookingButtonLabel = (
+  <>
+    <Calendar className="w-4 h-4" aria-hidden="true" />
+    <span className="hidden sm:inline">Book Appointment</span>
+    <span className="sm:hidden">Book</span>
+  </>
+);
+
+export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointment, title }) => {
   const pathname = usePathname();
   const sectionTitles: Record<string, string> = {
     patients: "Patients",
@@ -22,7 +32,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
     settings: "Clinic Settings",
   };
   const pageTitle = title ?? sectionTitles[pathname.split("/")[2]] ?? "Dashboard";
-  const { isSyncing, clinicProfile } = useClinic();
+  const { isSyncing, clinicProfile, loading } = useClinic();
   const { data: session, status } = useSession();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
@@ -82,14 +92,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
           )}
 
           {/* Quick Schedule Button */}
-          {pathname !== "/dashboard/appointments" && <Link
-            href="/dashboard/appointments"
-            className="px-3.5 sm:px-4 py-2 rounded-full bg-[#0089A8] text-white text-xs sm:text-sm font-semibold hover:bg-[#00738E] transition-all flex items-center gap-1.5 shadow-xs"
-          >
-            <Calendar className="w-4 h-4" />
-            <span className="hidden sm:inline">Book Appointment</span>
-            <span className="sm:hidden">Book</span>
-          </Link>}
+          {onBookAppointment ? (
+            <button type="button" onClick={onBookAppointment} disabled={loading} aria-haspopup="dialog" aria-label="Book Appointment" className={`${bookingButtonClass} disabled:opacity-50`}>
+              {bookingButtonLabel}
+            </button>
+          ) : pathname !== "/dashboard/appointments" && (
+            <Link href="/dashboard/appointments" className={bookingButtonClass}>{bookingButtonLabel}</Link>
+          )}
 
           {/* User Profile Avatar with Google Badge & Sign Out Dropdown */}
           <div className="relative pl-2 border-l border-[#E4E9F0]">

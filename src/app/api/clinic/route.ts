@@ -16,7 +16,7 @@ import {
   saveClinicProfile,
   seedSampleDataForDoctor,
 } from "@/lib/db/repository";
-import { Patient, Appointment, FeeItem, PaymentTransaction, ClinicProfile } from "@/lib/mockData";
+import { Patient, Appointment, FeeItem, ClinicProfile } from "@/lib/mockData";
 import {
   patientSchema,
   appointmentSchema,
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
 
       case "record_payment": {
         const validated = paymentSchema.parse(data);
-        await savePayment({ ...validated, dentistEmail: email } as PaymentTransaction, email);
+        await savePayment({ ...validated, dentistEmail: email }, email);
         break;
       }
 

@@ -1,13 +1,15 @@
 "use client";
 
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import type { Patient } from "@/lib/mockData";
+import { getPatientPhoneQuery, normalizePatientName, normalizePatientPhone } from "@/lib/patientSearch";
 
-export function PatientPicker({ patients, value, onChange }: {
+export function PatientPicker({ patients, value, onChange, onAddPatient }: {
   patients: Patient[];
   value: string;
   onChange: (patientId: string) => void;
+  onAddPatient?: (query: string) => void;
 }) {
   const id = useId();
   const listId = `${id}-patients`;
@@ -16,8 +18,13 @@ export function PatientPicker({ patients, value, onChange }: {
   const [expanded, setExpanded] = useState(false);
   const [activePatientId, setActivePatientId] = useState<string | null>(null);
   const selected = patients.find((patient) => patient._id === value);
-  const query = (search ?? "").trim().toLowerCase();
-  const matches = patients.filter((patient) => patient.name.toLowerCase().includes(query));
+  const query = normalizePatientName(search ?? "");
+  const phoneQuery = getPatientPhoneQuery(query);
+  const matches = patients.filter((patient) => {
+    const phone = patient.phone ?? "";
+    return normalizePatientName(patient.name).includes(query) ||
+      (phoneQuery && (normalizePatientPhone(phone).includes(phoneQuery) || phone.replace(/\D/g, "").includes(phoneQuery)));
+  });
   const activeIndex = matches.findIndex((patient) => patient._id === activePatientId);
   const activeOption = expanded && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
   const needsSelection = !expanded && search !== null && !selected;
@@ -81,7 +88,23 @@ export function PatientPicker({ patients, value, onChange }: {
     <div className="space-y-1.5" onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) close();
     }}>
-      <label htmlFor={id} className="block font-semibold text-[#111C3A]">Patient *</label>
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
+        <label htmlFor={id} className="block font-semibold text-[#111C3A]">Patient *</label>
+        {onAddPatient && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#00738E] hover:underline"
+            onClick={() => {
+              const initialSearch = search?.trim() ?? "";
+              setSearch(null);
+              close();
+              onAddPatient(initialSearch);
+            }}
+          >
+            <Plus size={15} aria-hidden="true" /> Add New Patient
+          </button>
+        )}
+      </div>
       <div className="fee-patient-picker">
         <div className="workspace-search fee-patient-field">
           <Search size={15} aria-hidden="true" />
@@ -97,7 +120,7 @@ export function PatientPicker({ patients, value, onChange }: {
             aria-activedescendant={activeOption}
             aria-describedby={needsSelection ? `${id}-selection` : undefined}
             required
-            placeholder="Type a patient name"
+            placeholder="Search by name or mobile number"
             value={search ?? selected?.name ?? ""}
             onFocus={(event) => open(event.currentTarget)}
             onClick={(event) => open(event.currentTarget)}
@@ -151,7 +174,7 @@ export function PatientPicker({ patients, value, onChange }: {
         )}
       </div>
       {selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
-      {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">Select a patient from the list.</p>}
+      {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">{matches.length ? "Select a patient from the list." : "No matching patients."}</p>}
     </div>
   );
 }

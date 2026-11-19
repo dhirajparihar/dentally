@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Users,
   Search,
@@ -19,6 +19,7 @@ import {
 import { buildPatientBalanceMap, formatINR } from "@/lib/financials";
 import Link from "next/link";
 import { useClinic } from "@/context/ClinicContext";
+import { PatientRegistrationForm } from "@/components/dashboard/PatientRegistrationForm";
 
 export default function PatientsPage() {
   const {
@@ -27,7 +28,6 @@ export default function PatientsPage() {
     payments,
     clinicProfile,
     loading,
-    addPatient,
   } = useClinic();
 
   const [search, setSearch] = useState("");
@@ -44,16 +44,6 @@ export default function PatientsPage() {
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    age: "",
-    gender: "Male" as "Male" | "Female" | "Other",
-    phone: "",
-    email: "",
-    address: "",
-    medicalAlerts: "",
-    bloodGroup: "O+",
-  });
 
   // Pre-compute dues with centralized useMemo map to eliminate O(N * (fees + payments)) overhead
   const balancesMap = useMemo(() => buildPatientBalanceMap(patients, fees, payments), [patients, fees, payments]);
@@ -86,39 +76,6 @@ export default function PatientsPage() {
       // Default: recent visits first
       return (b.lastVisit || b.registeredDate || "").localeCompare(a.lastVisit || a.registeredDate || "");
     });
-
-  const handleAddPatient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newPat: Patient = {
-      _id: `pat_${Date.now()}`,
-      name: form.name.trim(),
-      age: Number(form.age) || 30,
-      gender: form.gender,
-      phone: form.phone.trim(),
-      email: form.email.trim(),
-      address: form.address.trim(),
-      medicalAlerts: form.medicalAlerts.trim()
-        ? form.medicalAlerts.split(",").map((s) => s.trim()).filter(Boolean)
-        : ["None"],
-      bloodGroup: form.bloodGroup,
-      registeredDate: new Date().toISOString().split("T")[0],
-      notes: [],
-      history: [],
-    };
-
-    await addPatient(newPat);
-    setIsAddOpen(false);
-    setForm({
-      name: "",
-      age: "",
-      gender: "Male",
-      phone: "",
-      email: "",
-      address: "",
-      medicalAlerts: "",
-      bloodGroup: "O+",
-    });
-  };
 
   // Quick WhatsApp link generator
   const getWhatsAppLink = (patient: Patient) => {
@@ -260,124 +217,9 @@ export default function PatientsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddPatient} className="mt-4 space-y-3">
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Rahul Sharma"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="34"
-                    value={form.age}
-                    onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Gender</label>
-                  <select
-                    value={form.gender}
-                    onChange={(e) => setForm({ ...form, gender: e.target.value as "Male" | "Female" | "Other" })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
-                  <select
-                    value={form.bloodGroup}
-                    onChange={(e) => setForm({ ...form, bloodGroup: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
-                  >
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+91 98201 44521"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Email</label>
-                  <input
-                    type="email"
-                    placeholder="patient@example.com"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Address / Locality</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Flat 402, Green Park, Indore"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Alerts / Allergies</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Penicillin Allergy, Diabetic"
-                  value={form.medicalAlerts}
-                  onChange={(e) => setForm({ ...form, medicalAlerts: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs"
-                >
-                  Add Patient
-                </button>
-              </div>
-            </form>
+            <div className="mt-4">
+              <PatientRegistrationForm onCancel={() => setIsAddOpen(false)} onSaved={() => setIsAddOpen(false)} />
+            </div>
           </div>
         </div>
       )}

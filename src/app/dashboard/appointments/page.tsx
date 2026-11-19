@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   Plus,
-  CheckCircle2,
   X,
   AlertCircle,
   Phone,
@@ -13,18 +12,15 @@ import {
   ChevronRight,
   User,
   ArrowRight,
-  Send,
   MoreHorizontal,
 } from "lucide-react";
-import {
-  Appointment,
-  Patient,
-} from "@/lib/mockData";
+import type { Appointment } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
+import { AppointmentBookingConfirmation, BookAppointmentDialog, type AppointmentBookingDraft } from "@/components/dashboard/BookAppointmentDialog";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -60,16 +56,6 @@ function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onResch
   );
 }
 
-const emptyBookingForm = (date: string) => ({
-  patientName: "",
-  patientPhone: "",
-  date,
-  time: "",
-  durationMinutes: 30,
-  procedure: "Root Canal Treatment (RCT)",
-  notes: "",
-});
-
 const earliestAppointmentDate = "0001-01-01";
 const latestAppointmentDate = "9999-12-31";
 
@@ -79,7 +65,6 @@ export default function AppointmentsPage() {
     patients,
     clinicProfile,
     loading,
-    addPatient,
     bookAppointment,
     cancelAppointment,
     rescheduleAppointment,
@@ -92,8 +77,8 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
 
   // Modals
-  const [isBookModalOpen, setIsBookModalOpen] = useState(false);
-  const [emergencyOverride, setEmergencyOverride] = useState(false);
+  const [bookingRequest, setBookingRequest] = useState<{ date: string; time?: string } | null>(null);
+  const [bookingDraft, setBookingDraft] = useState<AppointmentBookingDraft>();
   const [rescheduleOverride, setRescheduleOverride] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
@@ -121,20 +106,6 @@ export default function AppointmentsPage() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, []);
-
-  // Quick procedure templates for single dentist (Auto-sets procedure and duration)
-  const procedurePresets = [
-    { name: "Consultation & Diagnostic X-Ray", duration: 15, tag: "Quick" },
-    { name: "Composite Restoration / Filling", duration: 30, tag: "Restorative" },
-    { name: "Root Canal Treatment (RCT)", duration: 45, tag: "Endodontics" },
-    { name: "Crown Preparation & Impression", duration: 60, tag: "Prosthetics" },
-    { name: "Permanent Crown Cementation", duration: 30, tag: "Prosthetics" },
-    { name: "Scaling & Root Planing (Teeth Cleaning)", duration: 30, tag: "Hygiene" },
-    { name: "Simple Extraction", duration: 30, tag: "Surgery" },
-  ];
-
-  // Book Appointment Form State
-  const [form, setForm] = useState(() => emptyBookingForm(selectedDate));
 
   useEffect(() => {
     if (loading || handledCalendarLink.current) return;
@@ -165,8 +136,6 @@ export default function AppointmentsPage() {
 
   const futureSlots = (date: string, currentClock = clock) =>
     workingHours.filter((slot) => isFutureAppointment(date, slot, currentClock));
-  const bookingSlots = futureSlots(form.date);
-  const bookingConflict = findSlotConflict(form.date, form.time, form.durationMinutes || 30);
   const rescheduleSlots = futureSlots(rescheduleData.date);
   const rescheduleConflict = rescheduleApt
     ? findSlotConflict(rescheduleData.date, rescheduleData.time, rescheduleApt.durationMinutes || 30, rescheduleApt._id)
@@ -213,90 +182,6 @@ export default function AppointmentsPage() {
     return `/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`;
   };
 
-  const closeBooking = () => {
-    if (isSubmitting) return;
-    setIsBookModalOpen(false);
-    setBookingError("");
-  };
-
-  // Booking submit
-  const handleBookSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    if (!isFutureAppointment(form.date, form.time)) {
-      setBookingError("Choose a future time to book this appointment.");
-      return;
-    }
-    if (bookingConflict && !emergencyOverride) return;
-    const trimmedName = form.patientName.trim();
-    const trimmedPhone = form.patientPhone.trim();
-    if (!trimmedName) return;
-
-    const matched = patients.find((patient) =>
-      patient.name.trim().toLowerCase() === trimmedName.toLowerCase() ||
-      (trimmedPhone && patient.phone.replace(/\D/g, "") === trimmedPhone.replace(/\D/g, ""))
-    );
-
-    setBookingError("");
-    setIsSubmitting(true);
-
-    let resolvedPatientId = matched?._id;
-    let resolvedPhone = trimmedPhone || matched?.phone || "";
-
-    if (!matched) {
-      // Auto-create registered patient in MongoDB so clinical dossier navigation works seamlessly
-      resolvedPatientId = `pat_${Date.now()}`;
-      const newPat: Patient = {
-        _id: resolvedPatientId,
-        name: trimmedName,
-        age: 30,
-        gender: "Other",
-        phone: resolvedPhone,
-        email: "",
-        address: "",
-        medicalAlerts: ["None"],
-        bloodGroup: "Unknown",
-        registeredDate: form.date,
-        notes: form.notes
-          ? [
-              {
-                id: `note_${Date.now()}`,
-                date: form.date,
-                text: `Initial booking: ${form.procedure}. ${form.notes}`,
-                doctor: clinicProfile.dentistName || "Doctor",
-              },
-            ]
-          : [],
-        history: [],
-      };
-      await addPatient(newPat);
-    }
-
-    const newApt: Appointment = {
-      _id: `apt_${Date.now()}`,
-      patientId: resolvedPatientId!,
-      patientName: trimmedName,
-      patientPhone: resolvedPhone,
-      date: form.date,
-      time: form.time,
-      durationMinutes: Number(form.durationMinutes) || 30,
-      procedure: form.procedure,
-      status: "scheduled",
-      notes: form.notes,
-    };
-
-    const saved = await bookAppointment(newApt);
-    setIsSubmitting(false);
-    if (!saved) {
-      setBookingError("Could not book the appointment. Check the date and time and try again.");
-      return;
-    }
-    setIsBookModalOpen(false);
-    setEmergencyOverride(false);
-    setBookedSuccessApt(newApt);
-    setForm(emptyBookingForm(selectedDate));
-  };
-
   // Reschedule submit
   const handleRescheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -325,14 +210,6 @@ export default function AppointmentsPage() {
     setRescheduleOverride(false);
   };
 
-  // WhatsApp Instant Booking Confirmation
-  const getBookingConfirmationWhatsAppUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
-    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const msg = `Hello ${apt.patientName}, your dental appointment with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${apt.date} at ${apt.time} (${apt.procedure}).\n\nLocation: ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
-    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
-  };
-
   // WhatsApp Pre-Appointment Reminder
   const getWhatsAppReminderUrl = (apt: Appointment) => {
     const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
@@ -352,16 +229,9 @@ export default function AppointmentsPage() {
   const availableSlots = futureSlots(selectedDate).filter((slot) => !findSlotConflict(selectedDate, slot));
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
   const openBooking = (time?: string) => {
-    const currentClock = getAppointmentClock();
-    if (loading || selectedDate < currentClock.date) return;
-    const slots = futureSlots(selectedDate, currentClock);
-    const initialTime = time && slots.includes(time)
-      ? time
-      : slots.find((slot) => !findSlotConflict(selectedDate, slot, form.durationMinutes || 30)) ?? slots[0] ?? "";
+    if (loading || selectedDate < getAppointmentClock().date) return;
     setBookingError("");
-    setEmergencyOverride(false);
-    setForm((previous) => ({ ...previous, date: selectedDate, time: initialTime }));
-    setIsBookModalOpen(true);
+    setBookingRequest({ date: selectedDate, time });
   };
   const openReschedule = (appointment: Appointment) => {
     const currentClock = getAppointmentClock();
@@ -401,18 +271,13 @@ export default function AppointmentsPage() {
           <button type="button" aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>Day</button>
           <button type="button" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>All Bookings</button>
         </div>
-        {!isPastDay && <button type="button" disabled={loading} onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>}
+        {!isPastDay && <button type="button" aria-haspopup="dialog" disabled={loading} onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>}
       </section>
 
-      {bookingError && !isBookModalOpen && !rescheduleApt && <p role="alert" className="text-xs text-rose-700">{bookingError}</p>}
+      {bookingError && !bookingRequest && !rescheduleApt && <p role="alert" className="text-xs text-rose-700">{bookingError}</p>}
 
       {bookedSuccessApt && !isPastDay && (
-        <div className="appointment-success" role="status">
-          <CheckCircle2 size={19} className="shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 text-xs leading-5"><strong>{bookedSuccessApt.patientName}</strong> booked for {bookedSuccessApt.date} at {bookedSuccessApt.time}<span className="block text-[#52627A]">{bookedSuccessApt.procedure} &middot; {bookedSuccessApt.patientPhone}</span></p>
-          <a href={getBookingConfirmationWhatsAppUrl(bookedSuccessApt)} target="_blank" rel="noopener noreferrer" className="appointment-text-action"><Share2 size={15} />Send Confirmation</a>
-          <button type="button" onClick={() => setBookedSuccessApt(null)} className="calendar-icon-button" aria-label="Dismiss booking confirmation"><X size={17} /></button>
-        </div>
+        <AppointmentBookingConfirmation appointment={bookedSuccessApt} onDismiss={() => setBookedSuccessApt(null)} />
       )}
 
       {viewMode === "timeline" && !isPastDay && (
@@ -423,7 +288,7 @@ export default function AppointmentsPage() {
           </div>
           {loading ? <p role="status" className="text-xs text-[#64748B]">Loading slots...</p> : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
             <div className="appointment-slot-list" role="group" aria-label={`Available slots on ${selectedDateLabel}`}>
-              {availableSlots.map((slot) => <button key={slot} type="button" onClick={() => openBooking(slot)} className="appointment-time-chip" aria-label={`Book ${slot} on ${selectedDateLabel}`}><Plus size={14} aria-hidden="true" />{slot}</button>)}
+              {availableSlots.map((slot) => <button key={slot} type="button" aria-haspopup="dialog" onClick={() => openBooking(slot)} className="appointment-time-chip" aria-label={`Book ${slot} on ${selectedDateLabel}`}><Plus size={14} aria-hidden="true" />{slot}</button>)}
             </div>
           )}
         </section>
@@ -467,232 +332,21 @@ export default function AppointmentsPage() {
         )}
       </section>
 
-      {/* ================= SMART BOOKING MODAL FOR SINGLE DENTIST ================= */}
-      {isBookModalOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div role="dialog" aria-modal="true" aria-labelledby="booking-heading" className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs my-auto animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
-              <div>
-                <h3 id="booking-heading" className="font-bold text-lg text-[#111C3A]">
-                  Book Appointment
-                </h3>
-              </div>
-              <button
-                onClick={closeBooking}
-                disabled={isSubmitting}
-                aria-label="Close booking form"
-                className="p-1 rounded-lg text-[#8291A7] hover:text-[#111C3A]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleBookSubmit} className="mt-4 space-y-4">
-              
-              {/* Quick Procedure Template Chips */}
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1.5">
-                  Treatment Presets
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {procedurePresets.map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setForm((prev) => ({
-                          ...prev,
-                          procedure: preset.name,
-                          durationMinutes: preset.duration,
-                        }));
-                      }}
-                      className={`text-[11px] px-2.5 py-1 rounded-xl border transition-all text-left ${
-                        form.procedure === preset.name
-                          ? "bg-[#0089A8] text-white border-[#0089A8] font-semibold"
-                          : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
-                      }`}
-                    >
-                      {preset.name} ({preset.duration}m)
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Patient Name *</label>
-                <input
-                  type="text"
-                  required
-                  list="registered-patients"
-                  placeholder="e.g. Rahul Sharma"
-                  value={form.patientName}
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    const matched = patients.find((p) => p.name.toLowerCase() === name.toLowerCase());
-                    setForm((prev) => ({
-                      ...prev,
-                      patientName: name,
-                      ...(matched ? { patientPhone: matched.phone } : {}),
-                    }));
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
-                />
-                <datalist id="registered-patients">
-                  {patients.map((p) => (
-                    <option key={p._id} value={p.name}>
-                      {p.phone} ({p._id})
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="+91 98201 44521"
-                  value={form.patientPhone}
-                  onChange={(e) => setForm({ ...form, patientPhone: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Date *</label>
-                  <input
-                    type="date"
-                    required
-                    min={clock.date}
-                    value={form.date}
-                    onChange={(e) => {
-                      const date = e.target.value;
-                      setEmergencyOverride(false);
-                      setForm({ ...form, date, time: "" });
-                    }}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Duration (Min)</label>
-                  <input
-                    type="number"
-                    step={15}
-                    value={form.durationMinutes}
-                    onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
-                  />
-                </div>
-              </div>
-
-              {/* Visual Operatory Time Slot Selection Chips */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-[#111C3A] block text-xs">
-                    Select Available Time Slot for {form.date}:
-                  </label>
-                  <span className="text-[11px] font-mono text-[#8291A7]">
-                    Selected: <strong className="text-[#0089A8]">{bookingSlots.includes(form.time) ? form.time : "None"}</strong>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                  {bookingSlots.map((hour) => {
-                    const busyApt = findSlotConflict(form.date, hour, form.durationMinutes || 30);
-                    const isSelected = form.time === hour;
-
-                    if (busyApt) {
-                      return (
-                        <div
-                          key={hour}
-                          className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
-                          title={`Operatory occupied by ${busyApt.patientName} (${busyApt.time}, ${busyApt.durationMinutes}m)`}
-                        >
-                          <div className="line-through">{hour}</div>
-                          <span className="text-[9px]">Booked</span>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={hour}
-                        type="button"
-                        onClick={() => setForm({ ...form, time: hour })}
-                        className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
-                          isSelected
-                            ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
-                            : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
-                        }`}
-                      >
-                        <div>{hour}</div>
-                        <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
-                          {isSelected ? "Selected" : "Free"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {bookingSlots.length === 0 && <p className="text-[#64748B]">Choose another date to see future slots.</p>}
-              </div>
-
-              {/* Overlap Conflict Detection Notice */}
-              {bookingConflict && bookingSlots.includes(form.time) && (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <strong>Chair 1 Operatory Conflict:</strong> {clinicProfile.dentistName} already has an appointment with{" "}
-                        <strong>{bookingConflict.patientName}</strong> from <strong>{bookingConflict.time}</strong> ({bookingConflict.durationMinutes}m for {bookingConflict.procedure}).
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={emergencyOverride}
-                        onChange={(e) => setEmergencyOverride(e.target.checked)}
-                        className="rounded border-amber-300 text-[#0089A8] focus:ring-[#0089A8]"
-                      />
-                      <span>Emergency Override: Allow double-booking operatory</span>
-                    </label>
-                  </div>
-              )}
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Notes (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Advised soft diet, bring previous X-rays"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
-                />
-              </div>
-
-              {bookingError && <p role="alert" className="text-rose-700">{bookingError}</p>}
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
-                <button
-                  type="button"
-                  onClick={closeBooking}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !bookingSlots.includes(form.time) || Boolean(bookingConflict && !emergencyOverride)}
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirm Booking
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {bookingRequest && (
+        <BookAppointmentDialog
+          initialDate={bookingRequest.date}
+          preferredTime={bookingRequest.time}
+          draft={bookingDraft}
+          onClose={(draft) => {
+            setBookingDraft(draft);
+            setBookingRequest(null);
+          }}
+          onBooked={(appointment) => {
+            setBookedSuccessApt(appointment);
+            setBookingDraft(undefined);
+            setBookingRequest(null);
+          }}
+        />
       )}
 
       {/* ================= RESCHEDULE MODAL ================= */}

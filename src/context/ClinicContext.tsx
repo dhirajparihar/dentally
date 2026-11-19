@@ -23,7 +23,7 @@ export interface ClinicContextType {
   userEmail: string;
   refreshClinic: () => Promise<void>;
   loadSampleData: () => Promise<void>;
-  addPatient: (patient: Patient) => Promise<void>;
+  addPatient: (patient: Patient) => Promise<boolean>;
   updatePatient: (patient: Patient) => Promise<void>;
   deletePatient: (patientId: string) => Promise<boolean>;
   bookAppointment: (appointment: Appointment) => Promise<boolean>;
@@ -138,7 +138,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [appointments, loading, refreshClinic, status]);
 
   // Generic helper to post mutations scoped to current doctor
-  const postMutation = async (payload: Record<string, any>) => {
+  const postMutation = useCallback(async (payload: Record<string, any>) => {
     try {
       setIsSyncing(true);
       const res = await fetch("/api/clinic", {
@@ -161,6 +161,9 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ...data.clinicProfile,
         }));
       }
+      if (payload.action === "add_patient") {
+        return Array.isArray(data.patients) && data.patients.some((patient: Patient) => patient._id === payload.data._id);
+      }
       return true;
     } catch (err) {
       console.error("Failed to sync mutation to clinic API:", err);
@@ -168,7 +171,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [userEmail]);
 
   const loadSampleData = async () => {
     await postMutation({ action: "load_sample_data" });
@@ -176,8 +179,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const addPatient = async (newPatient: Patient) => {
     const scoped = { ...newPatient, dentistEmail: userEmail };
-    setPatients((prev) => [scoped, ...prev.filter((p) => p._id !== scoped._id)]);
-    await postMutation({ action: "add_patient", data: scoped });
+    return postMutation({ action: "add_patient", data: scoped });
   };
 
   const updatePatient = async (updated: Patient) => {
@@ -227,7 +229,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const updateClinicProfile = useCallback(async (profileData: Partial<ClinicProfile>) => {
     setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail, isConfigured: true }));
     await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
-  }, [userEmail]);
+  }, [postMutation, userEmail]);
 
   return (
     <ClinicContext.Provider
