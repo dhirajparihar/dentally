@@ -38,4 +38,8 @@ const PatientSchema = new Schema<Patient>(
   { timestamps: true, _id: false }
 );
 
+// High-speed compound indexes for multi-tenant patient search
+PatientSchema.index({ dentistEmail: 1, phone: 1 });
+PatientSchema.index({ dentistEmail: 1, name: 1 });
+
 export default mongoose.models.Patient || mongoose.model<Patient>("Patient", PatientSchema);

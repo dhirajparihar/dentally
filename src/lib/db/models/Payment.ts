@@ -23,4 +23,8 @@ const PaymentSchema = new Schema<PaymentTransaction>(
   { timestamps: true, _id: false }
 );
 
+// High-speed compound indexes for multi-tenant payment reconciliation
+PaymentSchema.index({ dentistEmail: 1, patientId: 1 });
+PaymentSchema.index({ dentistEmail: 1, date: -1 });
+
 export default mongoose.models.Payment || mongoose.model<PaymentTransaction>("Payment", PaymentSchema);

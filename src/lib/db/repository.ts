@@ -267,6 +267,9 @@ export async function saveClinicProfile(
   const normalized = dentistEmail.toLowerCase().trim();
   if (!normalized) throw new Error("Dentist email required to save clinic profile");
 
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
   const mem = getOrCreateMemoryStore(normalized);
   const updated: ClinicProfile = {
     ...(mem.clinicProfile || clinicProfile),
@@ -277,7 +280,6 @@ export async function saveClinicProfile(
   mem.clinicProfile = updated;
 
   try {
-    const conn = await ensureDbInitialized();
     if (conn) {
       await ClinicProfileModel.findOneAndUpdate(
         { dentistEmail: normalized },
@@ -293,6 +295,7 @@ export async function saveClinicProfile(
     }
   } catch (err) {
     console.error("Failed to persist clinic profile to MongoDB:", err);
+    if (isDbConfigured()) throw err;
   }
 
   return updated;
@@ -303,11 +306,13 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
   if (!email) throw new Error("Missing dentist email for patient record");
   const patientToSave = { ...patient, dentistEmail: email };
 
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
   const mem = getOrCreateMemoryStore(email);
   mem.patients = [patientToSave, ...mem.patients.filter((p) => p._id !== patientToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized();
     if (conn) {
       await PatientModel.findOneAndUpdate(
         { _id: patientToSave._id, dentistEmail: email },
@@ -317,6 +322,7 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
     }
   } catch (err) {
     console.error("Error saving patient to MongoDB:", err);
+    if (isDbConfigured()) throw err;
   }
 
   return mem.patients;
@@ -451,8 +457,10 @@ export async function rescheduleAppointment(
       : a
   );
 
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
   try {
-    const conn = await ensureDbInitialized();
     if (conn) {
       const existing = await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email });
       const finalNotes = existing
@@ -466,6 +474,7 @@ export async function rescheduleAppointment(
     }
   } catch (err) {
     console.error("Error rescheduling appointment in MongoDB:", err);
+    if (isDbConfigured()) throw err;
   }
 
   return mem.appointments;
@@ -476,11 +485,13 @@ export async function saveFee(fee: FeeItem, dentistEmail?: string) {
   if (!email) throw new Error("Missing dentist email for fee record");
   const feeToSave = { ...fee, dentistEmail: email };
 
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
   const mem = getOrCreateMemoryStore(email);
   mem.fees = [feeToSave, ...mem.fees.filter((f) => f._id !== feeToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized();
     if (conn) {
       await FeeModel.findOneAndUpdate(
         { _id: feeToSave._id, dentistEmail: email },
@@ -490,6 +501,7 @@ export async function saveFee(fee: FeeItem, dentistEmail?: string) {
     }
   } catch (err) {
     console.error("Error saving fee to MongoDB:", err);
+    if (isDbConfigured()) throw err;
   }
 
   return mem.fees;
@@ -500,11 +512,13 @@ export async function savePayment(payment: PaymentTransaction, dentistEmail?: st
   if (!email) throw new Error("Missing dentist email for payment record");
   const paymentToSave = { ...payment, dentistEmail: email };
 
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
   const mem = getOrCreateMemoryStore(email);
   mem.payments = [paymentToSave, ...mem.payments.filter((p) => p._id !== paymentToSave._id)];
 
   try {
-    const conn = await ensureDbInitialized();
     if (conn) {
       await PaymentModel.findOneAndUpdate(
         { _id: paymentToSave._id, dentistEmail: email },
@@ -514,6 +528,7 @@ export async function savePayment(payment: PaymentTransaction, dentistEmail?: st
     }
   } catch (err) {
     console.error("Error saving payment to MongoDB:", err);
+    if (isDbConfigured()) throw err;
   }
 
   return mem.payments;

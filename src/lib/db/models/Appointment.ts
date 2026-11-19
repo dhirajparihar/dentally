@@ -23,4 +23,9 @@ const AppointmentSchema = new Schema<Appointment>(
   { timestamps: true, _id: false }
 );
 
+// High-speed compound indexes for multi-tenant queries
+AppointmentSchema.index({ dentistEmail: 1, date: 1 });
+AppointmentSchema.index({ dentistEmail: 1, patientId: 1 });
+AppointmentSchema.index({ dentistEmail: 1, status: 1 });
+
 export default mongoose.models.Appointment || mongoose.model<Appointment>("Appointment", AppointmentSchema);

@@ -23,4 +23,8 @@ const FeeSchema = new Schema<FeeItem>(
   { timestamps: true, _id: false }
 );
 
+// High-speed compound indexes for multi-tenant billing
+FeeSchema.index({ dentistEmail: 1, patientId: 1 });
+FeeSchema.index({ dentistEmail: 1, date: 1 });
+
 export default mongoose.models.Fee || mongoose.model<FeeItem>("Fee", FeeSchema);

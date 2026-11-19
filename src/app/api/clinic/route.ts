@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import {
   AppointmentNotFoundError,
@@ -15,22 +16,17 @@ import {
   seedSampleDataForDoctor,
 } from "@/lib/db/repository";
 import { Patient, Appointment, FeeItem, PaymentTransaction, ClinicProfile } from "@/lib/mockData";
+import {
+  patientSchema,
+  appointmentSchema,
+  rescheduleSchema,
+  feeSchema,
+  paymentSchema,
+  clinicProfileSchema,
+} from "@/lib/validations/clinic";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders,
-  });
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json(
         { error: "Unauthorized: Please sign in to access clinic records." },
-        { status: 401, headers: corsHeaders }
+        { status: 401 }
       );
     }
 
@@ -49,7 +45,7 @@ export async function GET(request: NextRequest) {
     if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
       return NextResponse.json(
         { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
-        { status: 403, headers: corsHeaders }
+        { status: 403 }
       );
     }
 
@@ -57,17 +53,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(state, {
       status: 200,
       headers: {
-        ...corsHeaders,
         "Cache-Control": "no-store, max-age=0",
       },
     });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Failed to fetch clinic state" },
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
+      { status: 500 }
     );
   }
 }
@@ -84,10 +76,9 @@ export async function POST(request: NextRequest) {
     if (session?.user?.email) {
       email = session.user.email.toLowerCase().trim();
     } else {
-      // Reject unauthenticated modifications to private records
       return NextResponse.json(
         { error: "Unauthorized: Please sign in with Google to modify clinic records." },
-        { status: 401, headers: corsHeaders }
+        { status: 401 }
       );
     }
     const doctorName = session?.user?.name || "Doctor";
@@ -100,64 +91,96 @@ export async function POST(request: NextRequest) {
 
       case "add_patient":
       case "update_patient": {
-        await savePatient({ ...(data as Patient), dentistEmail: email }, email);
+        const validated = patientSchema.parse(data);
+        await savePatient({ ...validated, dentistEmail: email } as Patient, email);
         break;
       }
 
       case "book_appointment": {
-        await saveAppointment({ ...(data as Appointment), dentistEmail: email }, email);
+        const validated = appointmentSchema.parse(data);
+        await saveAppointment({ ...validated, dentistEmail: email } as Appointment, email);
         break;
       }
 
       case "complete_appointment": {
+        if (!appointmentId || typeof appointmentId !== "string") {
+          return NextResponse.json({ error: "Valid appointment ID required" }, { status: 400 });
+        }
         await updateAppointmentStatus(appointmentId, "completed", email);
         break;
       }
 
       case "cancel_appointment": {
+        if (!appointmentId || typeof appointmentId !== "string") {
+          return NextResponse.json({ error: "Valid appointment ID required" }, { status: 400 });
+        }
         await updateAppointmentStatus(appointmentId, "cancelled", email, reason);
         break;
       }
 
       case "miss_appointment": {
+        if (!appointmentId || typeof appointmentId !== "string") {
+          return NextResponse.json({ error: "Valid appointment ID required" }, { status: 400 });
+        }
         await updateAppointmentStatus(appointmentId, "missed", email, reason);
         break;
       }
 
       case "reschedule_appointment": {
-        await rescheduleAppointment(appointmentId, date, time, reason, email);
+        const validated = rescheduleSchema.parse({ appointmentId, date, time, reason });
+        await rescheduleAppointment(
+          validated.appointmentId,
+          validated.date,
+          validated.time,
+          validated.reason,
+          email
+        );
         break;
       }
 
       case "add_fee": {
-        await saveFee({ ...(data as FeeItem), dentistEmail: email }, email);
+        const validated = feeSchema.parse(data);
+        await saveFee({ ...validated, dentistEmail: email } as FeeItem, email);
         break;
       }
 
       case "record_payment": {
-        await savePayment({ ...(data as PaymentTransaction), dentistEmail: email }, email);
+        const validated = paymentSchema.parse(data);
+        await savePayment({ ...validated, dentistEmail: email } as PaymentTransaction, email);
         break;
       }
 
       case "update_clinic_profile": {
-        await saveClinicProfile(data as Partial<ClinicProfile>, email);
+        const validated = clinicProfileSchema.parse(data);
+        await saveClinicProfile(validated as Partial<ClinicProfile>, email);
         break;
       }
 
       default:
         return NextResponse.json(
           { error: `Unknown clinic action: ${action}` },
-          { status: 400, headers: corsHeaders }
+          { status: 400 }
         );
     }
 
     const updated = await getClinicData(email);
-    return NextResponse.json(updated, { status: 200, headers: corsHeaders });
+    return NextResponse.json(updated, { status: 200 });
   } catch (err: any) {
-    const status = err instanceof AppointmentNotFoundError ? 404 : err instanceof AppointmentTimeError ? 400 : 500;
+    if (err instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: `Validation error: ${err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ")}` },
+        { status: 400 }
+      );
+    }
+    const status =
+      err instanceof AppointmentNotFoundError
+        ? 404
+        : err instanceof AppointmentTimeError
+        ? 400
+        : 500;
     return NextResponse.json(
       { error: err.message || "Failed to process clinic action" },
-      { status, headers: corsHeaders }
+      { status }
     );
   }
 }
