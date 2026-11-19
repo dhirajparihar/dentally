@@ -16,7 +16,6 @@ const PatientSchema = new Schema<Patient>(
     registeredDate: { type: String, default: () => new Date().toISOString().split("T")[0] },
     lastVisit: { type: String },
     followUpDue: { type: String },
-    teeth: { type: Schema.Types.Mixed, default: () => ({}) },
     notes: [
       {
         id: { type: String, required: true },

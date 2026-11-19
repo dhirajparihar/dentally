@@ -10,6 +10,8 @@ import {
   initialAppointments,
   initialFees,
   initialPayments,
+} from "./seedData";
+import {
   clinicProfile,
   ClinicProfile,
   Patient,

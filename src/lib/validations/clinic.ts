@@ -13,7 +13,6 @@ export const patientSchema = z.object({
   registeredDate: z.string().optional(),
   lastVisit: z.string().optional(),
   followUpDue: z.string().optional(),
-  teeth: z.record(z.string(), z.any()).optional().default({}),
   notes: z
     .array(
       z.object({

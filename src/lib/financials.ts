@@ -11,6 +11,65 @@ export interface PatientFinancialSummary {
   isSettled: boolean;
 }
 
+export interface FeeSettlement {
+  status: "paid" | "partial" | "unpaid";
+  allocatedAmount: number;
+  balanceDue: number;
+}
+
+/**
+ * Computes FIFO fee settlement for a patient based on chronological payments.
+ * When total payments >= cumulative fee amounts, earlier fees are fully "paid".
+ * When a fee is partially covered, status is "partial".
+ * Any remaining fees are "unpaid".
+ */
+export function calculateFeeSettlements(
+  patientFees: FeeItem[],
+  patientPayments: PaymentTransaction[]
+): Map<string, FeeSettlement> {
+  const result = new Map<string, FeeSettlement>();
+  const grossPaid = patientPayments
+    .filter((p) => !p.isRefund)
+    .reduce((sum, p) => sum + p.amount, 0);
+  const totalRefunded = patientPayments
+    .filter((p) => p.isRefund)
+    .reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = Math.max(0, grossPaid - totalRefunded);
+
+  // Sort fees chronologically (by date ascending, then ID)
+  const sortedFees = [...patientFees].sort((a, b) => {
+    const dComp = (a.date || "").localeCompare(b.date || "");
+    if (dComp !== 0) return dComp;
+    return (a._id || "").localeCompare(b._id || "");
+  });
+
+  let remainingPayment = totalPaid;
+
+  for (const fee of sortedFees) {
+    const net = Math.max(0, fee.netAmount);
+    if (net === 0) {
+      result.set(fee._id, { status: "paid", allocatedAmount: 0, balanceDue: 0 });
+      continue;
+    }
+
+    if (remainingPayment >= net) {
+      result.set(fee._id, { status: "paid", allocatedAmount: net, balanceDue: 0 });
+      remainingPayment -= net;
+    } else if (remainingPayment > 0) {
+      result.set(fee._id, {
+        status: "partial",
+        allocatedAmount: remainingPayment,
+        balanceDue: net - remainingPayment,
+      });
+      remainingPayment = 0;
+    } else {
+      result.set(fee._id, { status: "unpaid", allocatedAmount: 0, balanceDue: net });
+    }
+  }
+
+  return result;
+}
+
 /**
  * Calculates unified financial summary for a patient or overall clinic fees/payments.
  */

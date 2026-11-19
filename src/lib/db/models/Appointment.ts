@@ -15,7 +15,7 @@ const AppointmentSchema = new Schema<Appointment>(
     procedure: { type: String, required: true },
     status: {
       type: String,
-      enum: ["scheduled", "in-chair", "completed", "cancelled", "missed"],
+      enum: ["scheduled", "completed", "cancelled", "missed"],
       default: "scheduled",
     },
     notes: { type: String, default: "" },
