@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useClinic } from "@/context/ClinicContext";
 import type { Patient } from "@/lib/mockData";
 import { getPatientPhoneQuery, normalizePatientName, normalizePatientPhone } from "@/lib/patientSearch";
+import { shiftAppointmentDate } from "@/lib/appointmentTime";
 
 const fieldClass = "w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 outline-none focus:border-[#0089A8]";
 const labelClass = "mb-1 block font-semibold text-[#111C3A]";
@@ -34,6 +35,7 @@ export function PatientRegistrationForm({ compact = false, initialSearch = "", o
       address: "",
       medicalAlerts: "",
       bloodGroup: compact ? "" : "O+",
+      followUpDue: "",
     };
   });
 
@@ -79,6 +81,7 @@ export function PatientRegistrationForm({ compact = false, initialSearch = "", o
       medicalAlerts: form.medicalAlerts.trim() ? form.medicalAlerts.split(",").map((alert) => alert.trim()).filter(Boolean) : ["None"],
       bloodGroup: form.bloodGroup,
       registeredDate: new Date().toISOString().slice(0, 10),
+      followUpDue: form.followUpDue.trim() || undefined,
       notes: [],
       history: [],
     };
@@ -116,6 +119,60 @@ export function PatientRegistrationForm({ compact = false, initialSearch = "", o
       <div>
         <label className={labelClass} htmlFor={`${id}-alerts`}>Alerts / Allergies</label>
         <input id={`${id}-alerts`} type="text" placeholder="Separate alerts with commas" value={form.medicalAlerts} onChange={(event) => setForm({ ...form, medicalAlerts: event.target.value })} className={fieldClass} />
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className={labelClass} htmlFor={`${id}-follow-up`}>Follow-up / Recall Due (Optional)</label>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date().toISOString().slice(0, 10);
+                setForm((prev) => ({ ...prev, followUpDue: shiftAppointmentDate(today, 7) }));
+              }}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E4E9F0] text-[#0089A8] hover:bg-[#EDF7FA]"
+            >
+              +1 Wk
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date().toISOString().slice(0, 10);
+                setForm((prev) => ({ ...prev, followUpDue: shiftAppointmentDate(today, 14) }));
+              }}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E4E9F0] text-[#0089A8] hover:bg-[#EDF7FA]"
+            >
+              +2 Wk
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const d = new Date();
+                d.setMonth(d.getMonth() + 6);
+                setForm((prev) => ({ ...prev, followUpDue: d.toISOString().slice(0, 10) }));
+              }}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#CDEBF2] bg-[#EDF7FA] text-[#00738E] font-semibold hover:bg-[#DDF1F6]"
+            >
+              +6 Mo
+            </button>
+            {form.followUpDue && (
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, followUpDue: "" }))}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded text-[#8291A7] hover:text-rose-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <input
+          id={`${id}-follow-up`}
+          type="date"
+          value={form.followUpDue}
+          onChange={(event) => setForm({ ...form, followUpDue: event.target.value })}
+          className={fieldClass}
+        />
       </div>
     </div>
   );

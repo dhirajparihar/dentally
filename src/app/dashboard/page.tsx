@@ -52,7 +52,7 @@ function whatsAppUrl(phone: string, message: string) {
 }
 
 function getRecallBadge(dueDate: string, today: string) {
-  const days = (Date.parse(dueDate) - Date.parse(today)) / 86_400_000;
+  const days = Math.round((Date.parse(dueDate) - Date.parse(today)) / 86_400_000);
   if (days < 0) return { label: `Overdue ${-days}d`, color: "border-rose-200 bg-rose-50 text-rose-700" };
   if (days > 0) return { label: `In ${days}d`, color: "border-teal-200 bg-teal-50 text-teal-800" };
   return { label: "Due Today", color: "border-amber-200 bg-amber-50 text-amber-800" };

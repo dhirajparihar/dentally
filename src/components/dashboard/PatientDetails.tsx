@@ -83,6 +83,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     address: patient?.address || "",
     bloodGroup: patient?.bloodGroup || "O+",
     medicalAlerts: (patient?.medicalAlerts || []).join(", "),
+    followUpDue: patient?.followUpDue || "",
   });
 
   // Selected receipt for official view/print
@@ -125,6 +126,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       address: editForm.address.trim(),
       bloodGroup: editForm.bloodGroup.trim(),
       medicalAlerts: alerts.length > 0 ? alerts : ["None"],
+      followUpDue: editForm.followUpDue ? editForm.followUpDue : undefined,
     });
     setIsEditProfileOpen(false);
   };
@@ -134,6 +136,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     const d = new Date();
     d.setMonth(d.getMonth() + months);
     const dateStr = d.toISOString().split("T")[0];
+    onUpdatePatient({
+      ...patient,
+      followUpDue: dateStr,
+    });
+  };
+
+  const handleQuickSetRecallDays = (days: number) => {
+    if (!patient) return;
+    const today = getAppointmentClock().date;
+    const dateStr = shiftAppointmentDate(today, days);
     onUpdatePatient({
       ...patient,
       followUpDue: dateStr,
@@ -390,6 +402,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                         address: patient.address || "",
                         bloodGroup: patient.bloodGroup || "O+",
                         medicalAlerts: (patient.medicalAlerts || []).join(", "),
+                        followUpDue: patient.followUpDue || "",
                       });
                       setIsEditProfileOpen(true);
                     }}
@@ -491,9 +504,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 <div className="sm:col-span-2">
                   <dt>Follow-up / Recall Due</dt>
                   <dd className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold text-[#111C3A] font-mono mr-1.5">
+                    <span className="font-semibold text-[#111C3A] font-mono mr-1">
                       {patient.followUpDue || "Not set"}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSetRecallDays(7)}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                      title="Set follow-up for 1 week from today (e.g. Suture removal, post-op review)"
+                    >
+                      +1 Wk
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSetRecallDays(14)}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono hover:bg-[#EDF7FA] text-[#0089A8]"
+                      title="Set follow-up for 2 weeks from today (e.g. Crown trial, healing check)"
+                    >
+                      +2 Wk
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleQuickSetRecall(1)}
@@ -522,6 +551,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     >
                       +1 Yr
                     </button>
+                    <input
+                      type="date"
+                      value={patient.followUpDue || ""}
+                      onChange={(e) => {
+                        onUpdatePatient({
+                          ...patient,
+                          followUpDue: e.target.value || undefined,
+                        });
+                      }}
+                      className="px-2 py-0.5 rounded-lg border border-[#E4E9F0] text-[10px] font-mono text-[#111C3A] bg-white outline-none focus:border-[#0089A8]"
+                      title="Pick custom recall date"
+                    />
+                    {patient.followUpDue && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdatePatient({
+                            ...patient,
+                            followUpDue: undefined,
+                          });
+                        }}
+                        className="px-1.5 py-0.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-[10px] font-mono"
+                        title="Clear follow-up date"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </dd>
                 </div>
                 <div className="sm:col-span-2"><dt>Address</dt><dd className="break-words">{patient.address || "Not recorded"}</dd></div>
@@ -1224,6 +1280,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   value={editForm.address}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                   className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-[#111C3A] block mb-1">Follow-up / Recall Due</label>
+                <input
+                  type="date"
+                  value={editForm.followUpDue}
+                  onChange={(e) => setEditForm({ ...editForm, followUpDue: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-sm"
                 />
               </div>
 
