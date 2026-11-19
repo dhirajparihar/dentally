@@ -13,7 +13,7 @@ function PatientDetailContent() {
   const { patientId } = useParams<{ patientId: string }>();
   const search = useSearchParams();
   const router = useRouter();
-  const { patients, fees, payments, appointments, loading, updatePatient, recordPayment, addFee, bookAppointment } = useClinic();
+  const { patients, fees, payments, appointments, loading, updatePatient, deletePatient, recordPayment, addFee, bookAppointment } = useClinic();
   const patient = patients.find((entry) => entry._id === patientId);
 
   if (loading) return loadingPatient;
@@ -46,6 +46,13 @@ function PatientDetailContent() {
         patient={patient}
         onBack={() => router.push("/dashboard/patients")}
         onUpdatePatient={updatePatient}
+        onDeletePatient={async (id: string) => {
+          const success = await deletePatient(id);
+          if (success) {
+            router.push("/dashboard/patients");
+          }
+          return success;
+        }}
         fees={fees}
         payments={payments}
         appointments={appointments}

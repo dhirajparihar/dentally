@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Users,
   Search,
@@ -12,11 +12,6 @@ import {
   Share2,
   AlertTriangle,
   RefreshCw,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  ExternalLink,
-  Loader2,
 } from "lucide-react";
 import {
   Patient,
@@ -32,19 +27,10 @@ export default function PatientsPage() {
     clinicProfile,
     loading,
     addPatient,
-    updatePatient,
-    deletePatient,
   } = useClinic();
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered" | "recall">("recent");
-
-  // Dropdown & Action states
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-  const [deletingPatient, setDeletingPatient] = useState<Patient | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -54,17 +40,6 @@ export default function PatientsPage() {
       }
     }
   }, []);
-
-  // Close 3-dots menu on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (openMenuId) {
-        setOpenMenuId(null);
-      }
-    };
-    window.addEventListener("click", handleOutsideClick);
-    return () => window.removeEventListener("click", handleOutsideClick);
-  }, [openMenuId]);
 
   // Add Patient Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -78,36 +53,6 @@ export default function PatientsPage() {
     medicalAlerts: "",
     bloodGroup: "O+",
   });
-
-  // Edit Patient Form State
-  const [editForm, setEditForm] = useState({
-    name: "",
-    age: "",
-    gender: "Male" as "Male" | "Female" | "Other",
-    phone: "",
-    email: "",
-    address: "",
-    medicalAlerts: "",
-    bloodGroup: "O+",
-    followUpDue: "",
-  });
-
-  // Pre-fill edit form when editingPatient changes
-  useEffect(() => {
-    if (editingPatient) {
-      setEditForm({
-        name: editingPatient.name || "",
-        age: String(editingPatient.age || ""),
-        gender: editingPatient.gender || "Male",
-        phone: editingPatient.phone || "",
-        email: editingPatient.email || "",
-        address: editingPatient.address || "",
-        medicalAlerts: (editingPatient.medicalAlerts || []).filter((a) => a !== "None").join(", "),
-        bloodGroup: editingPatient.bloodGroup || "O+",
-        followUpDue: editingPatient.followUpDue || "",
-      });
-    }
-  }, [editingPatient]);
 
   // Pre-compute dues with useMemo map to eliminate O(N * (fees + payments)) overhead
   const balancesMap = useMemo(() => {
@@ -193,43 +138,6 @@ export default function PatientsPage() {
     });
   };
 
-  const handleUpdatePatient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPatient) return;
-    setIsUpdating(true);
-    try {
-      const updated: Patient = {
-        ...editingPatient,
-        name: editForm.name.trim(),
-        age: Number(editForm.age) || editingPatient.age,
-        gender: editForm.gender,
-        phone: editForm.phone.trim(),
-        email: editForm.email.trim(),
-        address: editForm.address.trim(),
-        bloodGroup: editForm.bloodGroup,
-        medicalAlerts: editForm.medicalAlerts.trim()
-          ? editForm.medicalAlerts.split(",").map((s) => s.trim()).filter(Boolean)
-          : ["None"],
-        followUpDue: editForm.followUpDue.trim() || undefined,
-      };
-      await updatePatient(updated);
-      setEditingPatient(null);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleDeletePatient = async () => {
-    if (!deletingPatient) return;
-    setIsDeleting(true);
-    try {
-      await deletePatient(deletingPatient._id);
-      setDeletingPatient(null);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   // Quick WhatsApp link generator
   const getWhatsAppLink = (patient: Patient) => {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
@@ -310,7 +218,6 @@ export default function PatientsPage() {
           {filtered.map((patient) => {
             const balance = getBalance(patient._id);
             const detailsUrl = `/dashboard/patients/${encodeURIComponent(patient._id)}`;
-            const isMenuOpen = openMenuId === patient._id;
 
             return (
               <article key={patient._id} className="relative flex min-w-0 flex-col rounded-2xl border border-[#E4E9F0] bg-white p-4 transition-shadow hover:shadow-xs">
@@ -321,83 +228,6 @@ export default function PatientsPage() {
                     <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
                       <span>{patient.gender}, {patient.age}y</span><span>Blood: {patient.bloodGroup}</span><span className="break-all text-[#8291A7]">{patient._id}</span>
                     </p>
-                  </div>
-
-                  {/* Three Dots Action Menu */}
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(isMenuOpen ? null : patient._id);
-                      }}
-                      aria-label={`Actions for ${patient.name}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8291A7] hover:bg-[#EDF7FA] hover:text-[#111C3A] transition-colors"
-                    >
-                      <MoreVertical size={16} />
-                    </button>
-
-                    {isMenuOpen && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute right-0 top-9 z-30 w-48 rounded-xl border border-[#E4E9F0] bg-white p-1.5 shadow-lg text-xs animate-in fade-in zoom-in-95"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenMenuId(null);
-                            setEditingPatient(patient);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                        >
-                          <Edit2 size={14} className="text-[#0089A8] shrink-0" />
-                          <span>Edit Patient</span>
-                        </button>
-
-                        <Link
-                          href={`/dashboard/appointments?patientId=${encodeURIComponent(patient._id)}&patientName=${encodeURIComponent(patient.name)}`}
-                          onClick={() => setOpenMenuId(null)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                        >
-                          <Calendar size={14} className="text-[#0089A8] shrink-0" />
-                          <span>Book Appointment</span>
-                        </Link>
-
-                        <Link
-                          href={detailsUrl}
-                          onClick={() => setOpenMenuId(null)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                        >
-                          <ExternalLink size={14} className="text-[#0089A8] shrink-0" />
-                          <span>View Full Record</span>
-                        </Link>
-
-                        <a
-                          href={getWhatsAppLink(patient)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => setOpenMenuId(null)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                        >
-                          <Share2 size={14} className="text-[#0089A8] shrink-0" />
-                          <span>WhatsApp Care</span>
-                        </a>
-
-                        <div className="my-1 border-t border-[#E4E9F0]" />
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenMenuId(null);
-                            setDeletingPatient(patient);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-rose-600 hover:bg-rose-50 transition-colors text-left font-medium"
-                        >
-                          <Trash2 size={14} className="shrink-0" />
-                          <span>Delete Patient</span>
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -432,197 +262,6 @@ export default function PatientsPage() {
               </article>
             );
           })}
-        </div>
-      )}
-
-      {/* Edit Patient Modal */}
-      {editingPatient && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
-              <div>
-                <h3 className="font-bold text-base text-[#111C3A]">Edit Patient Details</h3>
-                <p className="text-[11px] text-[#8291A7] mt-0.5">ID: {editingPatient._id}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingPatient(null)}
-                aria-label="Close edit patient form"
-                className="text-[#8291A7] hover:text-[#111C3A]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdatePatient} className="mt-4 space-y-3">
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
-                  <input
-                    type="number"
-                    required
-                    value={editForm.age}
-                    onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Gender</label>
-                  <select
-                    value={editForm.gender}
-                    onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as "Male" | "Female" | "Other" })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
-                  <select
-                    value={editForm.bloodGroup}
-                    onChange={(e) => setEditForm({ ...editForm, bloodGroup: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] text-xs"
-                  >
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Address / Locality</label>
-                <input
-                  type="text"
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Alerts / Allergies (comma-separated)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Penicillin Allergy, Diabetic"
-                  value={editForm.medicalAlerts}
-                  onChange={(e) => setEditForm({ ...editForm, medicalAlerts: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Follow-Up Due Date (optional)</label>
-                <input
-                  type="date"
-                  value={editForm.followUpDue}
-                  onChange={(e) => setEditForm({ ...editForm, followUpDue: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-xs"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
-                <button
-                  type="button"
-                  onClick={() => setEditingPatient(null)}
-                  disabled={isUpdating}
-                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUpdating}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs transition-colors disabled:opacity-50"
-                >
-                  {isUpdating && <Loader2 size={13} className="animate-spin" />}
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingPatient && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 border border-rose-200">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-[#111C3A]">Delete Patient Record?</h3>
-                <p className="text-[11px] text-[#8291A7]">Permanent deletion</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-[#52627A] leading-relaxed mb-4">
-              Are you sure you want to delete <strong className="text-[#111C3A]">{deletingPatient.name}</strong>?
-              This will remove this patient and automatically cascade to delete all their appointments, fee records, and payment history.
-            </p>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
-              <button
-                type="button"
-                onClick={() => setDeletingPatient(null)}
-                disabled={isDeleting}
-                className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeletePatient}
-                disabled={isDeleting}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700 shadow-xs transition-colors disabled:opacity-50"
-              >
-                {isDeleting && <Loader2 size={13} className="animate-spin" />}
-                Delete Record
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

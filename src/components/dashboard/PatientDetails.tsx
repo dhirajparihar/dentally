@@ -21,6 +21,9 @@ import {
   Droplet,
   Edit3,
   Printer,
+  MoreVertical,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import {
   Patient,
@@ -37,6 +40,7 @@ interface PatientDetailsProps {
   patient: Patient | null;
   onBack: () => void;
   onUpdatePatient: (updated: Patient) => void;
+  onDeletePatient?: (patientId: string) => Promise<boolean>;
   fees: FeeItem[];
   payments: PaymentTransaction[];
   appointments: Appointment[];
@@ -52,6 +56,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   patient,
   onBack,
   onUpdatePatient,
+  onDeletePatient,
   fees,
   payments,
   appointments,
@@ -62,7 +67,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   initialFollowUpSource,
   focusedVisitId,
 }) => {
-  const { clinicProfile } = useClinic();
+  const { clinicProfile, deletePatient } = useClinic();
   const [activeTab, setActiveTab] = useState<"overview" | "financials" | "appointments">(openVisits ? "appointments" : "overview");
 
   // Profile Editing State
@@ -82,6 +87,24 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
   // Selected treatment invoice for official view/print
   const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
+
+  // Three-dots menu and delete states
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isMenuOpen]);
 
   const handleEditProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,9 +402,115 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             ))}
             {medicalAlerts.length === 0 && <span className="text-xs text-[#64748B]">No medical alerts recorded</span>}
           </div>
-          <span className={`patient-payment ${outstandingBalance > 0 ? "due" : "settled"}`}>
-            <CreditCard size={15} aria-hidden="true" />{outstandingBalance > 0 ? `${money(outstandingBalance)} due` : "Settled"}
-          </span>
+          <div className="flex items-center gap-2 justify-self-end self-start sm:self-center" style={{ gridArea: "payment" }}>
+            <span className={`patient-payment ${outstandingBalance > 0 ? "due" : "settled"}`}>
+              <CreditCard size={15} aria-hidden="true" />{outstandingBalance > 0 ? `${money(outstandingBalance)} due` : "Settled"}
+            </span>
+
+            {/* Three Dots Action Menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label="Patient actions"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E4E9F0] bg-white text-[#52627A] hover:bg-[#EDF7FA] hover:text-[#0089A8] transition-colors shadow-xs"
+              >
+                <MoreVertical size={16} />
+              </button>
+
+              {isMenuOpen && (
+                <div
+                  className="absolute right-0 top-11 z-30 w-52 rounded-2xl border border-[#E4E9F0] bg-white p-1.5 shadow-xl text-xs animate-in fade-in zoom-in-95"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setEditForm({
+                        name: patient.name,
+                        age: patient.age.toString(),
+                        gender: patient.gender,
+                        phone: patient.phone,
+                        email: patient.email || "",
+                        address: patient.address || "",
+                        bloodGroup: patient.bloodGroup || "O+",
+                        medicalAlerts: (patient.medicalAlerts || []).join(", "),
+                      });
+                      setIsEditProfileOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
+                  >
+                    <Edit3 size={14} className="text-[#0089A8] shrink-0" />
+                    <span>Edit Patient Details</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setActiveTab("appointments");
+                      setShowRecallForm(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
+                  >
+                    <Calendar size={14} className="text-[#0089A8] shrink-0" />
+                    <span>Book Appointment</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setActiveTab("financials");
+                      setShowPaymentForm(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
+                  >
+                    <IndianRupee size={14} className="text-[#0089A8] shrink-0" />
+                    <span>Record Payment</span>
+                  </button>
+
+                  <a
+                    href={getWhatsAppReminderUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
+                  >
+                    <Share2 size={14} className="text-[#0089A8] shrink-0" />
+                    <span>WhatsApp Patient</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      window.print();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
+                  >
+                    <Printer size={14} className="text-[#0089A8] shrink-0" />
+                    <span>Print Records</span>
+                  </button>
+
+                  <div className="my-1 border-t border-[#E4E9F0]" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsDeleteModalOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-rose-600 hover:bg-rose-50 transition-colors text-left font-medium"
+                  >
+                    <Trash2 size={14} className="shrink-0" />
+                    <span>Delete Patient</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="patient-contact-row">
           <a href={`tel:${patient.phone}`} className="patient-phone"><Phone size={17} aria-hidden="true" /><span>{patient.phone}</span></a>
@@ -1468,6 +1597,61 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= DELETE PATIENT CONFIRMATION MODAL ================= */}
+      {isDeleteModalOpen && (
+        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center gap-3 text-rose-600 mb-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 border border-rose-200 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#111C3A]">Delete Patient Record?</h3>
+                <p className="text-[11px] text-[#8291A7]">Permanent deletion</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#52627A] leading-relaxed mb-4">
+              Are you sure you want to delete <strong className="text-[#111C3A]">{patient.name}</strong>?
+              This will remove this patient and automatically cascade to delete all their appointments, billed fees, and payment transactions.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    if (onDeletePatient) {
+                      await onDeletePatient(patient._id);
+                    } else {
+                      await deletePatient(patient._id);
+                      onBack();
+                    }
+                  } finally {
+                    setIsDeleting(false);
+                    setIsDeleteModalOpen(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700 shadow-xs transition-colors disabled:opacity-50"
+              >
+                {isDeleting && <Loader2 size={13} className="animate-spin" />}
+                Delete Record
+              </button>
             </div>
           </div>
         </div>
