@@ -24,7 +24,7 @@ import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
-import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
+import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -208,10 +208,9 @@ export default function AppointmentsPage() {
     if (!saved) setBookingError("Could not cancel the appointment. Try again.");
   };
 
-  // Open Dossier for Patient
-  const handleOpenPatientDossier = (patientId: string, patientName: string) => {
+  const getPatientDossierUrl = ({ patientId, patientName }: Appointment) => {
     const found = patients.find((p) => p._id === patientId || p.name === patientName);
-    router.push(`/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`);
+    return `/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`;
   };
 
   const closeBooking = () => {
@@ -433,7 +432,7 @@ export default function AppointmentsPage() {
       <section aria-labelledby="appointments-list-heading" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="appointments-list-heading" className="text-sm font-semibold">{viewMode === "list" ? "All Bookings" : isToday ? "Today's Appointments" : "Appointments"} <span className="ml-1 text-xs font-normal text-[#64748B]">({visibleAppointments.length})</span></h2>
-          {viewMode === "timeline" && <p className="text-xs text-[#64748B]">{dayAppointments.filter((appointment) => appointment.status === "scheduled").length} scheduled &middot; {dayAppointments.filter((appointment) => appointment.status === "completed").length} completed &middot; {dayAppointments.filter((appointment) => appointment.status === "missed").length} missed</p>}
+          {viewMode === "timeline" && <AppointmentStatusSummary appointments={dayAppointments} />}
           {viewMode === "list" && (
             <select aria-label="Filter appointments by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="appointment-status-filter">
               {(["all", "scheduled", "completed", "missed", "cancelled"] as const).map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.charAt(0).toUpperCase() + status.slice(1)} ({status === "all" ? appointments.length : appointments.filter((appointment) => appointment.status === status).length})</option>)}
@@ -444,39 +443,26 @@ export default function AppointmentsPage() {
           <div className="appointment-empty"><Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" /><p className="text-sm font-medium">No appointments {viewMode === "timeline" ? "on this date" : "found"}.</p>{viewMode === "list" && <p className="mt-1 text-xs text-[#64748B]">Try another status filter.</p>}</div>
         ) : (
           <div className={viewMode === "list" ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "appointment-timeline space-y-3"}>
-            {visibleAppointments.map((appointment) => (
-              <article key={appointment._id} className="appointment-card">
-                <div className="appointment-card-body">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="appointment-card-time">{appointment.time}</span>
-                    <span className="text-xs text-[#64748B]">{appointment.durationMinutes} min{viewMode === "list" && <> &middot; {appointment.date}</>}</span>
-                  </div>
-                  <h3 className="mt-2 break-words text-base font-bold"><button type="button" onClick={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)} className="text-left hover:text-[#0089A8]">{appointment.patientName}</button></h3>
-                  <p className="mt-1 text-sm font-medium text-[#007F96]">{appointment.procedure}</p>
-                  {appointment.notes && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#64748B]">{appointment.notes}</p>}
-                  {appointment.date < clock.date ? (
-                    <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</span>
-                  ) : (
-                    <a href={`tel:${appointment.patientPhone}`} className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]"><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</a>
-                  )}
-                </div>
-                <div className="appointment-card-controls">
-                  <AppointmentStatusControl appointment={appointment} />
-                  {appointment.date >= clock.date && (
+            {visibleAppointments.map((appointment) => {
+              const patientHref = getPatientDossierUrl(appointment);
+              const canCall = appointment.date >= clock.date;
+              return (
+                <AppointmentCard key={appointment._id} appointment={appointment} patientHref={patientHref} showDate={viewMode === "list"} canCall={canCall}>
+                  {canCall && (
                     <AppointmentActions
                       appointment={appointment}
                       reminderUrl={getWhatsAppReminderUrl(appointment)}
                       careUrl={getWhatsAppPostOpUrl(appointment)}
-                      onView={() => handleOpenPatientDossier(appointment.patientId, appointment.patientName)}
+                      onView={() => router.push(patientHref)}
                       onReschedule={() => openReschedule(appointment)}
                       onReopen={() => handleReopen(appointment)}
                       canReopen={isFutureAppointment(appointment.date, appointment.time, clock)}
                       onCancel={() => handleCancel(appointment)}
                     />
                   )}
-                </div>
-              </article>
-            ))}
+                </AppointmentCard>
+              );
+            })}
           </div>
         )}
       </section>

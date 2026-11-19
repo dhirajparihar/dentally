@@ -17,7 +17,7 @@ import {
   shiftAppointmentDate,
 } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
-import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
+import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 
 const appointmentsUrl = "/dashboard/appointments";
@@ -220,101 +220,92 @@ export default function DashboardOverviewPage() {
         </div>
       </section>
 
-      <section aria-labelledby="today-appointments-heading" className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-x-3">
-          <h2 id="today-appointments-heading" className="text-base font-bold">Today&apos;s Appointments</h2>
-          <Link href={appointmentsUrl} aria-label="View all appointments" className="inline-flex min-h-9 items-center text-sm font-semibold text-[#00738E] hover:underline">
-            View All
-          </Link>
+      <section aria-labelledby="today-appointments-heading" className="space-y-3" aria-busy={loading}>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h2 id="today-appointments-heading" className="text-base font-bold">
+            Today&apos;s Appointments {!loading && <span className="ml-1 text-xs font-normal text-[#64748B]">({todayAppointments.length})</span>}
+          </h2>
+          <div className="flex flex-wrap items-center gap-x-4">
+            {!loading && <AppointmentStatusSummary appointments={todayAppointments} />}
+            <Link href={appointmentsUrl} aria-label="View all appointments" className="inline-flex min-h-9 items-center text-sm font-semibold text-[#00738E] hover:underline">
+              View All
+            </Link>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-[#E4E9F0] bg-white" aria-busy={loading}>
-          {loading || todayAppointments.length === 0 ? (
-            <p role="status" className="px-4 py-6 text-center text-sm text-[#64748B]">
-              {loading ? "Loading appointments…" : "No appointments today."}
-            </p>
-          ) : (
-            <>
-              <div aria-hidden="true" className="overview-appointment-head rounded-t-xl border-b border-[#E4E9F0] bg-[#FAFBFC] text-xs font-medium text-[#52627A]">
-                <span>Time</span>
-                <span>Patient</span>
-                <span>Treatment</span>
-                <span>Status</span>
-                <span>Actions</span>
-              </div>
-              <ol role="list" className="divide-y divide-[#E4E9F0]">
-                {todayAppointments.map((appointment) => {
-                  const dossierUrl = patientUrl(appointment.patientId);
-                  const visitId = encodeURIComponent(appointment._id);
-                  const followUp = appointment.status === "completed" ? findBookedFollowUp(appointments, appointment._id) : undefined;
-                  const isInactive = appointment.status === "missed" || appointment.status === "cancelled";
-                  const canReopen = isInactive
-                    && isFutureAppointment(appointment.date, appointment.time, clock)
-                    && !findAppointmentConflict(appointments, appointment.date, appointment.time, appointment.durationMinutes, appointment._id);
+        {loading ? (
+          <p role="status" className="appointment-empty">Loading appointments…</p>
+        ) : todayAppointments.length === 0 ? (
+          <div className="appointment-empty">
+            <Calendar size={25} className="mx-auto mb-3 text-[#0089A8]" aria-hidden="true" />
+            <p className="text-sm font-medium">No appointments today.</p>
+          </div>
+        ) : (
+          <div className="appointment-timeline space-y-3">
+            {todayAppointments.map((appointment) => {
+              const dossierUrl = patientUrl(appointment.patientId);
+              const visitId = encodeURIComponent(appointment._id);
+              const followUp = appointment.status === "completed" ? findBookedFollowUp(appointments, appointment._id) : undefined;
+              const isInactive = appointment.status === "missed" || appointment.status === "cancelled";
+              const canReopen = isInactive
+                && isFutureAppointment(appointment.date, appointment.time, clock)
+                && !findAppointmentConflict(appointments, appointment.date, appointment.time, appointment.durationMinutes, appointment._id);
 
-                  return (
-                    <li key={appointment._id} className="overview-appointment-row text-sm">
-                      <span className="overview-appointment-time whitespace-nowrap font-semibold tabular-nums">{appointment.time}</span>
-                      <Link href={dossierUrl} className="overview-appointment-patient min-w-0 break-words font-semibold hover:text-[#00738E] hover:underline">
-                        {appointment.patientName}
-                      </Link>
-                      <span className="overview-appointment-treatment min-w-0 break-words text-[#52627A]">{appointment.procedure}</span>
-                      <div className="overview-appointment-status"><AppointmentStatusControl appointment={appointment} /></div>
-                      <details
-                        name="overview-appointment-actions"
-                        className="appointment-menu overview-appointment-actions"
-                        onBlur={(event) => {
-                          if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Escape" || !event.currentTarget.open) return;
-                          event.currentTarget.open = false;
-                          event.currentTarget.querySelector("summary")?.focus();
-                        }}
-                      >
-                        <summary aria-label={`Actions for ${appointment.patientName}`}>
-                          <MoreHorizontal size={18} aria-hidden="true" />
-                        </summary>
-                        <div className="appointment-menu-items" onClick={(event) => {
-                          if (!(event.target as Element).closest("button, a")) return;
-                          const menu = event.currentTarget.closest("details");
-                          if (menu) {
-                            menu.open = false;
-                            menu.querySelector("summary")?.focus();
-                          }
-                        }}>
-                          <a href={`tel:${appointment.patientPhone}`}><Phone size={15} aria-hidden="true" />Call Patient</a>
-                          {appointment.status === "scheduled" && (
-                            <>
-                              <a href={getReminderUrl(appointment)} target="_blank" rel="noopener noreferrer"><Share2 size={15} aria-hidden="true" />WhatsApp Reminder</a>
-                              <button type="button" onClick={() => cancelAppointment(appointment._id, "Cancelled from dashboard")} className="text-rose-700">
-                                <X size={15} aria-hidden="true" />Cancel Appointment
-                              </button>
-                            </>
-                          )}
-                          {appointment.status === "completed" && (
-                            <Link href={followUp ? `${dossierUrl}?visit=${encodeURIComponent(followUp._id)}` : `${dossierUrl}?followUp=${visitId}`}>
-                              <Calendar size={15} aria-hidden="true" />{followUp ? "View Follow-Up" : "Book Follow-Up"}
-                            </Link>
-                          )}
-                          {isInactive && (
-                            canReopen ? (
-                              <button type="button" onClick={() => bookAppointment({ ...appointment, status: "scheduled" })}>
-                                <RefreshCw size={15} aria-hidden="true" />Reopen Appointment
-                              </button>
-                            ) : (
-                              <Link href={appointmentsUrl}><Calendar size={15} aria-hidden="true" />Reschedule</Link>
-                            )
-                          )}
-                        </div>
-                      </details>
-                    </li>
-                  );
-                })}
-              </ol>
-            </>
-          )}
-        </div>
+              return (
+                <AppointmentCard key={appointment._id} appointment={appointment} patientHref={dossierUrl}>
+                  <details
+                    name="overview-appointment-actions"
+                    className="appointment-menu"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape" || !event.currentTarget.open) return;
+                      event.currentTarget.open = false;
+                      event.currentTarget.querySelector("summary")?.focus();
+                    }}
+                  >
+                    <summary aria-label={`More actions for ${appointment.patientName}`}>
+                      <MoreHorizontal size={20} aria-hidden="true" />
+                    </summary>
+                    <div className="appointment-menu-items" role="group" aria-label={`Actions for ${appointment.patientName}`} onClick={(event) => {
+                      if (!(event.target as Element).closest("button, a")) return;
+                      const menu = event.currentTarget.closest("details");
+                      if (menu) {
+                        menu.open = false;
+                        menu.querySelector("summary")?.focus();
+                      }
+                    }}>
+                      <a href={`tel:${appointment.patientPhone}`}><Phone size={15} aria-hidden="true" />Call Patient</a>
+                      {appointment.status === "scheduled" && (
+                        <>
+                          <a href={getReminderUrl(appointment)} target="_blank" rel="noopener noreferrer"><Share2 size={15} aria-hidden="true" />WhatsApp Reminder</a>
+                          <button type="button" onClick={() => cancelAppointment(appointment._id)} className="text-rose-700">
+                            <X size={15} aria-hidden="true" />Cancel Appointment
+                          </button>
+                        </>
+                      )}
+                      {appointment.status === "completed" && (
+                        <Link href={followUp ? `${dossierUrl}?visit=${encodeURIComponent(followUp._id)}` : `${dossierUrl}?followUp=${visitId}`}>
+                          <Calendar size={15} aria-hidden="true" />{followUp ? "View Follow-Up" : "Book Follow-Up"}
+                        </Link>
+                      )}
+                      {isInactive && (
+                        canReopen ? (
+                          <button type="button" onClick={() => bookAppointment({ ...appointment, status: "scheduled" })}>
+                            <RefreshCw size={15} aria-hidden="true" />Reopen Appointment
+                          </button>
+                        ) : (
+                          <Link href={appointmentsUrl}><Calendar size={15} aria-hidden="true" />Reschedule</Link>
+                        )
+                      )}
+                    </div>
+                  </details>
+                </AppointmentCard>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
