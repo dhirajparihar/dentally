@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CreditCard,
   Plus,
   Search,
-  ChevronDown,
   CheckCircle2,
   Printer,
   X,
@@ -26,6 +25,8 @@ import {
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
+import { PatientPicker } from "@/components/dashboard/PatientPicker";
+import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 
 const procedurePresets = [
   { name: "Consultation & Diagnostic X-Ray", price: 500 },
@@ -39,158 +40,6 @@ const procedurePresets = [
 const customTreatment = "custom";
 const normalizeTreatmentName = (name: string) => name.trim().replace(/\s+/g, " ");
 const treatmentKey = (name: string) => `treatment:${normalizeTreatmentName(name).toLowerCase()}`;
-
-function PatientPicker({ patients, value, onChange }: {
-  patients: Patient[];
-  value: string;
-  onChange: (patientId: string) => void;
-}) {
-  const id = useId();
-  const listId = `${id}-patients`;
-  const input = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [activePatientId, setActivePatientId] = useState<string | null>(null);
-  const selected = patients.find((patient) => patient._id === value);
-  const query = (search ?? "").trim().toLowerCase();
-  const matches = patients.filter((patient) => patient.name.toLowerCase().includes(query));
-  const activeIndex = matches.findIndex((patient) => patient._id === activePatientId);
-  const activeOption = expanded && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
-  const needsSelection = !expanded && search !== null && !selected;
-
-  useEffect(() => {
-    if (activeOption) document.getElementById(activeOption)?.scrollIntoView({ block: "nearest" });
-  }, [activeOption]);
-
-  const open = (target: HTMLInputElement | null) => {
-    if (search === null) target?.select();
-    setExpanded(true);
-  };
-
-  const close = () => {
-    setExpanded(false);
-    setActivePatientId(null);
-  };
-
-  const selectPatient = (patient: Patient) => {
-    onChange(patient._id);
-    setSearch(null);
-    close();
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    switch (event.key) {
-      case "ArrowDown":
-      case "ArrowUp": {
-        event.preventDefault();
-        setExpanded(true);
-        if (!matches.length) return;
-        const down = event.key === "ArrowDown";
-        const next = activeIndex < 0
-          ? down ? 0 : matches.length - 1
-          : Math.max(0, Math.min(matches.length - 1, activeIndex + (down ? 1 : -1)));
-        setActivePatientId(matches[next]._id);
-        break;
-      }
-      case "Enter": {
-        event.preventDefault();
-        if (!expanded) {
-          setExpanded(true);
-          return;
-        }
-        const match = matches[activeIndex] ?? (matches.length === 1 ? matches[0] : undefined);
-        if (match) selectPatient(match);
-        break;
-      }
-      case "Escape":
-        if (expanded) {
-          event.preventDefault();
-          event.stopPropagation();
-          close();
-        }
-        break;
-    }
-  };
-
-  return (
-    <div className="space-y-1.5" onBlur={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget)) close();
-    }}>
-      <label htmlFor={id} className="block font-semibold text-[#111C3A]">Patient *</label>
-      <div className="fee-patient-picker">
-        <div className="workspace-search fee-patient-field">
-          <Search size={15} aria-hidden="true" />
-          <input
-            ref={input}
-            id={id}
-            type="text"
-            role="combobox"
-            autoComplete="off"
-            aria-autocomplete="list"
-            aria-expanded={expanded}
-            aria-controls={expanded ? listId : undefined}
-            aria-activedescendant={activeOption}
-            aria-describedby={needsSelection ? `${id}-selection` : undefined}
-            required
-            placeholder="Type a patient name"
-            value={search ?? selected?.name ?? ""}
-            onFocus={(event) => open(event.currentTarget)}
-            onClick={(event) => open(event.currentTarget)}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setActivePatientId(null);
-              setExpanded(true);
-              if (value) onChange("");
-            }}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={expanded ? "Close patient list" : "Show patient list"}
-            aria-expanded={expanded}
-            aria-controls={expanded ? listId : undefined}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              if (expanded) close();
-              else {
-                input.current?.focus();
-                open(input.current);
-              }
-            }}
-          >
-            <ChevronDown size={15} className={expanded ? "rotate-180" : undefined} aria-hidden="true" />
-          </button>
-        </div>
-        {expanded && (
-          <div className="fee-patient-dropdown">
-            <ul id={listId} role="listbox" aria-label="Matching patients">
-              {matches.map((patient, index) => (
-                <li
-                  key={patient._id}
-                  id={`${listId}-${index}`}
-                  role="option"
-                  aria-selected={patient._id === value}
-                  data-active={index === activeIndex}
-                  className="fee-patient-option"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectPatient(patient)}
-                >
-                  <span className="min-w-0 break-words font-semibold">{patient.name}</span>
-                  <span className="break-all text-[11px] text-[#64748B]">{patient.phone || patient._id}</span>
-                </li>
-              ))}
-            </ul>
-            {matches.length === 0 && <p role="status" className="p-3 text-[#64748B]">No matching patients.</p>}
-          </div>
-        )}
-      </div>
-      {selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
-      {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">Select a patient from the list.</p>}
-    </div>
-  );
-}
 
 export default function FeesPage() {
   const {
@@ -208,7 +57,7 @@ export default function FeesPage() {
 
   // Modals
   const [isAddFeeOpen, setIsAddFeeOpen] = useState(false);
-  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
+  const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentTransaction | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<FeeItem | null>(null);
   const [qrModalData, setQrModalData] = useState<{ patientId?: string; patientName: string; amount: number; procedure?: string } | null>(null);
@@ -248,14 +97,6 @@ export default function FeesPage() {
   const procedureName = addingTreatment
     ? normalizeTreatmentName(feeForm.newTreatmentName)
     : treatments.get(feeForm.treatment)?.name ?? "";
-
-  // Record Payment Form State
-  const [paymentForm, setPaymentForm] = useState({
-    patientId: patients[0]?._id || "",
-    amount: "5000",
-    paymentMethod: "UPI" as "UPI" | "Cash" | "Card",
-    notes: "UPI payment via GPay",
-  });
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -336,30 +177,6 @@ export default function FeesPage() {
     setIsAddFeeOpen(false);
   };
 
-  // Record Payment Handler
-  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const patient = patients.find((p) => p._id === paymentForm.patientId);
-    if (!patient) return;
-    const amountVal = Number(paymentForm.amount);
-    if (!amountVal || amountVal <= 0) return;
-
-    const newPayment: PaymentTransaction = {
-      _id: `pay_${Date.now()}`,
-      patientId: patient._id,
-      patientName: patient.name,
-      date: todayStr,
-      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      amount: amountVal,
-      paymentMethod: paymentForm.paymentMethod,
-      notes: paymentForm.notes,
-      receiptNo: `REC-2026-${(payments.length + 86).toString().padStart(3, "0")}`,
-    };
-
-    await recordPayment(newPayment);
-    setIsRecordPaymentOpen(false);
-  };
-
   const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
   const matchesSearch = (...values: (string | undefined)[]) => values.some((value) => value?.toLowerCase().includes(search.trim().toLowerCase()));
   const visibleDues = unpaidDuesList.filter(({ patient, latestFee }) => matchesSearch(patient.name, patient._id, patient.phone, latestFee?.procedureName));
@@ -367,8 +184,11 @@ export default function FeesPage() {
   const visiblePayments = payments.filter((payment) => matchesSearch(payment.patientName, payment.patientId, payment.receiptNo, payment.paymentMethod, payment.notes, payment.date));
   const openPayment = (patientId?: string, amount?: number, notes?: string) => {
     const ledger = unpaidDuesList[0];
-    setPaymentForm({ patientId: patientId || ledger?.patient._id || patients[0]?._id || "", amount: amount?.toString() || ledger?.outstanding.toString() || "", paymentMethod: "UPI", notes: notes || "" });
-    setIsRecordPaymentOpen(true);
+    setPaymentDefaults({
+      patientId: patientId ?? ledger?.patient._id ?? patients[0]?._id ?? "",
+      amount: amount ?? ledger?.outstanding,
+      notes,
+    });
   };
   const summaries = [
     { label: "Collected Today", value: money(todayTotal), detail: `UPI ${money(upiToday)} / Cash ${money(cashToday)} / Card ${money(cardToday)}`, icon: IndianRupee, tone: "green" },
@@ -629,96 +449,8 @@ export default function FeesPage() {
         </div>
       )}
 
-      {/* ================= RECORD PAYMENT MODAL ================= */}
-      {isRecordPaymentOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
-              <div>
-                <h3 className="font-bold text-base text-[#111C3A]">
-                  Record Payment
-                </h3>
-                <p className="text-[11px] text-[#64748B] mt-0.5">
-                  A receipt is created when you save.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsRecordPaymentOpen(false)}
-                aria-label="Close payment form"
-                className="text-[#8291A7] hover:text-[#111C3A]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRecordPaymentSubmit} className="mt-4 space-y-3">
-              <PatientPicker
-                patients={patients}
-                value={paymentForm.patientId}
-                onChange={(patientId) => setPaymentForm((previous) => ({ ...previous, patientId }))}
-              />
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Amount Paid (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono font-bold text-base bg-[#FAFBFC] focus:border-[#0089A8]"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Payment Method *</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(["UPI", "Cash", "Card"] as const).map((method) => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setPaymentForm({ ...paymentForm, paymentMethod: method })}
-                      className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
-                        paymentForm.paymentMethod === method
-                          ? "bg-[#0089A8] text-white border-[#0089A8]"
-                          : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
-                      }`}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Transaction Note</label>
-                <input
-                  type="text"
-                  placeholder="e.g. UPI Ref #49201, GPay"
-                  value={paymentForm.notes}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none bg-[#FAFBFC]"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
-                <button
-                  type="button"
-                  onClick={() => setIsRecordPaymentOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!paymentForm.patientId}
-                  className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Save Payment
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {paymentDefaults && (
+        <RecordPaymentDialog defaults={paymentDefaults} onClose={() => setPaymentDefaults(null)} />
       )}
 
       {/* ================= INSTANT CHAIRSIDE UPI QR MODAL ================= */}

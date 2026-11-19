@@ -70,6 +70,9 @@ const emptyBookingForm = (date: string) => ({
   notes: "",
 });
 
+const earliestAppointmentDate = "0001-01-01";
+const latestAppointmentDate = "9999-12-31";
+
 export default function AppointmentsPage() {
   const {
     appointments,
@@ -377,11 +380,24 @@ export default function AppointmentsPage() {
     <div className="appointments-workspace space-y-5">
       <section className="appointment-toolbar" aria-label="Appointment controls">
         <div className="appointment-date-controls">
-          <button type="button" onClick={() => shiftDate(-1)} className="calendar-icon-button" aria-label="Previous day"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => shiftDate(-1)} disabled={selectedDate === earliestAppointmentDate} className="calendar-icon-button" aria-label="Previous day"><ChevronLeft size={18} /></button>
           <button type="button" onClick={() => setSelectedDate(getAppointmentClock().date)} className={`calendar-today ${isToday ? "selected" : ""}`}>Today</button>
-          <button type="button" onClick={() => shiftDate(1)} className="calendar-icon-button" aria-label="Next day"><ChevronRight size={18} /></button>
+          <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate === latestAppointmentDate} className="calendar-icon-button" aria-label="Next day"><ChevronRight size={18} /></button>
         </div>
-        <p className="appointment-selected-date"><Calendar size={17} aria-hidden="true" /><time dateTime={selectedDate}>{selectedDateLabel}</time></p>
+        <input
+          type="date"
+          className="appointment-date-picker"
+          aria-label="Choose appointment date"
+          value={selectedDate}
+          min={earliestAppointmentDate}
+          max={latestAppointmentDate}
+          required
+          onChange={(event) => {
+            if (!event.currentTarget.validity.valid) return;
+            setSelectedDate(event.currentTarget.value);
+            setViewMode("timeline");
+          }}
+        />
         <div className="appointment-view-toggle" role="group" aria-label="Appointment view">
           <button type="button" aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>Day</button>
           <button type="button" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>All Bookings</button>
