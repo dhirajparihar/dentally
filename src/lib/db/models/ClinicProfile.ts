@@ -14,6 +14,7 @@ export interface IClinicProfile extends Document {
   workingHoursStart: string;
   workingHoursEnd: string;
   receiptFooter: string;
+  isConfigured?: boolean;
   status: "active" | "suspended";
   isActive: boolean;
   lastActiveAt?: Date;
@@ -44,6 +45,7 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
       type: String,
       default: "Thank you for visiting! For dental emergencies, contact our clinic.",
     },
+    isConfigured: { type: Boolean, default: false },
     status: { type: String, enum: ["active", "suspended"], default: "active" },
     isActive: { type: Boolean, default: true },
     lastActiveAt: { type: Date, default: Date.now },

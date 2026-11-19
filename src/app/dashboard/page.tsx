@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowRight, Calendar, Check, CreditCard, IndianRupee, MoreHorizontal, Phone,
   QrCode, RefreshCw, Share2, User, X,
@@ -69,6 +70,15 @@ export default function DashboardOverviewPage() {
     bookAppointment,
     recordPayment,
   } = useClinic();
+
+  const router = useRouter();
+
+  // If a new dentist has not configured their clinic profile yet, redirect to Settings
+  useEffect(() => {
+    if (!loading && clinicProfile && clinicProfile.isConfigured === false) {
+      router.replace("/dashboard/settings?setup=first-time");
+    }
+  }, [loading, clinicProfile, router]);
 
   const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
   const [qrAmount, setQrAmount] = useState<number | null>(null);
@@ -163,6 +173,15 @@ export default function DashboardOverviewPage() {
     const message = `Hello ${patient.name}, greetings from ${clinicProfile.name}.\n\nYour account has an outstanding balance of ${money.format(balance)}. You can pay via UPI at ${upiId} or scan our QR code at your next visit.\n\n${clinicProfile.dentistName} · ${clinicProfile.phone}`;
     return whatsAppUrl(patient.phone, message);
   };
+
+  if (!loading && clinicProfile && clinicProfile.isConfigured === false) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
+        <div className="w-8 h-8 border-3 border-[#0089A8] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-[#64748B] font-medium">Opening clinic profile setup...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="overview space-y-5 sm:space-y-6">

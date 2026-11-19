@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Building2,
   User,
@@ -11,15 +13,24 @@ import {
   MapPin,
   QrCode,
   Clock,
-  Save,
   CheckCircle2,
   Receipt,
   Share2,
+  Loader2,
+  Sparkles,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 
-export default function ClinicSettingsPage() {
-  const { clinicProfile, updateClinicProfile, loading, isSyncing, userEmail } = useClinic();
+type AutoSaveStatus = "saved" | "saving" | "unsaved" | "error";
+
+function ClinicSettingsContent() {
+  const searchParams = useSearchParams();
+  const { clinicProfile, updateClinicProfile, loading, userEmail } = useClinic();
+
+  const isFirstTime =
+    searchParams?.get("setup") === "first-time" || clinicProfile?.isConfigured === false;
 
   const [form, setForm] = useState({
     name: clinicProfile.name || "Dentally Clinic",
@@ -38,45 +49,90 @@ export default function ClinicSettingsPage() {
       "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
   });
 
-  const [isSaved, setIsSaved] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<AutoSaveStatus>("saved");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedJsonRef = useRef<string>("");
+  const isInitialLoadedRef = useRef(false);
 
-  // Sync state if clinicProfile loads after initial render
+  // Sync state when clinicProfile loads
   useEffect(() => {
-    if (clinicProfile) {
-      setForm((prev) => ({
-        ...prev,
-        name: clinicProfile.name || prev.name,
-        dentistName: clinicProfile.dentistName || prev.dentistName,
-        qualification: clinicProfile.qualification || prev.qualification,
-        regNo: clinicProfile.regNo || prev.regNo,
-        phone: clinicProfile.phone || prev.phone,
-        email: clinicProfile.email || userEmail || prev.email,
-        address: clinicProfile.address || prev.address,
-        upiId: clinicProfile.upiId || prev.upiId,
-        slotDuration: clinicProfile.slotDuration || prev.slotDuration,
-        workingHoursStart: clinicProfile.workingHoursStart || prev.workingHoursStart,
-        workingHoursEnd: clinicProfile.workingHoursEnd || prev.workingHoursEnd,
-        receiptFooter: clinicProfile.receiptFooter || prev.receiptFooter,
-      }));
+    if (clinicProfile && !isInitialLoadedRef.current) {
+      const initial = {
+        name: clinicProfile.name || "Dentally Clinic",
+        dentistName: clinicProfile.dentistName || "Doctor",
+        qualification: clinicProfile.qualification || "BDS, MDS",
+        regNo: clinicProfile.regNo || "DCI-ONLINE",
+        phone: clinicProfile.phone || "+91 98200 11223",
+        email: clinicProfile.email || userEmail || "",
+        address: clinicProfile.address || "Dental Operatory",
+        upiId: clinicProfile.upiId || "dentally@upi",
+        slotDuration: clinicProfile.slotDuration || 30,
+        workingHoursStart: clinicProfile.workingHoursStart || "09:30 AM",
+        workingHoursEnd: clinicProfile.workingHoursEnd || "08:00 PM",
+        receiptFooter:
+          clinicProfile.receiptFooter ||
+          "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
+      };
+      setForm(initial);
+      lastSavedJsonRef.current = JSON.stringify(initial);
+      isInitialLoadedRef.current = true;
     }
   }, [clinicProfile, userEmail]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setIsSaved(false);
+  // Execute database save
+  const executeSave = useCallback(
+    async (dataToSave: typeof form) => {
+      const currentJson = JSON.stringify(dataToSave);
+      if (currentJson === lastSavedJsonRef.current) {
+        setSaveStatus("saved");
+        return;
+      }
 
-    try {
-      await updateClinicProfile(form);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 4000);
-    } catch (err) {
-      console.error("Failed to save clinic settings:", err);
-    } finally {
-      setIsSaving(false);
-    }
+      setSaveStatus("saving");
+      try {
+        await updateClinicProfile(dataToSave);
+        lastSavedJsonRef.current = currentJson;
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        setSaveStatus("error");
+      }
+    },
+    [updateClinicProfile]
+  );
+
+  // Handle live field change with debounce
+  const updateField = (field: keyof typeof form, value: any) => {
+    setForm((prev) => {
+      const updated = { ...prev, [field]: value };
+      if (isInitialLoadedRef.current) {
+        setSaveStatus("unsaved");
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = setTimeout(() => {
+          executeSave(updated);
+        }, 750);
+      }
+      return updated;
+    });
   };
+
+  // Immediate save on blur
+  const handleBlur = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    executeSave(form);
+  };
+
+  // Cleanup pending timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Generate standard UPI payment link for QR Preview
   const upiPayUrl = `upi://pay?pa=${encodeURIComponent(form.upiId)}&pn=${encodeURIComponent(
@@ -99,7 +155,7 @@ export default function ClinicSettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header Banner */}
       <div className="bg-white p-6 sm:p-7 rounded-[22px] border border-[#E4E9F0] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -118,8 +174,32 @@ export default function ClinicSettingsPage() {
           </div>
         </div>
 
-        {/* Sync Indicator */}
-        <div className="flex items-center gap-2">
+        {/* Live Auto-Save & Tenant Indicator */}
+        <div className="flex flex-wrap items-center gap-2">
+          {saveStatus === "saving" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-mono font-medium border border-amber-200 animate-pulse">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span>Auto-saving...</span>
+            </span>
+          )}
+          {saveStatus === "saved" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-mono font-medium border border-emerald-200">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>All changes saved</span>
+            </span>
+          )}
+          {saveStatus === "unsaved" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-mono font-medium border border-slate-200">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Unsaved changes...</span>
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 text-rose-700 text-xs font-mono font-medium border border-rose-200">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>Save error, retrying...</span>
+            </span>
+          )}
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EDF7FA] text-[#0089A8] text-xs font-mono font-medium border border-[#D4EDF3]">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Private Tenant Scoped</span>
@@ -127,23 +207,39 @@ export default function ClinicSettingsPage() {
         </div>
       </div>
 
-      {/* Success Notification Banner */}
-      {isSaved && (
-        <div className="p-4 rounded-2xl bg-[#EDF7FA] border border-[#B3E1ED] text-[#111C3A] text-sm flex items-center justify-between animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-[#0089A8]" />
-            <span className="font-semibold">
-              Clinic profile updated successfully! All receipts, reminders, and ChatGPT MCP tools are now using your custom clinic branding.
-            </span>
+      {/* First-Time Dentist Onboarding Banner */}
+      {isFirstTime && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-[#EDF7FA] to-[#E5F5F9] border border-[#B3E1ED] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-[#0089A8] font-bold text-sm">
+              <Sparkles className="w-4 h-4" />
+              <span>Welcome Dr. {form.dentistName || "Doctor"}! First-Time Practice Setup</span>
+            </div>
+            <p className="text-xs text-[#3D5450] max-w-xl leading-relaxed">
+              Please enter your clinic name, dental council registration number, and chairside UPI ID below.
+              <strong> All changes save automatically as you type</strong> — no save button needed.
+            </p>
           </div>
-          <span className="text-xs font-mono text-[#64748B]">Synced to Database</span>
+          <Link
+            href="/dashboard"
+            className="px-4 py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shrink-0 shadow-xs"
+          >
+            <span>Open Dashboard</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       )}
 
       {/* Main Settings Form and Live Preview Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-7">
         {/* Left 2 Cols: Form Fields */}
-        <form onSubmit={handleSubmit} className="lg:col-span-2 space-y-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleBlur();
+          }}
+          className="lg:col-span-2 space-y-6"
+        >
           {/* Section 1: Clinic Identity */}
           <div className="bg-white p-6 sm:p-7 rounded-[22px] border border-[#E4E9F0] shadow-xs space-y-5">
             <div className="flex items-center gap-2.5 pb-3 border-b border-[#E4E9F0]">
@@ -160,7 +256,8 @@ export default function ClinicSettingsPage() {
                   type="text"
                   required
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={(e) => updateField("name", e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="e.g. Apex Multispeciality Dental Care"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all"
                 />
@@ -176,7 +273,8 @@ export default function ClinicSettingsPage() {
                     type="text"
                     required
                     value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    onChange={(e) => updateField("phone", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="+91 98200 11223"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all"
                   />
@@ -192,7 +290,8 @@ export default function ClinicSettingsPage() {
                   <input
                     type="email"
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    onChange={(e) => updateField("email", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="clinic@dentally.app"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all bg-slate-50/50"
                   />
@@ -209,7 +308,8 @@ export default function ClinicSettingsPage() {
                     type="text"
                     required
                     value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    onChange={(e) => updateField("address", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="e.g. 102 Crystal Plaza, Opp. Metro Station, Andheri West, Mumbai - 400053"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all"
                   />
@@ -237,7 +337,8 @@ export default function ClinicSettingsPage() {
                   type="text"
                   required
                   value={form.dentistName}
-                  onChange={(e) => setForm({ ...form, dentistName: e.target.value })}
+                  onChange={(e) => updateField("dentistName", e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="e.g. Dr. Dhiraj Sharma"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all"
                 />
@@ -253,7 +354,8 @@ export default function ClinicSettingsPage() {
                     type="text"
                     required
                     value={form.qualification}
-                    onChange={(e) => setForm({ ...form, qualification: e.target.value })}
+                    onChange={(e) => updateField("qualification", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="e.g. BDS, MDS (Endodontics)"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all"
                   />
@@ -270,7 +372,8 @@ export default function ClinicSettingsPage() {
                     type="text"
                     required
                     value={form.regNo}
-                    onChange={(e) => setForm({ ...form, regNo: e.target.value })}
+                    onChange={(e) => updateField("regNo", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="e.g. DCI-MH-49210 / A-19382"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm transition-all font-mono"
                   />
@@ -302,7 +405,8 @@ export default function ClinicSettingsPage() {
                     type="text"
                     required
                     value={form.upiId}
-                    onChange={(e) => setForm({ ...form, upiId: e.target.value })}
+                    onChange={(e) => updateField("upiId", e.target.value)}
+                    onBlur={handleBlur}
                     placeholder="e.g. drsharma@okaxis or 9820011223@paytm"
                     className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-sm font-mono transition-all"
                   />
@@ -319,7 +423,8 @@ export default function ClinicSettingsPage() {
                 <textarea
                   rows={2}
                   value={form.receiptFooter}
-                  onChange={(e) => setForm({ ...form, receiptFooter: e.target.value })}
+                  onChange={(e) => updateField("receiptFooter", e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="Thank you for visiting! For dental emergencies, contact our clinic."
                   className="w-full px-3.5 py-2 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] focus:ring-2 focus:ring-[#0089A8]/20 outline-hidden text-xs transition-all"
                 />
@@ -341,7 +446,11 @@ export default function ClinicSettingsPage() {
                 </label>
                 <select
                   value={form.slotDuration}
-                  onChange={(e) => setForm({ ...form, slotDuration: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    updateField("slotDuration", val);
+                    executeSave({ ...form, slotDuration: val });
+                  }}
                   className="w-full px-3 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] outline-hidden text-xs font-semibold bg-white"
                 >
                   <option value={15}>15 Minutes (Consults)</option>
@@ -358,7 +467,8 @@ export default function ClinicSettingsPage() {
                 <input
                   type="text"
                   value={form.workingHoursStart}
-                  onChange={(e) => setForm({ ...form, workingHoursStart: e.target.value })}
+                  onChange={(e) => updateField("workingHoursStart", e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="09:30 AM"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] outline-hidden text-xs font-mono"
                 />
@@ -371,7 +481,8 @@ export default function ClinicSettingsPage() {
                 <input
                   type="text"
                   value={form.workingHoursEnd}
-                  onChange={(e) => setForm({ ...form, workingHoursEnd: e.target.value })}
+                  onChange={(e) => updateField("workingHoursEnd", e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="08:00 PM"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] outline-hidden text-xs font-mono"
                 />
@@ -379,16 +490,41 @@ export default function ClinicSettingsPage() {
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-6 py-3 rounded-full bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-sm shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          {/* Footer Action Bar with Real-Time Auto-Save Confirmation */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-xs">
+            <div className="flex items-center gap-2.5 text-xs text-[#64748B]">
+              {saveStatus === "saving" ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-[#0089A8] animate-spin" />
+                  <span className="text-[#0089A8] font-medium">Saving your profile changes...</span>
+                </>
+              ) : saveStatus === "unsaved" ? (
+                <>
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <span className="text-amber-700">Auto-saving in a moment...</span>
+                </>
+              ) : saveStatus === "error" ? (
+                <>
+                  <AlertCircle className="w-4 h-4 text-rose-500" />
+                  <span className="text-rose-600">Failed to auto-save. Retrying...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-emerald-700 font-medium">
+                    All changes saved automatically in real-time.
+                  </span>
+                </>
+              )}
+            </div>
+
+            <Link
+              href="/dashboard"
+              className="px-5 py-2.5 rounded-full bg-[#111C3A] hover:bg-[#1E2D4A] text-white font-semibold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Save className="w-4 h-4" />
-              <span>{isSaving ? "Saving Settings..." : "Save Clinic Profile"}</span>
-            </button>
+              <span>Go to Clinic Dashboard</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </form>
 
@@ -480,5 +616,23 @@ export default function ClinicSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ClinicSettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 animate-pulse">
+          <div className="h-24 bg-white rounded-[22px] border border-[#E4E9F0]" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-96 bg-white rounded-[22px] border border-[#E4E9F0]" />
+            <div className="h-96 bg-white rounded-[22px] border border-[#E4E9F0]" />
+          </div>
+        </div>
+      }
+    >
+      <ClinicSettingsContent />
+    </Suspense>
   );
 }

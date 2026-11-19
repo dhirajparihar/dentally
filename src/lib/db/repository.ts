@@ -186,6 +186,10 @@ export async function getClinicData(dentistEmail?: string): Promise<{
       const mappedFees = (fees as any[]).map((f) => ({ ...f, _id: String(f._id) }));
       const mappedPayments = (payments as any[]).map((p) => ({ ...p, _id: String(p._id) }));
 
+      const isConfigured = profileDoc
+        ? (profileDoc.isConfigured ?? (profileDoc.name && profileDoc.name !== "Dentally Clinic"))
+        : false;
+
       const resolvedProfile: ClinicProfile = profileDoc
         ? {
             ...clinicProfile,
@@ -201,10 +205,12 @@ export async function getClinicData(dentistEmail?: string): Promise<{
             workingHoursStart: profileDoc.workingHoursStart || clinicProfile.workingHoursStart,
             workingHoursEnd: profileDoc.workingHoursEnd || clinicProfile.workingHoursEnd,
             receiptFooter: profileDoc.receiptFooter || clinicProfile.receiptFooter,
+            isConfigured: Boolean(isConfigured),
           }
         : {
             ...clinicProfile,
             email: normalized,
+            isConfigured: false,
           };
 
       const mem = getOrCreateMemoryStore(normalized);
@@ -244,6 +250,7 @@ export async function getClinicData(dentistEmail?: string): Promise<{
     clinicProfile: mem.clinicProfile || {
       ...clinicProfile,
       email: normalized,
+      isConfigured: false,
     },
     storage: "memory",
   };
@@ -261,6 +268,7 @@ export async function saveClinicProfile(
     ...(mem.clinicProfile || clinicProfile),
     ...profileData,
     email: normalized,
+    isConfigured: true,
   };
   mem.clinicProfile = updated;
 
@@ -273,6 +281,7 @@ export async function saveClinicProfile(
           $set: {
             ...profileData,
             dentistEmail: normalized,
+            isConfigured: true,
           },
         },
         { upsert: true, new: true }

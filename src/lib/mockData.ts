@@ -155,6 +155,7 @@ export interface ClinicProfile {
   workingHoursStart: string;
   workingHoursEnd: string;
   receiptFooter: string;
+  isConfigured?: boolean;
   mcpServerUrl?: string;
   status?: "active" | "suspended";
   isActive?: boolean;

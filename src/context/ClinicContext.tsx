@@ -57,6 +57,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ...defaultClinicProfile,
     dentistName: "Doctor",
     email: userEmail,
+    isConfigured: undefined,
   }));
 
   // Keep clinicProfile synced with authenticated session
@@ -157,6 +158,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       if (data.fees) setFees(data.fees);
       if (data.payments) setPayments(data.payments);
+      if (data.clinicProfile) {
+        setClinicProfile((prev) => ({
+          ...prev,
+          ...data.clinicProfile,
+        }));
+      }
       return true;
     } catch (err) {
       console.error("Failed to sync mutation to clinic API:", err);
