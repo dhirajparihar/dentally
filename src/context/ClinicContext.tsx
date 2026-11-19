@@ -219,10 +219,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "record_payment", data: scoped });
   };
 
-  const updateClinicProfile = async (profileData: Partial<ClinicProfile>) => {
-    setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail }));
+  const updateClinicProfile = useCallback(async (profileData: Partial<ClinicProfile>) => {
+    setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail, isConfigured: true }));
     await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
-  };
+  }, [userEmail]);
 
   return (
     <ClinicContext.Provider

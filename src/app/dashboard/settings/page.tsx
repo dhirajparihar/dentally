@@ -20,6 +20,7 @@ import {
   Sparkles,
   ArrowRight,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 
@@ -29,55 +30,62 @@ function ClinicSettingsContent() {
   const searchParams = useSearchParams();
   const { clinicProfile, updateClinicProfile, loading, userEmail } = useClinic();
 
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const isFirstTime =
-    searchParams?.get("setup") === "first-time" || clinicProfile?.isConfigured === false;
+    !bannerDismissed &&
+    (searchParams?.get("setup") === "first-time" || clinicProfile?.isConfigured === false);
 
   const [form, setForm] = useState({
-    name: clinicProfile.name || "Dentally Clinic",
-    dentistName: clinicProfile.dentistName || "Doctor",
-    qualification: clinicProfile.qualification || "BDS, MDS",
-    regNo: clinicProfile.regNo || "DCI-ONLINE",
-    phone: clinicProfile.phone || "+91 98200 11223",
-    email: clinicProfile.email || userEmail || "",
-    address: clinicProfile.address || "Dental Operatory",
-    upiId: clinicProfile.upiId || "dentally@upi",
-    slotDuration: clinicProfile.slotDuration || 30,
-    workingHoursStart: clinicProfile.workingHoursStart || "09:30 AM",
-    workingHoursEnd: clinicProfile.workingHoursEnd || "08:00 PM",
+    name: clinicProfile?.name || "Dentally Clinic",
+    dentistName: clinicProfile?.dentistName || "Doctor",
+    qualification: clinicProfile?.qualification || "BDS, MDS",
+    regNo: clinicProfile?.regNo || "DCI-ONLINE",
+    phone: clinicProfile?.phone || "+91 98200 11223",
+    email: clinicProfile?.email || userEmail || "",
+    address: clinicProfile?.address || "Dental Operatory",
+    upiId: clinicProfile?.upiId || "dentally@upi",
+    slotDuration: clinicProfile?.slotDuration || 30,
+    workingHoursStart: clinicProfile?.workingHoursStart || "09:30 AM",
+    workingHoursEnd: clinicProfile?.workingHoursEnd || "08:00 PM",
     receiptFooter:
-      clinicProfile.receiptFooter ||
+      clinicProfile?.receiptFooter ||
       "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
   });
+
+  const formRef = useRef(form);
+  formRef.current = form;
 
   const [saveStatus, setSaveStatus] = useState<AutoSaveStatus>("saved");
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedJsonRef = useRef<string>("");
   const isInitialLoadedRef = useRef(false);
 
-  // Sync state when clinicProfile loads
+  // Sync state once clinicProfile finishes loading from the server
   useEffect(() => {
-    if (clinicProfile && !isInitialLoadedRef.current) {
-      const initial = {
-        name: clinicProfile.name || "Dentally Clinic",
-        dentistName: clinicProfile.dentistName || "Doctor",
-        qualification: clinicProfile.qualification || "BDS, MDS",
-        regNo: clinicProfile.regNo || "DCI-ONLINE",
-        phone: clinicProfile.phone || "+91 98200 11223",
-        email: clinicProfile.email || userEmail || "",
-        address: clinicProfile.address || "Dental Operatory",
-        upiId: clinicProfile.upiId || "dentally@upi",
-        slotDuration: clinicProfile.slotDuration || 30,
-        workingHoursStart: clinicProfile.workingHoursStart || "09:30 AM",
-        workingHoursEnd: clinicProfile.workingHoursEnd || "08:00 PM",
-        receiptFooter:
-          clinicProfile.receiptFooter ||
-          "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
-      };
-      setForm(initial);
-      lastSavedJsonRef.current = JSON.stringify(initial);
-      isInitialLoadedRef.current = true;
+    if (!loading && clinicProfile) {
+      if (!isInitialLoadedRef.current) {
+        const initial = {
+          name: clinicProfile.name || "Dentally Clinic",
+          dentistName: clinicProfile.dentistName || "Doctor",
+          qualification: clinicProfile.qualification || "BDS, MDS",
+          regNo: clinicProfile.regNo || "DCI-ONLINE",
+          phone: clinicProfile.phone || "+91 98200 11223",
+          email: clinicProfile.email || userEmail || "",
+          address: clinicProfile.address || "Dental Operatory",
+          upiId: clinicProfile.upiId || "dentally@upi",
+          slotDuration: clinicProfile.slotDuration || 30,
+          workingHoursStart: clinicProfile.workingHoursStart || "09:30 AM",
+          workingHoursEnd: clinicProfile.workingHoursEnd || "08:00 PM",
+          receiptFooter:
+            clinicProfile.receiptFooter ||
+            "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
+        };
+        setForm(initial);
+        lastSavedJsonRef.current = JSON.stringify(initial);
+        isInitialLoadedRef.current = true;
+      }
     }
-  }, [clinicProfile, userEmail]);
+  }, [loading, clinicProfile, userEmail]);
 
   // Execute database save
   const executeSave = useCallback(
@@ -93,6 +101,14 @@ function ClinicSettingsContent() {
         await updateClinicProfile(dataToSave);
         lastSavedJsonRef.current = currentJson;
         setSaveStatus("saved");
+
+        // Vanish the first-time setup banner upon successful save
+        setBannerDismissed(true);
+        if (typeof window !== "undefined" && window.location.search.includes("setup=")) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("setup");
+          window.history.replaceState({}, "", url.pathname);
+        }
       } catch (err) {
         console.error("Auto-save failed:", err);
         setSaveStatus("error");
@@ -116,13 +132,13 @@ function ClinicSettingsContent() {
     });
   };
 
-  // Immediate save on blur
+  // Immediate save on blur using current ref
   const handleBlur = () => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    executeSave(form);
+    executeSave(formRef.current);
   };
 
   // Cleanup pending timer on unmount
@@ -209,24 +225,41 @@ function ClinicSettingsContent() {
 
       {/* First-Time Dentist Onboarding Banner */}
       {isFirstTime && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-[#EDF7FA] to-[#E5F5F9] border border-[#B3E1ED] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
-          <div className="space-y-1">
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-[#EDF7FA] to-[#E5F5F9] border border-[#B3E1ED] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-in fade-in relative">
+          <div className="space-y-1 pr-6">
             <div className="flex items-center gap-2 text-[#0089A8] font-bold text-sm">
               <Sparkles className="w-4 h-4" />
               <span>Welcome Dr. {form.dentistName || "Doctor"}! First-Time Practice Setup</span>
             </div>
             <p className="text-xs text-[#3D5450] max-w-xl leading-relaxed">
               Please enter your clinic name, dental council registration number, and chairside UPI ID below.
-              <strong> All changes save automatically as you type</strong> — no save button needed.
+              <strong> All changes save automatically as you type</strong> — the banner will disappear once saved.
             </p>
           </div>
-          <Link
-            href="/dashboard"
-            className="px-4 py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shrink-0 shadow-xs"
-          >
-            <span>Open Dashboard</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <span>Open Dashboard</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setBannerDismissed(true);
+                if (typeof window !== "undefined" && window.location.search.includes("setup=")) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete("setup");
+                  window.history.replaceState({}, "", url.pathname);
+                }
+              }}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-colors"
+              title="Dismiss banner"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

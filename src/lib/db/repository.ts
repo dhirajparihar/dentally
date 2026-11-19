@@ -186,9 +186,13 @@ export async function getClinicData(dentistEmail?: string): Promise<{
       const mappedFees = (fees as any[]).map((f) => ({ ...f, _id: String(f._id) }));
       const mappedPayments = (payments as any[]).map((p) => ({ ...p, _id: String(p._id) }));
 
-      const isConfigured = profileDoc
-        ? (profileDoc.isConfigured ?? (profileDoc.name && profileDoc.name !== "Dentally Clinic"))
-        : false;
+      const isConfigured = Boolean(
+        profileDoc &&
+          (profileDoc.isConfigured === true ||
+            (profileDoc.name && profileDoc.name !== "Dentally Clinic") ||
+            (profileDoc.regNo && profileDoc.regNo !== "DCI-ONLINE") ||
+            (profileDoc.upiId && profileDoc.upiId !== "dentally@upi"))
+      );
 
       const resolvedProfile: ClinicProfile = profileDoc
         ? {

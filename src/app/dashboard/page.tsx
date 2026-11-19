@@ -73,10 +73,18 @@ export default function DashboardOverviewPage() {
 
   const router = useRouter();
 
-  // If a new dentist has not configured their clinic profile yet, redirect to Settings
+  // If a new dentist has not configured their clinic profile yet, redirect to Settings once
   useEffect(() => {
     if (!loading && clinicProfile && clinicProfile.isConfigured === false) {
-      router.replace("/dashboard/settings?setup=first-time");
+      const alreadyRedirected =
+        typeof window !== "undefined" &&
+        sessionStorage.getItem("dentally_setup_visited");
+      if (!alreadyRedirected) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("dentally_setup_visited", "true");
+        }
+        router.replace("/dashboard/settings?setup=first-time");
+      }
     }
   }, [loading, clinicProfile, router]);
 
@@ -174,17 +182,27 @@ export default function DashboardOverviewPage() {
     return whatsAppUrl(patient.phone, message);
   };
 
-  if (!loading && clinicProfile && clinicProfile.isConfigured === false) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-3">
-        <div className="w-8 h-8 border-3 border-[#0089A8] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-[#64748B] font-medium">Opening clinic profile setup...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="overview space-y-5 sm:space-y-6">
+      {/* Unconfigured Clinic Profile Warning */}
+      {!loading && clinicProfile && clinicProfile.isConfigured === false && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Your clinic profile is not yet configured. Set up your clinic name, doctor credentials, and UPI ID to ensure receipts and AI booking work seamlessly.
+            </span>
+          </div>
+          <Link
+            href="/dashboard/settings"
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs transition-colors shrink-0 flex items-center justify-center gap-1.5"
+          >
+            <span>Complete Setup</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
+
       <div>
         <h2 className="text-xl font-bold leading-tight sm:text-2xl">{greeting}</h2>
         <p className="mt-1 text-sm text-[#64748B]">

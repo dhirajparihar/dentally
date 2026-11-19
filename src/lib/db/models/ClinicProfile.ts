@@ -45,7 +45,7 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
       type: String,
       default: "Thank you for visiting! For dental emergencies, contact our clinic.",
     },
-    isConfigured: { type: Boolean, default: false },
+    isConfigured: { type: Boolean },
     status: { type: String, enum: ["active", "suspended"], default: "active" },
     isActive: { type: Boolean, default: true },
     lastActiveAt: { type: Date, default: Date.now },
