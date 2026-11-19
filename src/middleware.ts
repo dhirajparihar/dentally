@@ -5,6 +5,7 @@ export default withAuth(
   function middleware(req) {
     const pathname = req.nextUrl.pathname;
     const token = req.nextauth.token;
+    const isSuperAdmin = token?.role === "superadmin" || Boolean(token?.isSuperAdmin);
 
     // If an admin attempts to visit /dashboard or any clinic operatory route,
     // exclusively redirect them to /admin!
