@@ -13,7 +13,7 @@ export const patientSchema = z.object({
   registeredDate: z.string().optional(),
   lastVisit: z.string().optional(),
   followUpDue: z.string().optional(),
-  teeth: z.record(z.any()).optional().default({}),
+  teeth: z.record(z.string(), z.any()).optional().default({}),
   notes: z
     .array(
       z.object({
@@ -79,11 +79,13 @@ export const feeSchema = z.object({
 
 export const paymentSchema = z.object({
   _id: z.string().min(1, "Payment ID required"),
+  feeId: z.string().optional(),
   patientId: z.string().min(1, "Patient ID required"),
   patientName: z.string().min(1, "Patient name required"),
   date: z.string().min(8, "Date required"),
+  time: z.string().optional().default("12:00 PM"),
   amount: z.number().min(0.01, "Payment amount must be greater than 0"),
-  method: z.enum(["UPI", "Cash", "Card"]).optional().default("UPI"),
+  paymentMethod: z.enum(["UPI", "Cash", "Card"]).optional().default("UPI"),
   notes: z.string().optional().default(""),
   receiptNo: z.string().min(1, "Receipt number required"),
   isRefund: z.boolean().optional().default(false),
