@@ -156,6 +156,10 @@ export interface ClinicProfile {
   workingHoursEnd: string;
   receiptFooter: string;
   mcpServerUrl?: string;
+  status?: "active" | "suspended";
+  isActive?: boolean;
+  lastActiveAt?: string | Date;
+  createdAt?: string | Date;
 }
 
 export const clinicProfile: ClinicProfile = {

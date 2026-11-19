@@ -29,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
   const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
   const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
   const userImage = session?.user?.image;
+  const isSuperAdmin =
+    (session?.user as any)?.role === "superadmin" ||
+    Boolean((session?.user as any)?.isSuperAdmin);
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -65,6 +68,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0089A8]"></span>
             </span>
           </Link>
+
+          {/* Superadmin Console Shortcut */}
+          {isSuperAdmin && (
+            <Link
+              href="/admin"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#111C3A] hover:bg-slate-800 text-teal-400 border border-slate-700 text-xs font-mono font-bold transition-all shadow-2xs"
+              title="Open Platform Multi-Clinic Operations Center"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+              <span>Admin Console</span>
+            </Link>
+          )}
 
           {/* Quick Schedule Button */}
           {pathname !== "/dashboard/appointments" && <Link
@@ -109,6 +124,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, title }) => {
                     <span>Google Authenticated</span>
                   </div>
                 </div>
+
+                {isSuperAdmin && (
+                  <Link
+                    href="/admin"
+                    className="w-full text-left px-3 py-2 rounded-xl text-teal-700 hover:bg-teal-50 flex items-center gap-2 font-medium transition-colors mb-1"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Platform Admin Console</span>
+                  </Link>
+                )}
 
                 <button
                   onClick={() => signOut({ callbackUrl: "/login" })}

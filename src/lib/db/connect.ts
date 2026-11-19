@@ -38,3 +38,5 @@ export async function connectDB() {
   return cached.conn;
 }
 
+export const connectDb = connectDB;
+
