@@ -8,7 +8,13 @@ export interface PatientFinancialSummary {
   refunded: number;
   netPaid: number;
   due: number;
+  advance: number;
   isSettled: boolean;
+}
+
+export interface PatientBalance {
+  due: number;
+  advance: number;
 }
 
 export interface FeeSettlement {
@@ -102,6 +108,7 @@ export function calculateFinancialSummary(
 
   const netPaid = Math.max(0, paid - refunded);
   const due = Math.max(0, billed - netPaid);
+  const advance = Math.max(0, netPaid - billed);
 
   return {
     gross,
@@ -111,19 +118,20 @@ export function calculateFinancialSummary(
     refunded,
     netPaid,
     due,
+    advance,
     isSettled: due <= 0,
   };
 }
 
 /**
- * Builds an O(N) lookup map of patientId -> outstanding due balance.
+ * Builds an O(N) lookup map of patientId -> { due, advance }.
  * Eliminates O(patients * (fees + payments)) filtering in sort and render loops.
  */
 export function buildPatientBalanceMap(
   patients: Patient[],
   fees: FeeItem[],
   payments: PaymentTransaction[]
-): Map<string, number> {
+): Map<string, PatientBalance> {
   const billedMap = new Map<string, number>();
   for (const f of fees) {
     const prev = billedMap.get(f.patientId) || 0;
@@ -140,11 +148,13 @@ export function buildPatientBalanceMap(
     }
   }
 
-  const result = new Map<string, number>();
+  const result = new Map<string, PatientBalance>();
   for (const pat of patients) {
     const billed = billedMap.get(pat._id) || 0;
     const paid = paidMap.get(pat._id) || 0;
-    result.set(pat._id, Math.max(0, billed - paid));
+    const due = Math.max(0, billed - paid);
+    const advance = Math.max(0, paid - billed);
+    result.set(pat._id, { due, advance });
   }
 
   return result;

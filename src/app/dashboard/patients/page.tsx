@@ -16,7 +16,7 @@ import {
 import {
   Patient,
 } from "@/lib/mockData";
-import { buildPatientBalanceMap, formatINR } from "@/lib/financials";
+import { buildPatientBalanceMap, formatINR, PatientBalance } from "@/lib/financials";
 import Link from "next/link";
 import { useClinic } from "@/context/ClinicContext";
 import { PatientRegistrationForm } from "@/components/dashboard/PatientRegistrationForm";
@@ -47,7 +47,7 @@ export default function PatientsPage() {
 
   // Pre-compute dues with centralized useMemo map to eliminate O(N * (fees + payments)) overhead
   const balancesMap = useMemo(() => buildPatientBalanceMap(patients, fees, payments), [patients, fees, payments]);
-  const getBalance = (patientId: string) => balancesMap.get(patientId) || 0;
+  const getBalance = (patientId: string): PatientBalance => balancesMap.get(patientId) || { due: 0, advance: 0 };
 
   const filtered = patients
     .filter((p) => {
@@ -70,7 +70,7 @@ export default function PatientsPage() {
         if (!b.followUpDue) return -1;
         return a.followUpDue.localeCompare(b.followUpDue);
       }
-      if (sortBy === "due") return getBalance(b._id) - getBalance(a._id);
+      if (sortBy === "due") return getBalance(b._id).due - getBalance(a._id).due;
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "registered") return (b.registeredDate || "").localeCompare(a.registeredDate || "");
       // Default: recent visits first
@@ -82,8 +82,8 @@ export default function PatientsPage() {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const balance = getBalance(patient._id);
-    const msg = balance > 0
-      ? `Hello ${patient.name}, this is from ${clinicProfile.name}. Outstanding balance on your dental account is ₹${balance.toLocaleString()}. Kindly reach out for UPI details or to schedule your next visit. Regards, ${clinicProfile.dentistName}.`
+    const msg = balance.due > 0
+      ? `Hello ${patient.name}, this is from ${clinicProfile.name}. Outstanding balance on your dental account is ₹${balance.due.toLocaleString()}. Kindly reach out for UPI details or to schedule your next visit. Regards, ${clinicProfile.dentistName}.`
       : `Hello ${patient.name}, this is from ${clinicProfile.name}. We hope you are doing well after your recent visit. Please reach out if you need any assistance! Regards, ${clinicProfile.dentistName}.`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
@@ -209,7 +209,21 @@ export default function PatientsPage() {
                 </div>
                 <div className="flex-1" />
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] pt-2">
-                  <span className={`text-xs font-semibold ${balance > 0 ? "text-rose-700" : "text-[#0089A8]"}`}>{balance > 0 ? `${formatINR(balance)} due` : "Settled"}</span>
+                  <span
+                    className={`text-xs font-semibold ${
+                      balance.due > 0
+                        ? "text-rose-700"
+                        : balance.advance > 0
+                          ? "text-emerald-700"
+                          : "text-[#0089A8]"
+                    }`}
+                  >
+                    {balance.due > 0
+                      ? `${formatINR(balance.due)} due`
+                      : balance.advance > 0
+                        ? `+${formatINR(balance.advance)} advance`
+                        : "Settled"}
+                  </span>
                   <div className="flex items-center gap-2">
                     <a href={getWhatsAppLink(patient)} target="_blank" rel="noopener noreferrer" title="Send WhatsApp message" aria-label={`Message ${patient.name} on WhatsApp`} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#D4EDF3] sm:h-9 sm:w-9 text-[#0089A8] transition-colors hover:bg-[#EDF7FA]"><Share2 size={16} /></a>
                     <Link href={detailsUrl} aria-label={`View ${patient.name}`} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#0089A8] px-3 sm:min-h-9 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]">View</Link>

@@ -136,9 +136,10 @@ export default function DashboardOverviewPage() {
 
   // The Fees page and existing payment records use UTC dates.
   const paymentDate = now.toISOString().slice(0, 10);
-  const collectedToday = payments
-    .filter((payment) => payment.date === paymentDate && !payment.isRefund)
-    .reduce((total, payment) => total + payment.amount, 0);
+  const todayPayments = payments.filter((payment) => payment.date === paymentDate && !payment.isRefund);
+  const collectedToday = todayPayments.reduce((total, payment) => total + payment.amount, 0);
+  const upiToday = todayPayments.filter((p) => p.paymentMethod === "UPI").reduce((sum, p) => sum + p.amount, 0);
+  const cashToday = todayPayments.filter((p) => p.paymentMethod === "Cash").reduce((sum, p) => sum + p.amount, 0);
   const patientsWithBalances = patients.map((patient) => {
     const billed = fees
       .filter((fee) => fee.patientId === patient._id)
@@ -164,7 +165,14 @@ export default function DashboardOverviewPage() {
 
   const metrics = [
     { label: "Appointments", value: todayAppointments.length, icon: Calendar, href: appointmentsUrl, tone: "blue" },
-    { label: "Collected Today", value: money.format(collectedToday), icon: IndianRupee, href: feesUrl, tone: "green" },
+    {
+      label: "Collected Today",
+      value: money.format(collectedToday),
+      subtext: collectedToday > 0 ? `UPI ${money.format(upiToday)} · Cash ${money.format(cashToday)}` : undefined,
+      icon: IndianRupee,
+      href: feesUrl,
+      tone: "green",
+    },
     { label: "Outstanding", value: money.format(outstanding), icon: AlertCircle, href: feesUrl, tone: "rose" },
     { label: "Recalls Due", value: recallsDue.length, icon: RefreshCw, href: recallsUrl, tone: "teal" },
   ];
@@ -214,7 +222,7 @@ export default function DashboardOverviewPage() {
       </div>
 
       <section aria-label="Dashboard summary" aria-busy={loading} className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-4">
-        {metrics.map(({ label, value, icon: Icon, href, tone }) => (
+        {metrics.map(({ label, value, subtext, icon: Icon, href, tone }) => (
           <Link key={label} href={href} className="overview-metric" data-tone={tone}>
             <div className="flex items-center justify-between gap-1.5">
               <span className="text-xs font-medium text-[#52627A]">{label}</span>
@@ -225,6 +233,11 @@ export default function DashboardOverviewPage() {
             <p className="mt-2 break-words text-xl font-bold leading-tight tracking-tight tabular-nums sm:text-2xl">
               {loading ? "—" : value}
             </p>
+            {subtext && !loading && (
+              <p className="mt-1 text-[11px] font-mono text-[#52627A] truncate">
+                {subtext}
+              </p>
+            )}
           </Link>
         ))}
       </section>

@@ -180,6 +180,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const totalPaid = financialSummary.paid;
   const netPaid = financialSummary.netPaid;
   const outstandingBalance = financialSummary.due;
+  const advanceCredit = financialSummary.advance;
   const patientFees = fees.filter((f) => f.patientId === patient._id);
   const patientPayments = payments.filter((p) => p.patientId === patient._id && !p.isRefund);
   const feeSettlements = calculateFeeSettlements(patientFees, patientPayments);
@@ -235,7 +236,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const getWhatsAppBillUrl = () => {
     const cleanPhone = patient.phone.replace(/[^0-9]/g, "").replace(/^0+/, "");
     const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const text = `Hello ${patient.name}, thank you for visiting ${clinicProfile.name}.\n\nTotal Billed: ₹${totalBilled.toLocaleString()}\nTotal Paid: ₹${totalPaid.toLocaleString()}\nBalance Due: ₹${outstandingBalance.toLocaleString()}.\n\nFeel free to reach out to us at ${clinicProfile.phone}.`;
+    const balanceText = outstandingBalance > 0
+      ? `Balance Due: ₹${outstandingBalance.toLocaleString()}`
+      : advanceCredit > 0
+        ? `Advance Credit Balance: ₹${advanceCredit.toLocaleString()}`
+        : "Balance Due: ₹0 (Settled)";
+    const text = `Hello ${patient.name}, thank you for visiting ${clinicProfile.name}.\n\nTotal Billed: ₹${totalBilled.toLocaleString()}\nTotal Paid: ₹${totalPaid.toLocaleString()}\n${balanceText}.\n\nFeel free to reach out to us at ${clinicProfile.phone}.`;
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
   };
 
@@ -268,8 +274,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             {medicalAlerts.length === 0 && <span className="text-xs text-[#64748B]">No medical alerts recorded</span>}
           </div>
           <div className="flex items-center gap-2 justify-self-end self-start sm:self-center" style={{ gridArea: "payment" }}>
-            <span className={`patient-payment ${outstandingBalance > 0 ? "due" : "settled"}`}>
-              <CreditCard size={15} aria-hidden="true" />{outstandingBalance > 0 ? `${money(outstandingBalance)} due` : "Settled"}
+            <span className={`patient-payment ${outstandingBalance > 0 ? "due" : advanceCredit > 0 ? "advance" : "settled"}`}>
+              <CreditCard size={15} aria-hidden="true" />
+              {outstandingBalance > 0
+                ? `${money(outstandingBalance)} due`
+                : advanceCredit > 0
+                  ? `+${money(advanceCredit)} credit`
+                  : "Settled"}
             </span>
 
             {/* Three Dots Action Menu */}
@@ -518,23 +529,38 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   className={`p-4 rounded-2xl border text-xs space-y-1 shadow-card-subtle ${
                     outstandingBalance > 0
                       ? "bg-rose-50/80 border-rose-200"
-                      : "bg-white border-[#E4E9F0]"
+                      : advanceCredit > 0
+                        ? "bg-emerald-50/80 border-emerald-200"
+                        : "bg-white border-[#E4E9F0]"
                   }`}
                 >
                   <span
                     className={`font-mono text-[11px] uppercase ${
-                      outstandingBalance > 0 ? "text-rose-800" : "text-[#64748B]"
+                      outstandingBalance > 0
+                        ? "text-rose-800"
+                        : advanceCredit > 0
+                          ? "text-emerald-800"
+                          : "text-[#64748B]"
                     }`}
                   >
-                    Balance Due
+                    {advanceCredit > 0 ? "Advance Credit" : "Balance Due"}
                   </span>
                   <div
                     className={`text-xl font-bold font-mono ${
-                      outstandingBalance > 0 ? "text-rose-600" : "text-[#0089A8]"
+                      outstandingBalance > 0
+                        ? "text-rose-600"
+                        : advanceCredit > 0
+                          ? "text-emerald-600"
+                          : "text-[#0089A8]"
                     }`}
                   >
-                    ₹{outstandingBalance.toLocaleString()}
+                    {advanceCredit > 0 ? `+₹${advanceCredit.toLocaleString()}` : `₹${outstandingBalance.toLocaleString()}`}
                   </div>
+                  {advanceCredit > 0 && (
+                    <span className="text-[10px] text-emerald-700 font-medium block pt-0.5">
+                      Available for future treatments
+                    </span>
+                  )}
                   {outstandingBalance > 0 && (
                     <a
                       href={getWhatsAppBillUrl()}
