@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
 import {
   ShieldCheck,
   Lock,
@@ -14,9 +14,20 @@ import { clinicProfile } from "@/lib/mockData";
 
 function LoginFormContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
   const errorParam = searchParams.get("error");
   const [loading, setLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      const isSuperAdmin =
+        (session.user as any)?.role === "superadmin" ||
+        Boolean((session.user as any)?.isSuperAdmin);
+      router.replace(isSuperAdmin ? "/admin" : callbackUrl);
+    }
+  }, [status, session, router, callbackUrl]);
 
   const handleGoogleSignIn = async () => {
     setLoading("google");

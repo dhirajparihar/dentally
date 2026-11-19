@@ -61,10 +61,20 @@ export const Navbar: React.FC = () => {
             </Link>
             {session ? (
               <Link
-                href="/dashboard"
+                href={
+                  (session.user as any)?.role === "superadmin" ||
+                  Boolean((session.user as any)?.isSuperAdmin)
+                    ? "/admin"
+                    : "/dashboard"
+                }
                 className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
               >
-                <span>Operatory Dashboard</span>
+                <span>
+                  {(session.user as any)?.role === "superadmin" ||
+                  Boolean((session.user as any)?.isSuperAdmin)
+                    ? "Admin Console"
+                    : "Operatory Dashboard"}
+                </span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             ) : (

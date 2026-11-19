@@ -7,15 +7,10 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
   Building2,
-  Users,
-  Database,
-  Stethoscope,
   LogOut,
   Menu,
   X,
   ShieldCheck,
-  Activity,
-  ArrowRight,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -152,22 +147,6 @@ export default function AdminLayout({
               Live
             </span>
           </Link>
-
-          <div className="pt-4 pb-2">
-            <span className="px-3 text-[10px] uppercase tracking-[0.15em] text-[#8291A7] font-semibold block mb-2 font-mono">
-              Clinic Operatory
-            </span>
-            <Link
-              href="/dashboard"
-              className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-[#64748B] hover:bg-[#EDF7FA] hover:text-[#00738E] transition-all group"
-            >
-              <div className="flex items-center gap-2.5">
-                <Stethoscope className="w-4 h-4 text-[#8291A7] group-hover:text-[#0089A8]" />
-                <span>Chairside Dashboard</span>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-[#8291A7] group-hover:text-[#0089A8]" />
-            </Link>
-          </div>
         </div>
 
         {/* Admin Profile Footer */}
@@ -243,7 +222,7 @@ export default function AdminLayout({
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               {/* Telemetry Indicator */}
               <div
-                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#EDF7FA] border border-[#D4EDF3] text-[#111C3A] text-xs font-mono font-medium"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#EDF7FA] border border-[#D4EDF3] text-[#111C3A] text-xs font-mono font-medium"
                 title="MongoDB connection & Multi-tenant isolation active"
               >
                 <span className="flex h-2 w-2 relative">
@@ -252,17 +231,6 @@ export default function AdminLayout({
                 </span>
                 <span>MongoDB Active</span>
               </div>
-
-              {/* Return to Chairside Operatory */}
-              <Link
-                href="/dashboard"
-                className="px-3.5 sm:px-4 py-2 rounded-xl bg-white hover:bg-[#EDF7FA] border border-[#E4E9F0] text-[#111C3A] text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 shadow-2xs"
-                title="Go to Doctor Operatory Screen"
-              >
-                <Stethoscope className="w-4 h-4 text-[#0089A8]" />
-                <span className="hidden sm:inline">Chairside Operatory</span>
-                <span className="sm:hidden">Operatory</span>
-              </Link>
             </div>
           </div>
         </header>
