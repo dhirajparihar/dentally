@@ -328,6 +328,36 @@ export async function savePatient(patient: Patient, dentistEmail?: string) {
   return mem.patients;
 }
 
+export async function deletePatient(patientId: string, dentistEmail: string) {
+  const email = (dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for patient deletion");
+
+  const conn = await ensureDbInitialized();
+  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
+  const mem = getOrCreateMemoryStore(email);
+  mem.patients = mem.patients.filter((p) => p._id !== patientId);
+  mem.appointments = mem.appointments.filter((a) => a.patientId !== patientId);
+  mem.fees = mem.fees.filter((f) => f.patientId !== patientId);
+  mem.payments = mem.payments.filter((p) => p.patientId !== patientId);
+
+  try {
+    if (conn) {
+      await Promise.all([
+        PatientModel.deleteOne({ _id: patientId, dentistEmail: email }),
+        AppointmentModel.deleteMany({ patientId, dentistEmail: email }),
+        FeeModel.deleteMany({ patientId, dentistEmail: email }),
+        PaymentModel.deleteMany({ patientId, dentistEmail: email }),
+      ]);
+    }
+  } catch (err) {
+    console.error("Error deleting patient from MongoDB:", err);
+    if (isDbConfigured()) throw err;
+  }
+
+  return mem.patients;
+}
+
 export class AppointmentTimeError extends Error {}
 export class AppointmentNotFoundError extends Error {}
 

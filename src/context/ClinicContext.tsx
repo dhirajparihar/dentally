@@ -29,6 +29,7 @@ export interface ClinicContextType {
   loadSampleData: () => Promise<void>;
   addPatient: (patient: Patient) => Promise<void>;
   updatePatient: (patient: Patient) => Promise<void>;
+  deletePatient: (patientId: string) => Promise<boolean>;
   bookAppointment: (appointment: Appointment) => Promise<boolean>;
   completeAppointment: (appointmentId: string) => Promise<boolean>;
   cancelAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
@@ -189,6 +190,14 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "update_patient", data: scoped });
   };
 
+  const deletePatient = async (patientId: string) => {
+    setPatients((prev) => prev.filter((p) => p._id !== patientId));
+    setAppointments((prev) => prev.filter((a) => a.patientId !== patientId));
+    setFees((prev) => prev.filter((f) => f.patientId !== patientId));
+    setPayments((prev) => prev.filter((p) => p.patientId !== patientId));
+    return await postMutation({ action: "delete_patient", patientId });
+  };
+
   const bookAppointment = async (newApt: Appointment) => {
     const scoped = { ...newApt, dentistEmail: userEmail };
     return postMutation({ action: "book_appointment", data: scoped });
@@ -239,6 +248,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         loadSampleData,
         addPatient,
         updatePatient,
+        deletePatient,
         bookAppointment,
         completeAppointment,
         cancelAppointment,

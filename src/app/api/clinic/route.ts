@@ -7,6 +7,7 @@ import {
   AppointmentTimeError,
   getClinicData,
   savePatient,
+  deletePatient,
   saveAppointment,
   updateAppointmentStatus,
   rescheduleAppointment,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const body = await request.json();
-    const { action, data, appointmentId, date, time, reason } = body;
+    const { action, data, appointmentId, patientId, date, time, reason } = body;
 
     // Secure Authorization:
     // Enforce mutations to the authenticated user's email only.
@@ -93,6 +94,15 @@ export async function POST(request: NextRequest) {
       case "update_patient": {
         const validated = patientSchema.parse(data);
         await savePatient({ ...validated, dentistEmail: email } as Patient, email);
+        break;
+      }
+
+      case "delete_patient": {
+        const idToDelete = patientId || data?.patientId;
+        if (!idToDelete || typeof idToDelete !== "string") {
+          return NextResponse.json({ error: "Valid patient ID required for deletion" }, { status: 400 });
+        }
+        await deletePatient(idToDelete, email);
         break;
       }
 
