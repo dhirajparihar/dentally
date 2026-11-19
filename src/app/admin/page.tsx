@@ -30,6 +30,7 @@ import {
   Zap,
   Check,
   AlertTriangle,
+  MoreVertical,
 } from "lucide-react";
 import { AdminClinicSummary, PlatformStats } from "@/lib/db/adminRepository";
 
@@ -52,6 +53,15 @@ export default function AdminDashboardPage() {
   // Mutation loading & feedback
   const [actionLoadingEmail, setActionLoadingEmail] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Row Actions Dropdown & Confirmation Modal
+  const [openMenuEmail, setOpenMenuEmail] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    action: "suspend" | "reactivate" | "revoke" | "seed" | "delete";
+    clinic: AdminClinicSummary;
+  } | null>(null);
+  const [isExecutingConfirm, setIsExecutingConfirm] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
   // Add Clinic Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -90,136 +100,105 @@ export default function AdminDashboardPage() {
     loadData();
   }, []);
 
-  const handleToggleStatus = async (clinic: AdminClinicSummary) => {
-    const nextStatus = clinic.status === "active" ? "suspended" : "active";
-    const confirmMsg =
-      nextStatus === "suspended"
-        ? `SUSPEND "${clinic.clinicName}"?\n\nThis is an immediate kill-switch:\n• The doctor will be blocked from logging into the dashboard.\n• Incoming tool calls from their ChatGPT will be rejected (403 Forbidden).`
-        : `Re-activate "${clinic.clinicName}"?\n\nThe doctor will regain full dashboard and ChatGPT MCP access.`;
+  // Close three-dots menu when clicking outside
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setOpenMenuEmail(null);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
 
-    if (!confirm(confirmMsg)) return;
+  const handleExecuteConfirmedAction = async () => {
+    if (!confirmModal) return;
+    const { action, clinic } = confirmModal;
 
+    setIsExecutingConfirm(true);
     setActionLoadingEmail(clinic.dentistEmail);
+
     try {
-      const res = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "toggle_status",
-          dentistEmail: clinic.dentistEmail,
-          status: nextStatus,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update status");
+      if (action === "suspend" || action === "reactivate") {
+        const nextStatus = action === "suspend" ? "suspended" : "active";
+        const res = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "toggle_status",
+            dentistEmail: clinic.dentistEmail,
+            status: nextStatus,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to update status");
 
-      setStats(data.stats);
-      setClinics(data.clinics);
-      setFeedbackMessage(
-        `Clinic ${clinic.clinicName} is now ${nextStatus === "active" ? "active" : "suspended (Kill switch engaged)"}.`
-      );
+        setStats(data.stats);
+        setClinics(data.clinics);
+        setFeedbackMessage(
+          `Clinic "${clinic.clinicName}" is now ${nextStatus === "active" ? "active" : "suspended (Kill switch engaged)"}.`
+        );
+      } else if (action === "revoke") {
+        const res = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "revoke_mcp_token",
+            dentistEmail: clinic.dentistEmail,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to revoke token");
+
+        setStats(data.stats);
+        setClinics(data.clinics);
+        setFeedbackMessage(`MCP bearer token revoked for "${clinic.clinicName}". Connected ChatGPT lost access.`);
+      } else if (action === "seed") {
+        const res = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "seed_sample_data",
+            dentistEmail: clinic.dentistEmail,
+            doctorName: clinic.dentistName,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to seed demo data");
+
+        setStats(data.stats);
+        setClinics(data.clinics);
+        setFeedbackMessage(`Sample clinical data loaded for "${clinic.clinicName}".`);
+      } else if (action === "delete") {
+        const isDeleteConfirmed =
+          deleteConfirmInput.trim().toUpperCase() === "DELETE" ||
+          deleteConfirmInput.trim() === clinic.dentistEmail;
+
+        if (!isDeleteConfirmed) {
+          throw new Error("Confirmation mismatch. Please type DELETE to confirm.");
+        }
+
+        const res = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "delete_clinic",
+            dentistEmail: clinic.dentistEmail,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to delete clinic");
+
+        setStats(data.stats);
+        setClinics(data.clinics);
+        setFeedbackMessage(`Tenant record for "${clinic.dentistEmail}" was permanently purged.`);
+      }
+
       setTimeout(() => setFeedbackMessage(null), 3500);
+      setConfirmModal(null);
+      setDeleteConfirmInput("");
     } catch (err: any) {
-      alert(err?.message || "Failed to toggle status");
+      alert(err?.message || "Action failed");
     } finally {
-      setActionLoadingEmail(null);
-    }
-  };
-
-  const handleRevokeMcpToken = async (clinic: AdminClinicSummary) => {
-    if (
-      !confirm(
-        `Revoke MCP bearer token for "${clinic.dentistName}" (${clinic.dentistEmail})?\n\nTheir connected ChatGPT will immediately lose access until they generate a fresh key in their dashboard.`
-      )
-    )
-      return;
-
-    setActionLoadingEmail(clinic.dentistEmail);
-    try {
-      const res = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "revoke_mcp_token",
-          dentistEmail: clinic.dentistEmail,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to revoke token");
-
-      setStats(data.stats);
-      setClinics(data.clinics);
-      setFeedbackMessage(`MCP token revoked for ${clinic.clinicName}.`);
-      setTimeout(() => setFeedbackMessage(null), 3500);
-    } catch (err: any) {
-      alert(err?.message || "Failed to revoke token");
-    } finally {
-      setActionLoadingEmail(null);
-    }
-  };
-
-  const handleSeedData = async (clinic: AdminClinicSummary) => {
-    if (
-      !confirm(
-        `Pre-seed sample patients and visits for "${clinic.dentistName}"? (Existing data will be preserved)`
-      )
-    )
-      return;
-
-    setActionLoadingEmail(clinic.dentistEmail);
-    try {
-      const res = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "seed_sample_data",
-          dentistEmail: clinic.dentistEmail,
-          doctorName: clinic.dentistName,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to seed demo data");
-
-      setStats(data.stats);
-      setClinics(data.clinics);
-      setFeedbackMessage(`Demo data loaded for ${clinic.clinicName}!`);
-      setTimeout(() => setFeedbackMessage(null), 3500);
-    } catch (err: any) {
-      alert(err?.message || "Failed to seed data");
-    } finally {
-      setActionLoadingEmail(null);
-    }
-  };
-
-  const handleDeleteClinic = async (clinic: AdminClinicSummary) => {
-    const promptValue = prompt(
-      `DANGER: Permanently delete tenant records for "${clinic.dentistEmail}"?\n\nType the email "${clinic.dentistEmail}" to confirm deletion:`
-    );
-    if (promptValue !== clinic.dentistEmail) {
-      if (promptValue !== null) alert("Email mismatch. Deletion cancelled.");
-      return;
-    }
-
-    setActionLoadingEmail(clinic.dentistEmail);
-    try {
-      const res = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "delete_clinic",
-          dentistEmail: clinic.dentistEmail,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete clinic");
-
-      setStats(data.stats);
-      setClinics(data.clinics);
-      setFeedbackMessage(`Tenant record "${clinic.dentistEmail}" was permanently purged.`);
-      setTimeout(() => setFeedbackMessage(null), 3500);
-    } catch (err: any) {
-      alert(err?.message || "Failed to delete clinic");
-    } finally {
+      setIsExecutingConfirm(false);
       setActionLoadingEmail(null);
     }
   };
@@ -508,7 +487,7 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto min-h-[320px]">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-[#E4E9F0] bg-[#FAFBFC] text-[#52627A] font-mono text-[11px] uppercase tracking-wider">
@@ -630,58 +609,105 @@ export default function AdminDashboardPage() {
 
                           {/* Gateway Actions */}
                           <td className="py-4 px-4 sm:px-6 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Suspend / Reactivate Kill Switch */}
+                            <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
                               <button
                                 type="button"
                                 disabled={isActing}
-                                onClick={() => handleToggleStatus(clinic)}
-                                className={`small-outline p-2 ${
-                                  clinic.status === "active"
-                                    ? "text-rose-700 hover:bg-rose-50 hover:border-rose-300"
-                                    : "text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuEmail(openMenuEmail === clinic.dentistEmail ? null : clinic.dentistEmail);
+                                }}
+                                className={`p-2 rounded-xl border transition-colors ${
+                                  openMenuEmail === clinic.dentistEmail
+                                    ? "bg-[#EDF7FA] border-[#0089A8] text-[#0089A8]"
+                                    : "border-[#E4E9F0] text-[#64748B] hover:text-[#111C3A] hover:bg-[#FAFBFC] hover:border-[#CCD5E2]"
                                 }`}
-                                title={
-                                  clinic.status === "active"
-                                    ? "Kill Switch: Suspend account & cut off ChatGPT MCP"
-                                    : "Reactivate account & restore ChatGPT MCP"
-                                }
+                                title="Tenant Actions"
                               >
-                                <Power className="w-3.5 h-3.5" />
+                                {isActing ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin text-[#0089A8]" />
+                                ) : (
+                                  <MoreVertical className="w-4 h-4" />
+                                )}
                               </button>
 
-                              {/* Revoke MCP Key */}
-                              <button
-                                type="button"
-                                disabled={isActing}
-                                onClick={() => handleRevokeMcpToken(clinic)}
-                                className="small-outline p-2 text-amber-700 hover:bg-amber-50 hover:border-amber-300"
-                                title="Revoke MCP Bearer Token immediately"
-                              >
-                                <Key className="w-3.5 h-3.5" />
-                              </button>
+                              {openMenuEmail === clinic.dentistEmail && (
+                                <div
+                                  className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white border border-[#E4E9F0] shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {/* Suspend / Reactivate Kill Switch */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuEmail(null);
+                                      setConfirmModal({
+                                        action: clinic.status === "active" ? "suspend" : "reactivate",
+                                        clinic,
+                                      });
+                                    }}
+                                    className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 text-xs font-medium transition-colors ${
+                                      clinic.status === "active"
+                                        ? "text-rose-700 hover:bg-rose-50"
+                                        : "text-emerald-700 hover:bg-emerald-50"
+                                    }`}
+                                  >
+                                    <Power className="w-3.5 h-3.5 shrink-0" />
+                                    <span>{clinic.status === "active" ? "Suspend (Kill Switch)" : "Reactivate Tenant"}</span>
+                                  </button>
 
-                              {/* Load / Seed Demo Data */}
-                              <button
-                                type="button"
-                                disabled={isActing}
-                                onClick={() => handleSeedData(clinic)}
-                                className="small-outline p-2 text-[#0089A8] hover:bg-[#EDF7FA]"
-                                title="Seed/refresh sample demo data for this doctor"
-                              >
-                                <Sparkles className="w-3.5 h-3.5" />
-                              </button>
+                                  {/* Revoke MCP Key */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuEmail(null);
+                                      setConfirmModal({
+                                        action: "revoke",
+                                        clinic,
+                                      });
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+                                  >
+                                    <Key className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Revoke MCP Key</span>
+                                  </button>
 
-                              {/* Delete Clinic */}
-                              <button
-                                type="button"
-                                disabled={isActing}
-                                onClick={() => handleDeleteClinic(clinic)}
-                                className="small-outline p-2 text-[#8291A7] hover:text-rose-700 hover:border-rose-300 hover:bg-rose-50"
-                                title="Permanently purge tenant"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                                  {/* Pre-seed Demo Data */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuEmail(null);
+                                      setConfirmModal({
+                                        action: "seed",
+                                        clinic,
+                                      });
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 text-xs font-medium text-[#0089A8] hover:bg-[#EDF7FA] transition-colors"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Pre-seed Demo Data</span>
+                                  </button>
+
+                                  <div className="h-px bg-[#E4E9F0] my-1" />
+
+                                  {/* Delete Clinic */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuEmail(null);
+                                      setDeleteConfirmInput("");
+                                      setConfirmModal({
+                                        action: "delete",
+                                        clinic,
+                                      });
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left flex items-center gap-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Delete Tenant</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -961,6 +987,194 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ACTION CONFIRMATION ================= */}
+      {confirmModal && (
+        <div
+          className="fixed inset-0 bg-[#111C3A]/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => !isExecutingConfirm && setConfirmModal(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] space-y-5 animate-in fade-in zoom-in-95 my-auto text-[#111C3A]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-3.5">
+              <div
+                className={`p-3 rounded-2xl shrink-0 ${
+                  confirmModal.action === "suspend"
+                    ? "bg-rose-100 text-rose-700"
+                    : confirmModal.action === "reactivate"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : confirmModal.action === "revoke"
+                    ? "bg-amber-100 text-amber-700"
+                    : confirmModal.action === "seed"
+                    ? "bg-[#EDF7FA] text-[#0089A8]"
+                    : "bg-rose-100 text-rose-700"
+                }`}
+              >
+                {confirmModal.action === "suspend" && <Power className="w-5 h-5" />}
+                {confirmModal.action === "reactivate" && <CheckCircle2 className="w-5 h-5" />}
+                {confirmModal.action === "revoke" && <Key className="w-5 h-5" />}
+                {confirmModal.action === "seed" && <Sparkles className="w-5 h-5" />}
+                {confirmModal.action === "delete" && <Trash2 className="w-5 h-5" />}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-base text-[#111C3A]">
+                  {confirmModal.action === "suspend" && "Engage AI Kill Switch?"}
+                  {confirmModal.action === "reactivate" && "Reactivate Clinic Tenant?"}
+                  {confirmModal.action === "revoke" && "Revoke MCP Bearer Token?"}
+                  {confirmModal.action === "seed" && "Pre-seed Realistic Demo Data?"}
+                  {confirmModal.action === "delete" && "Permanently Purge Tenant?"}
+                </h3>
+                <p className="text-xs text-[#64748B] mt-0.5 font-mono truncate">
+                  {confirmModal.clinic.clinicName} &bull; {confirmModal.clinic.dentistEmail}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={isExecutingConfirm}
+                onClick={() => setConfirmModal(null)}
+                className="text-[#8291A7] hover:text-[#111C3A] p-1 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Context & Explanation */}
+            <div className="text-xs text-[#52627A] space-y-3 leading-relaxed">
+              {confirmModal.action === "suspend" && (
+                <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/60 text-rose-900 space-y-1.5">
+                  <div className="font-semibold flex items-center gap-1.5 text-rose-900">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-700 shrink-0" />
+                    Immediate Kill Switch Impact:
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-800">
+                    <li>Incoming tool calls from their connected ChatGPT will be rejected (403 Forbidden).</li>
+                    <li>The doctor will be immediately blocked from logging into the clinic dashboard.</li>
+                  </ul>
+                </div>
+              )}
+
+              {confirmModal.action === "reactivate" && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/60 text-emerald-900 space-y-1.5">
+                  <div className="font-semibold flex items-center gap-1.5 text-emerald-900">
+                    <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    Restoration Details:
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    The doctor will regain full access to their dashboard, and incoming ChatGPT MCP calls with a valid bearer token will be accepted again.
+                  </p>
+                </div>
+              )}
+
+              {confirmModal.action === "revoke" && (
+                <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/60 text-amber-900 space-y-1.5">
+                  <div className="font-semibold flex items-center gap-1.5 text-amber-900">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    Token Invalidation Impact:
+                  </div>
+                  <p className="text-[11px] text-amber-800">
+                    Their currently configured ChatGPT custom GPT will lose authorization immediately. The doctor must visit their dashboard to generate and copy a fresh key into ChatGPT.
+                  </p>
+                </div>
+              )}
+
+              {confirmModal.action === "seed" && (
+                <div className="p-3.5 rounded-2xl bg-[#EDF7FA] border border-[#CDEBF2] text-[#005B70] space-y-1.5">
+                  <div className="font-semibold flex items-center gap-1.5 text-[#0089A8]">
+                    <Sparkles className="w-3.5 h-3.5 text-[#0089A8] shrink-0" />
+                    Sample Data Population:
+                  </div>
+                  <p className="text-[11px] text-[#005B70]">
+                    Populates realistic patients, appointments, and billing fee records for Dr. {confirmModal.clinic.dentistName}. Existing records are preserved.
+                  </p>
+                </div>
+              )}
+
+              {confirmModal.action === "delete" && (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/60 text-rose-900 space-y-1.5">
+                    <div className="font-semibold flex items-center gap-1.5 text-rose-900">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-700 shrink-0" />
+                      Irreversible Tenant Deletion:
+                    </div>
+                    <p className="text-[11px] text-rose-800">
+                      This permanently purges all records for this clinic ({confirmModal.clinic.patientCount} patients, {confirmModal.clinic.appointmentCount} visits), clinic profile settings, and MCP keys.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#111C3A] mb-1">
+                      Type <span className="font-mono text-rose-700 font-bold">DELETE</span> to confirm:
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={deleteConfirmInput}
+                      onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                      placeholder="Type DELETE"
+                      className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-rose-600 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E4E9F0]">
+              <button
+                type="button"
+                disabled={isExecutingConfirm}
+                onClick={() => {
+                  setConfirmModal(null);
+                  setDeleteConfirmInput("");
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[#64748B] hover:bg-[#FAFBFC] transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  isExecutingConfirm ||
+                  (confirmModal.action === "delete" &&
+                    deleteConfirmInput.trim().toUpperCase() !== "DELETE" &&
+                    deleteConfirmInput.trim() !== confirmModal.clinic.dentistEmail)
+                }
+                onClick={handleExecuteConfirmedAction}
+                className={`px-5 py-2 rounded-xl text-xs font-semibold text-white shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  confirmModal.action === "suspend" || confirmModal.action === "delete"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : confirmModal.action === "reactivate"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : confirmModal.action === "revoke"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-[#0089A8] hover:bg-[#00738E]"
+                }`}
+              >
+                {isExecutingConfirm ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Executing...</span>
+                  </>
+                ) : (
+                  <>
+                    {confirmModal.action === "suspend" && "Confirm Kill Switch"}
+                    {confirmModal.action === "reactivate" && "Confirm Reactivation"}
+                    {confirmModal.action === "revoke" && "Confirm Invalidation"}
+                    {confirmModal.action === "seed" && "Load Demo Records"}
+                    {confirmModal.action === "delete" && "Permanently Purge"}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
