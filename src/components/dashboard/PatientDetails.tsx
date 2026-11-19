@@ -35,6 +35,8 @@ import {
 import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 import { calculateFinancialSummary, formatINR } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
+import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
+import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 
@@ -296,17 +298,20 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ||
     patientAppts.find((a) => a.status === "scheduled");
 
+  const feeTreatments = getAppointmentTreatments(clinicProfile.appointmentTreatments);
+  const selectedFeeTreatment = feeTreatments.find(({ name }) => name === feeProcedure);
+
   const handleAddFeeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = Number(feeAmount);
     const disc = Number(feeDiscount) || 0;
-    if (!amt || !feeProcedure) return;
+    if (!feeAmount.trim() || !Number.isFinite(amt) || amt < 0 || !selectedFeeTreatment) return;
 
     const newFeeItem: FeeItem = {
       _id: `fee_${Date.now()}`,
       patientId: patient._id,
       patientName: patient.name,
-      procedureName: feeProcedure,
+      procedureName: selectedFeeTreatment.name,
       tooth: feeTooth ? `Tooth #${feeTooth}` : undefined,
       date: new Date().toISOString().split("T")[0],
       amount: amt,
@@ -719,16 +724,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                     <div className="sm:col-span-2">
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
-                        Procedure Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
+                      <FeeProcedurePicker
+                        treatments={feeTreatments}
                         value={feeProcedure}
-                        onChange={(e) => setFeeProcedure(e.target.value)}
-                        placeholder="e.g. Root Canal Therapy, Porcelain Crown"
-                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8]"
+                        onChange={(procedure, suggestedAmount) => {
+                          setFeeProcedure(procedure);
+                          setFeeAmount(suggestedAmount);
+                        }}
                       />
                     </div>
 
@@ -752,6 +754,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                       <input
                         type="number"
                         required
+                        min={0}
+                        step="0.01"
                         value={feeAmount}
                         onChange={(e) => setFeeAmount(e.target.value)}
                         placeholder="e.g. 5000"
@@ -784,6 +788,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </button>
                     <button
                       type="submit"
+                      disabled={!selectedFeeTreatment}
                       className="detail-button primary"
                     >
                       Save Fee Item

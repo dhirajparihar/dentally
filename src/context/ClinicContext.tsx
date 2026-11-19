@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { getScheduledAppointmentEnd } from "@/lib/appointmentTime";
+import type { AppointmentTreatment } from "@/lib/appointmentTreatments";
 import {
   Patient,
   Appointment,
@@ -34,6 +35,7 @@ export interface ClinicContextType {
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
   updateClinicProfile: (profile: Partial<ClinicProfile>) => Promise<void>;
+  saveAppointmentTreatments: (treatments: AppointmentTreatment[]) => Promise<boolean>;
 }
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
@@ -231,6 +233,9 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
   }, [postMutation, userEmail]);
 
+  const saveAppointmentTreatments = (appointmentTreatments: AppointmentTreatment[]) =>
+    postMutation({ action: "update_clinic_profile", data: { appointmentTreatments } });
+
   return (
     <ClinicContext.Provider
       value={{
@@ -255,6 +260,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addFee,
         recordPayment,
         updateClinicProfile,
+        saveAppointmentTreatments,
       }}
     >
       {children}

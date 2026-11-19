@@ -5,11 +5,12 @@ import { ChevronDown, Plus, Search } from "lucide-react";
 import type { Patient } from "@/lib/mockData";
 import { getPatientPhoneQuery, normalizePatientName, normalizePatientPhone } from "@/lib/patientSearch";
 
-export function PatientPicker({ patients, value, onChange, onAddPatient }: {
+export function PatientPicker({ patients, value, onChange, onAddPatient, showPhone = true }: {
   patients: Patient[];
   value: string;
   onChange: (patientId: string) => void;
   onAddPatient?: (query: string) => void;
+  showPhone?: boolean;
 }) {
   const id = useId();
   const listId = `${id}-patients`;
@@ -165,7 +166,7 @@ export function PatientPicker({ patients, value, onChange, onAddPatient }: {
                   onClick={() => selectPatient(patient)}
                 >
                   <span className="min-w-0 break-words font-semibold">{patient.name}</span>
-                  <span className="break-all text-[11px] text-[#64748B]">{patient.phone || patient._id}</span>
+                  {showPhone && <span className="break-all text-[11px] text-[#64748B]">{patient.phone || patient._id}</span>}
                 </li>
               ))}
             </ul>
@@ -173,7 +174,7 @@ export function PatientPicker({ patients, value, onChange, onAddPatient }: {
           </div>
         )}
       </div>
-      {selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
+      {showPhone && selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
       {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">{matches.length ? "Select a patient from the list." : "No matching patients."}</p>}
     </div>
   );

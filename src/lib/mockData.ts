@@ -2,6 +2,8 @@
  * Core clinical domain models, types, and clinic profile defaults.
  */
 
+import { defaultAppointmentTreatments, type AppointmentTreatment } from "@/lib/appointmentTreatments";
+
 export interface Patient {
   _id: string;
   dentistEmail?: string;
@@ -90,6 +92,7 @@ export interface ClinicProfile {
   workingHoursStart: string;
   workingHoursEnd: string;
   receiptFooter: string;
+  appointmentTreatments?: AppointmentTreatment[];
   isConfigured?: boolean;
   mcpServerUrl?: string;
   status?: "active" | "suspended";
@@ -114,6 +117,7 @@ export const clinicProfile: ClinicProfile = {
   slotDuration: 30,
   workingHoursStart: "09:30 AM",
   workingHoursEnd: "08:00 PM",
+  appointmentTreatments: [...defaultAppointmentTreatments],
   receiptFooter: "Thank you for trusting us with your dental care! For emergencies, contact our clinic.",
   mcpServerUrl: "https://dentally.reline.me/api/mcp",
 };

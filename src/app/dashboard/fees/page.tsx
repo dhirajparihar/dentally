@@ -25,21 +25,10 @@ import {
 } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
+import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
+import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
 import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
-
-const procedurePresets = [
-  { name: "Consultation & Diagnostic X-Ray", price: 500 },
-  { name: "Composite Restoration / Filling", price: 1500 },
-  { name: "Root Canal Treatment (Molar RCT)", price: 4500 },
-  { name: "Zirconia Crown (Permanent)", price: 8000 },
-  { name: "Scaling & Root Planing (Cleaning)", price: 1200 },
-  { name: "Simple Tooth Extraction", price: 1500 },
-  { name: "Ceramic Laminate Veneer", price: 9000 },
-];
-const customTreatment = "custom";
-const normalizeTreatmentName = (name: string) => name.trim().replace(/\s+/g, " ");
-const treatmentKey = (name: string) => `treatment:${normalizeTreatmentName(name).toLowerCase()}`;
 
 export default function FeesPage() {
   const {
@@ -65,38 +54,30 @@ export default function FeesPage() {
   const [qrRecordedSuccess, setQrRecordedSuccess] = useState<string | null>(null);
   const router = useRouter();
 
-  const treatments = useMemo(() => {
-    const options = new Map<string, { name: string; price?: number }>(
-      procedurePresets.map((preset) => [treatmentKey(preset.name), preset])
-    );
-    const recentFees = [...fees].sort((a, b) =>
-      (b.date || "").localeCompare(a.date || "") || b._id.localeCompare(a._id, undefined, { numeric: true })
-    );
-    for (const fee of recentFees) {
-      const name = normalizeTreatmentName(fee.procedureName || "");
-      const key = treatmentKey(name);
-      if (name && !options.has(key)) {
-        const price = Number.isFinite(fee.amount) && fee.amount >= 0 ? fee.amount : undefined;
-        options.set(key, { name, price });
-      }
-    }
-    return options;
-  }, [fees]);
+  const treatments = useMemo(() => getAppointmentTreatments(clinicProfile.appointmentTreatments), [clinicProfile.appointmentTreatments]);
 
   // Add Fee Form State
   const [feeForm, setFeeForm] = useState({
     patientId: patients[0]?._id || "",
-    treatment: treatmentKey(procedurePresets[2].name),
-    newTreatmentName: "",
+    procedure: "",
     tooth: "46",
-    amount: procedurePresets[2].price.toString(),
+    amount: "",
     discount: "0",
     notes: "",
   });
-  const addingTreatment = feeForm.treatment === customTreatment;
-  const procedureName = addingTreatment
-    ? normalizeTreatmentName(feeForm.newTreatmentName)
-    : treatments.get(feeForm.treatment)?.name ?? "";
+  const selectedTreatment = treatments.find(({ name }) => name === feeForm.procedure);
+
+  const openAddFee = () => {
+    const defaultTreatment = treatments.find(({ name }) => name === "Root Canal Treatment (Molar RCT)") ?? treatments[0];
+    setFeeForm((previous) => ({
+      ...previous,
+      patientId: patients.some((patient) => patient._id === previous.patientId) ? previous.patientId : patients[0]?._id || "",
+      ...(treatments.some(({ name }) => name === previous.procedure)
+        ? {}
+        : { procedure: defaultTreatment.name, amount: defaultTreatment.charge?.toString() ?? "" }),
+    }));
+    setIsAddFeeOpen(true);
+  };
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -151,19 +132,17 @@ export default function FeesPage() {
   const handleAddFeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const patient = patients.find((p) => p._id === feeForm.patientId);
-    if (!patient || !procedureName || !feeForm.amount.trim()) return;
+    if (!patient || !selectedTreatment || !feeForm.amount.trim()) return;
     const gross = Number(feeForm.amount);
     const disc = Number(feeForm.discount || 0);
     if (!Number.isFinite(gross) || gross < 0 || !Number.isFinite(disc)) return;
-
-    const key = treatmentKey(procedureName);
 
     const newFee: FeeItem = {
       _id: `fee_${Date.now()}`,
       patientId: patient._id,
       patientName: patient.name,
       date: todayStr,
-      procedureName: treatments.get(key)?.name ?? procedureName,
+      procedureName: selectedTreatment.name,
       tooth: feeForm.tooth ? `Tooth #${feeForm.tooth}` : undefined,
       amount: gross,
       discount: disc,
@@ -173,7 +152,6 @@ export default function FeesPage() {
     };
 
     await addFee(newFee);
-    setFeeForm((previous) => ({ ...previous, treatment: key, newTreatmentName: "" }));
     setIsAddFeeOpen(false);
   };
 
@@ -222,7 +200,7 @@ export default function FeesPage() {
           {search && <button type="button" onClick={() => setSearch("")} aria-label="Clear search"><X size={16} /></button>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" disabled={loading || patients.length === 0} onClick={() => { setFeeForm((previous) => ({ ...previous, patientId: patients.some((patient) => patient._id === previous.patientId) ? previous.patientId : patients[0]?._id || "" })); setIsAddFeeOpen(true); }} className="workspace-button secondary"><Plus size={16} />Add Fee</button>
+          <button type="button" disabled={loading || patients.length === 0} onClick={openAddFee} className="workspace-button secondary"><Plus size={16} />Add Fee</button>
           <button type="button" disabled={loading || patients.length === 0} onClick={() => openPayment()} className="workspace-button primary"><IndianRupee size={16} />Record Payment</button>
         </div>
       </div>
@@ -319,9 +297,6 @@ export default function FeesPage() {
                 <h3 className="font-bold text-lg text-[#111C3A]">
                   Add Fee
                 </h3>
-                <p className="text-[11px] text-[#64748B] mt-0.5">
-                  Select a procedure or enter a custom charge.
-                </p>
               </div>
               <button
                 onClick={() => setIsAddFeeOpen(false)}
@@ -337,47 +312,20 @@ export default function FeesPage() {
                 patients={patients}
                 value={feeForm.patientId}
                 onChange={(patientId) => setFeeForm((previous) => ({ ...previous, patientId }))}
+                showPhone={false}
               />
 
               <div className="grid grid-cols-1 items-start gap-3 min-[400px]:grid-cols-3">
-                <div className="min-w-0 space-y-3 min-[400px]:col-span-2">
-                  <div>
-                    <label htmlFor="fee-treatment" className="mb-1 block font-semibold text-[#111C3A]">Procedure Name *</label>
-                    <select
-                      id="fee-treatment"
-                      required
-                      value={addingTreatment || treatments.has(feeForm.treatment) ? feeForm.treatment : ""}
-                      onChange={(event) => {
-                        const treatment = event.target.value;
-                        const amount = treatments.get(treatment)?.price?.toString() ?? "";
-                        setFeeForm((previous) => ({ ...previous, treatment, amount }));
-                      }}
-                      className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 outline-none focus:border-[#0089A8]"
-                    >
-                      <option value="" disabled>Select a procedure</option>
-                      {Array.from(treatments, ([key, { name, price }]) => (
-                        <option key={key} value={key}>
-                          {name}{price === undefined ? "" : ` (₹${price.toLocaleString("en-IN")})`}
-                        </option>
-                      ))}
-                      <option value={customTreatment}>+ Add new procedure</option>
-                    </select>
-                  </div>
-
-                  {addingTreatment && (
-                    <div>
-                      <label htmlFor="fee-new-treatment" className="mb-1 block font-semibold text-[#111C3A]">New Procedure Name *</label>
-                      <input
-                        id="fee-new-treatment"
-                        type="text"
-                        required
-                        placeholder="Enter the procedure name"
-                        value={feeForm.newTreatmentName}
-                        onChange={(event) => setFeeForm({ ...feeForm, newTreatmentName: event.target.value })}
-                        className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 outline-none focus:border-[#0089A8]"
-                      />
-                    </div>
-                  )}
+                <div className="min-w-0 min-[400px]:col-span-2">
+                  <FeeProcedurePicker
+                    treatments={treatments}
+                    value={feeForm.procedure}
+                    onChange={(procedure, suggestedAmount) => setFeeForm((previous) => ({
+                      ...previous,
+                      procedure,
+                      amount: suggestedAmount,
+                    }))}
+                  />
                 </div>
 
                 <div>
@@ -438,7 +386,7 @@ export default function FeesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!feeForm.patientId || !procedureName}
+                  disabled={!feeForm.patientId || !selectedTreatment}
                   className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Save Fee

@@ -1,4 +1,16 @@
 import { z } from "zod";
+import { treatmentKey } from "@/lib/appointmentTreatments";
+
+const appointmentDurationSchema = z.number().int().min(5).max(480);
+
+export const appointmentTreatmentsSchema = z.array(z.object({
+  name: z.string().trim().min(1, "Enter a name for each treatment."),
+  duration: appointmentDurationSchema,
+  charge: z.number().min(0).multipleOf(0.01).nullable().optional(),
+})).min(1, "Add at least one treatment.").refine(
+  (treatments) => new Set(treatments.map(({ name }) => treatmentKey(name))).size === treatments.length,
+  "Treatment names must be unique."
+);
 
 export const patientSchema = z.object({
   _id: z.string().min(1, "Patient ID is required"),
@@ -45,7 +57,7 @@ export const appointmentSchema = z.object({
   patientPhone: z.string().min(5, "Patient phone is required"),
   date: z.string().min(8, "Valid appointment date required"),
   time: z.string().min(3, "Valid appointment time required"),
-  durationMinutes: z.number().int().min(5).max(480).optional().default(30),
+  durationMinutes: appointmentDurationSchema.optional().default(30),
   procedure: z.string().min(1, "Procedure name is required"),
   status: z
     .enum(["scheduled", "in-chair", "completed", "cancelled", "missed"])
@@ -103,6 +115,7 @@ export const clinicProfileSchema = z.object({
   workingHoursStart: z.string().optional(),
   workingHoursEnd: z.string().optional(),
   receiptFooter: z.string().optional(),
+  appointmentTreatments: appointmentTreatmentsSchema.optional(),
   isConfigured: z.boolean().optional(),
 });
 

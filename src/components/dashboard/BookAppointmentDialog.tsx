@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Share2, X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import type { Appointment, Patient } from "@/lib/mockData";
+import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
@@ -18,25 +19,7 @@ export interface AppointmentBookingDraft {
   notes: string;
 }
 
-const emptyDraft: AppointmentBookingDraft = {
-  patientId: "",
-  phoneForAppointment: "",
-  durationMinutes: 30,
-  procedure: "Root Canal Treatment (RCT)",
-  notes: "",
-};
-
-const procedurePresets = [
-  { name: "Consultation & Diagnostic X-Ray", duration: 15 },
-  { name: "Composite Restoration / Filling", duration: 30 },
-  { name: "Root Canal Treatment (RCT)", duration: 45 },
-  { name: "Crown Preparation & Impression", duration: 60 },
-  { name: "Permanent Crown Cementation", duration: 30 },
-  { name: "Scaling & Root Planing (Teeth Cleaning)", duration: 30 },
-  { name: "Simple Extraction", duration: 30 },
-];
-
-export function BookAppointmentDialog({ initialDate, preferredTime, draft = emptyDraft, onClose, onBooked }: {
+export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClose, onBooked }: {
   initialDate: string;
   preferredTime?: string;
   draft?: AppointmentBookingDraft;
@@ -44,6 +27,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft = empt
   onBooked: (appointment: Appointment) => void;
 }) {
   const { appointments, patients, clinicProfile, bookAppointment } = useClinic();
+  const treatments = getAppointmentTreatments(clinicProfile.appointmentTreatments);
   const clock = getAppointmentClock(useMinuteClock());
   const dialog = useRef<HTMLDialogElement>(null);
   const bookingHeading = useRef<HTMLHeadingElement>(null);
@@ -57,11 +41,22 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft = empt
     findAppointmentConflict(appointments, date, time, durationMinutes);
   const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const [form, setForm] = useState(() => {
+    const draftTreatment = treatments.find(({ name }) => name === draft?.procedure);
+    const treatment = draftTreatment ?? treatments.find(({ name }) => name === "Root Canal Treatment (RCT)") ?? treatments[0];
+    const durationMinutes = draftTreatment && draft ? draft.durationMinutes : treatment.duration;
     const slots = futureSlots(initialDate);
     const time = preferredTime && slots.includes(preferredTime)
       ? preferredTime
-      : slots.find((slot) => !findSlotConflict(initialDate, slot, draft.durationMinutes || 30)) ?? slots[0] ?? "";
-    return { ...draft, date: initialDate, time };
+      : slots.find((slot) => !findSlotConflict(initialDate, slot, durationMinutes || 30)) ?? slots[0] ?? "";
+    return {
+      patientId: draft?.patientId ?? "",
+      phoneForAppointment: draft?.phoneForAppointment ?? "",
+      date: initialDate,
+      time,
+      durationMinutes,
+      procedure: treatment.name,
+      notes: draft?.notes ?? "",
+    };
   });
 
   const selectedPatient = patients.find((patient) => patient._id === form.patientId);
@@ -197,7 +192,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft = empt
           )}
 
           <TreatmentPicker
-            presets={procedurePresets}
+            presets={treatments}
             value={form.procedure}
             onChange={(preset) => setForm((previous) => ({
               ...previous,
@@ -227,8 +222,10 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft = empt
               <label className="font-semibold text-[#111C3A] block mb-1">Duration (Min)</label>
               <input
                 type="number"
-                step={15}
-                value={form.durationMinutes}
+                min={5}
+                max={480}
+                step={1}
+                value={form.durationMinutes || ""}
                 onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
                 className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] font-mono bg-[#FAFBFC]"
               />

@@ -23,6 +23,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
+import { AppointmentTreatmentsSettings } from "@/components/dashboard/AppointmentTreatmentsSettings";
 
 type AutoSaveStatus = "saved" | "saving" | "unsaved" | "error";
 
@@ -191,7 +192,7 @@ function ClinicSettingsContent() {
           {saveStatus === "saved" && (
             <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>All changes saved</span>
+              <span>Clinic profile saved</span>
             </span>
           )}
           {saveStatus === "unsaved" && (
@@ -482,6 +483,7 @@ function ClinicSettingsContent() {
               </div>
             </div>
           </div>
+          <AppointmentTreatmentsSettings />
         </div>
 
         {/* Right 1 Col: Live Letterhead & Receipt Preview */}

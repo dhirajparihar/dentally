@@ -2,13 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
-
-type TreatmentPreset = { name: string; duration: number };
+import type { AppointmentTreatment } from "@/lib/appointmentTreatments";
 
 export function TreatmentPicker({ presets, value, onChange }: {
-  presets: readonly TreatmentPreset[];
+  presets: readonly AppointmentTreatment[];
   value: string;
-  onChange: (preset: TreatmentPreset) => void;
+  onChange: (preset: AppointmentTreatment) => void;
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -27,7 +26,7 @@ export function TreatmentPicker({ presets, value, onChange }: {
     setSearch("");
   };
 
-  const select = (preset: TreatmentPreset) => {
+  const select = (preset: AppointmentTreatment) => {
     onChange(preset);
     close();
     trigger.current?.focus();

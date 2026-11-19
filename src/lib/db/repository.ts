@@ -211,6 +211,7 @@ export async function getClinicData(dentistEmail?: string): Promise<{
             workingHoursStart: profileDoc.workingHoursStart || clinicProfile.workingHoursStart,
             workingHoursEnd: profileDoc.workingHoursEnd || clinicProfile.workingHoursEnd,
             receiptFooter: profileDoc.receiptFooter || clinicProfile.receiptFooter,
+            appointmentTreatments: profileDoc.appointmentTreatments ?? clinicProfile.appointmentTreatments,
             isConfigured: Boolean(isConfigured),
           }
         : {
@@ -272,15 +273,6 @@ export async function saveClinicProfile(
   const conn = await ensureDbInitialized();
   if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
 
-  const mem = getOrCreateMemoryStore(normalized);
-  const updated: ClinicProfile = {
-    ...(mem.clinicProfile || clinicProfile),
-    ...profileData,
-    email: normalized,
-    isConfigured: true,
-  };
-  mem.clinicProfile = updated;
-
   try {
     if (conn) {
       await ClinicProfileModel.findOneAndUpdate(
@@ -300,6 +292,14 @@ export async function saveClinicProfile(
     if (isDbConfigured()) throw err;
   }
 
+  const mem = getOrCreateMemoryStore(normalized);
+  const updated: ClinicProfile = {
+    ...(mem.clinicProfile || clinicProfile),
+    ...profileData,
+    email: normalized,
+    isConfigured: true,
+  };
+  mem.clinicProfile = updated;
   return updated;
 }
 
