@@ -126,9 +126,12 @@ export default function DashboardOverviewPage() {
       const completionOrder = Number(a.status === "completed") - Number(b.status === "completed");
       if (completionOrder !== 0) return completionOrder;
 
-      const timeA = parseAppointmentTime(a.time) ?? 24 * 60;
-      const timeB = parseAppointmentTime(b.time) ?? 24 * 60;
-      return timeA - timeB || appointmentStatusOrder[a.status] - appointmentStatusOrder[b.status];
+      const timeA = parseAppointmentTime(a.time);
+      const timeB = parseAppointmentTime(b.time);
+      const timeOrder = a.status === "completed"
+        ? (timeB ?? -1) - (timeA ?? -1)
+        : (timeA ?? 24 * 60) - (timeB ?? 24 * 60);
+      return timeOrder || appointmentStatusOrder[a.status] - appointmentStatusOrder[b.status];
     });
 
   // The Fees page and existing payment records use UTC dates.
@@ -280,7 +283,7 @@ export default function DashboardOverviewPage() {
                 && !findAppointmentConflict(appointments, appointment.date, appointment.time, appointment.durationMinutes, appointment._id);
 
               return (
-                <AppointmentCard key={appointment._id} appointment={appointment} patientHref={dossierUrl}>
+                <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={dossierUrl}>
                   <details
                     name="overview-appointment-actions"
                     className="appointment-menu"

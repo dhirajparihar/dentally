@@ -19,6 +19,8 @@ export function getAppointmentClock(now = new Date()) {
   };
 }
 
+export type AppointmentClock = ReturnType<typeof getAppointmentClock>;
+
 export function shiftAppointmentDate(date: string, days: number) {
   const next = new Date(`${date}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + days);

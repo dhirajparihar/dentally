@@ -3,11 +3,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Phone } from "lucide-react";
+import type { AppointmentClock } from "@/lib/appointmentTime";
 import type { Appointment } from "@/lib/mockData";
 import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
 
-export function AppointmentCard({ appointment, patientHref, showDate = false, canCall = true, children }: {
+export function AppointmentCard({ appointment, clock, patientHref, showDate = false, canCall = true, children }: {
   appointment: Appointment;
+  clock: AppointmentClock;
   patientHref: string;
   showDate?: boolean;
   canCall?: boolean;
@@ -36,7 +38,7 @@ export function AppointmentCard({ appointment, patientHref, showDate = false, ca
         )}
       </div>
       <div className="appointment-card-controls">
-        <AppointmentStatusControl appointment={appointment} />
+        <AppointmentStatusControl appointment={appointment} clock={clock} />
         {children}
       </div>
     </article>

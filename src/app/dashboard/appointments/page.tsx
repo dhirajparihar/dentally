@@ -312,7 +312,7 @@ export default function AppointmentsPage() {
               const patientHref = getPatientDossierUrl(appointment);
               const canCall = appointment.date >= clock.date;
               return (
-                <AppointmentCard key={appointment._id} appointment={appointment} patientHref={patientHref} showDate={viewMode === "list"} canCall={canCall}>
+                <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={patientHref} showDate={viewMode === "list"} canCall={canCall}>
                   {canCall && (
                     <AppointmentActions
                       appointment={appointment}

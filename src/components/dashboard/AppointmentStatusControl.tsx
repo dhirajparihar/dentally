@@ -3,16 +3,31 @@
 import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
+import { isFutureAppointment, type AppointmentClock } from "@/lib/appointmentTime";
 import type { Appointment } from "@/lib/mockData";
 
-export function AppointmentStatusControl({ appointment }: { appointment: Appointment }) {
+const statusLabels: Record<Appointment["status"], string> = {
+  scheduled: "Scheduled",
+  completed: "Completed",
+  missed: "Missed",
+  cancelled: "Cancelled",
+};
+
+export function AppointmentStatusControl({ appointment, clock }: { appointment: Appointment; clock: AppointmentClock }) {
   const { completeAppointment, missAppointment } = useClinic();
   const [pendingStatus, setPendingStatus] = useState<"completed" | "missed" | null>(null);
   const [failed, setFailed] = useState(false);
   const errorId = useId();
   const status = pendingStatus ?? appointment.status;
+  const isFuture = isFutureAppointment(appointment.date, appointment.time, clock);
 
-  if (status === "cancelled") return <span className="status-pill cancelled">Cancelled</span>;
+  if (status === "cancelled" || isFuture) {
+    return (
+      <span className={`status-pill ${status}`} title={isFuture && status !== "cancelled" ? "Status can be updated at the scheduled start time." : undefined}>
+        {statusLabels[status] ?? "In chair"}
+      </span>
+    );
+  }
 
   const changeStatus = async (next: string) => {
     if ((next !== "completed" && next !== "missed") || next === appointment.status || pendingStatus) return;
@@ -38,7 +53,7 @@ export function AppointmentStatusControl({ appointment }: { appointment: Appoint
         >
           {appointment.status !== "completed" && appointment.status !== "missed" && (
             <option value={appointment.status} disabled>
-              {appointment.status === "scheduled" ? "Scheduled" : "In chair"}
+              {statusLabels[appointment.status] ?? "In chair"}
             </option>
           )}
           <option value="completed">Completed</option>

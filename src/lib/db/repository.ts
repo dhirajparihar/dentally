@@ -419,14 +419,27 @@ export async function updateAppointmentStatus(
   const filter = { _id: appointmentId, dentistEmail: email };
   const changes: Partial<Appointment> = { status };
   const cached = mem.appointments.find((appointment) => appointment._id === appointmentId);
+  const isOutcomeUpdate = status === "completed" || status === "missed";
+  const existing = conn && (isOutcomeUpdate || reason)
+    ? await AppointmentModel.findOne(filter).select("date time notes").lean().exec()
+    : cached;
+
+  if (isOutcomeUpdate) {
+    if (!existing) throw new AppointmentNotFoundError("Appointment not found.");
+    if (isFutureAppointment(existing.date, existing.time)) {
+      throw new AppointmentTimeError("Appointment status can be updated at the scheduled start time.");
+    }
+  }
+
   if (reason) {
-    const existing = conn ? await AppointmentModel.findOne(filter).select("notes").lean().exec() as Appointment | null : cached;
     const label = status.charAt(0).toUpperCase() + status.slice(1);
     changes.notes = `${existing?.notes || ""} [${label}: ${reason}]`.trim();
   }
 
+  // Apply the outcome only to the date and time checked above.
+  const updateFilter = isOutcomeUpdate && existing ? { ...filter, date: existing.date, time: existing.time } : filter;
   const previous = conn
-    ? await AppointmentModel.findOneAndUpdate(filter, { $set: changes }, { returnDocument: "before" }).lean().exec() as Appointment | null
+    ? await AppointmentModel.findOneAndUpdate(updateFilter, { $set: changes }, { returnDocument: "before" }).lean().exec() as Appointment | null
     : cached;
   if (!previous) throw new AppointmentNotFoundError("Appointment not found.");
 
