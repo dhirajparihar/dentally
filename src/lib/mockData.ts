@@ -183,31 +183,6 @@ export const clinicProfile: ClinicProfile = {
   mcpServerUrl: "https://dentally.reline.me/api/mcp",
 };
 
-export const generateDefaultToothMap = (): Record<number, ToothCondition> => {
-  const toothNames: Record<number, string> = {
-    18: "Upper Right 3rd Molar", 17: "Upper Right 2nd Molar", 16: "Upper Right 1st Molar",
-    15: "Upper Right 2nd Premolar", 14: "Upper Right 1st Premolar", 13: "Upper Right Canine",
-    12: "Upper Right Lateral Incisor", 11: "Upper Right Central Incisor",
-    21: "Upper Left Central Incisor", 22: "Upper Left Lateral Incisor", 23: "Upper Left Canine",
-    24: "Upper Left 1st Premolar", 25: "Upper Left 2nd Premolar", 26: "Upper Left 1st Molar",
-    27: "Upper Left 2nd Molar", 28: "Upper Left 3rd Molar",
-    38: "Lower Left 3rd Molar", 37: "Lower Left 2nd Molar", 36: "Lower Left 1st Molar",
-    35: "Lower Left 2nd Premolar", 34: "Lower Left 1st Premolar", 33: "Lower Left Canine",
-    32: "Lower Left Lateral Incisor", 31: "Lower Left Central Incisor",
-    41: "Lower Right Central Incisor", 42: "Lower Right Lateral Incisor", 43: "Lower Right Canine",
-    44: "Lower Right 1st Premolar", 45: "Lower Right 2nd Premolar", 46: "Lower Right 1st Molar",
-    47: "Lower Right 2nd Molar", 48: "Lower Right 3rd Molar",
-  };
-
-  const map: Record<number, ToothCondition> = {};
-  for (const idStr of Object.keys(toothNames)) {
-    const id = parseInt(idStr);
-    const quad = Math.floor(id / 10) as 1 | 2 | 3 | 4;
-    map[id] = { id, name: toothNames[id], quadrant: quad, status: "sound" };
-  }
-  return map;
-};
-
 export const initialPatients: Patient[] = [
   {
     _id: "pat_101",

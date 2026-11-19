@@ -10,10 +10,6 @@ import {
   PaymentTransaction,
   clinicProfile as defaultClinicProfile,
   ClinicProfile,
-  initialPatients,
-  initialAppointments,
-  initialFees,
-  initialPayments,
 } from "@/lib/mockData";
 
 export interface ClinicContextType {

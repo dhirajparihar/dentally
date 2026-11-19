@@ -16,6 +16,7 @@ import {
 import {
   Patient,
 } from "@/lib/mockData";
+import { buildPatientBalanceMap, formatINR } from "@/lib/financials";
 import Link from "next/link";
 import { useClinic } from "@/context/ClinicContext";
 
@@ -54,27 +55,8 @@ export default function PatientsPage() {
     bloodGroup: "O+",
   });
 
-  // Pre-compute dues with useMemo map to eliminate O(N * (fees + payments)) overhead
-  const balancesMap = useMemo(() => {
-    const billedMap = new Map<string, number>();
-    for (const f of fees) {
-      billedMap.set(f.patientId, (billedMap.get(f.patientId) || 0) + (f.netAmount || 0));
-    }
-    const paidMap = new Map<string, number>();
-    for (const p of payments) {
-      if (!p.isRefund) {
-        paidMap.set(p.patientId, (paidMap.get(p.patientId) || 0) + (p.amount || 0));
-      }
-    }
-    const map = new Map<string, number>();
-    for (const pat of patients) {
-      const billed = billedMap.get(pat._id) || 0;
-      const paid = paidMap.get(pat._id) || 0;
-      map.set(pat._id, Math.max(0, billed - paid));
-    }
-    return map;
-  }, [fees, payments, patients]);
-
+  // Pre-compute dues with centralized useMemo map to eliminate O(N * (fees + payments)) overhead
+  const balancesMap = useMemo(() => buildPatientBalanceMap(patients, fees, payments), [patients, fees, payments]);
   const getBalance = (patientId: string) => balancesMap.get(patientId) || 0;
 
   const filtered = patients
@@ -253,7 +235,7 @@ export default function PatientsPage() {
                 </div>
                 <div className="flex-1" />
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#E4E9F0] pt-2">
-                  <span className={`text-xs font-semibold ${balance > 0 ? "text-rose-700" : "text-[#0089A8]"}`}>{balance > 0 ? `${new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(balance)} due` : "Settled"}</span>
+                  <span className={`text-xs font-semibold ${balance > 0 ? "text-rose-700" : "text-[#0089A8]"}`}>{balance > 0 ? `${formatINR(balance)} due` : "Settled"}</span>
                   <div className="flex items-center gap-2">
                     <a href={getWhatsAppLink(patient)} target="_blank" rel="noopener noreferrer" title="Send WhatsApp message" aria-label={`Message ${patient.name} on WhatsApp`} className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#D4EDF3] sm:h-9 sm:w-9 text-[#0089A8] transition-colors hover:bg-[#EDF7FA]"><Share2 size={16} /></a>
                     <Link href={detailsUrl} aria-label={`View ${patient.name}`} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#0089A8] px-3 sm:min-h-9 text-xs font-semibold text-white transition-colors hover:bg-[#00738E]">View</Link>

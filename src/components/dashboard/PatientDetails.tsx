@@ -32,6 +32,8 @@ import {
   Appointment,
   calculateFeeSettlements,
 } from "@/lib/mockData";
+import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+import { calculateFinancialSummary, formatINR } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
@@ -138,11 +140,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     });
   };
 
-  // Inline Payment State
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState<"UPI" | "Cash" | "Card">("UPI");
-  const [payNotes, setPayNotes] = useState("");
+  // Standard Record Payment Dialog State
+  const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
 
   // Inline Fee State
   const [showFeeForm, setShowFeeForm] = useState(false);
@@ -267,15 +266,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   if (!patient) return null;
 
-  // Patient financial calculations
+  // Patient financial calculations (centralized single source of truth)
+  const financialSummary = calculateFinancialSummary(fees, payments, patient._id);
+  const totalBilled = financialSummary.billed;
+  const totalPaid = financialSummary.paid;
+  const netPaid = financialSummary.netPaid;
+  const outstandingBalance = financialSummary.due;
   const patientFees = fees.filter((f) => f.patientId === patient._id);
   const patientPayments = payments.filter((p) => p.patientId === patient._id && !p.isRefund);
-  const patientRefunds = payments.filter((p) => p.patientId === patient._id && p.isRefund);
-  const totalBilled = patientFees.reduce((acc, f) => acc + f.netAmount, 0);
-  const totalPaid = patientPayments.reduce((acc, p) => acc + p.amount, 0);
-  const totalRefunded = patientRefunds.reduce((acc, p) => acc + p.amount, 0);
-  const netPaid = totalPaid - totalRefunded;
-  const outstandingBalance = Math.max(0, totalBilled - netPaid);
   const feeSettlements = calculateFeeSettlements(patientFees, patientPayments);
 
   // Patient appointments
@@ -285,29 +283,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
       .filter((a) => a.status === "scheduled" && a.date >= recallClock.date)
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ||
     patientAppts.find((a) => a.status === "scheduled");
-
-  const handleRecordPaymentSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountNum = Number(payAmount);
-    if (!amountNum || amountNum <= 0) return;
-
-    const newPayment: PaymentTransaction = {
-      _id: `pay_${Date.now()}`,
-      patientId: patient._id,
-      patientName: patient.name,
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      amount: amountNum,
-      paymentMethod: payMethod,
-      notes: payNotes || `Patient payment recorded by ${clinicProfile.dentistName}`,
-      receiptNo: `REC-${Date.now().toString().slice(-4)}`,
-    };
-
-    onAddPayment(newPayment);
-    setShowPaymentForm(false);
-    setPayAmount("");
-    setPayNotes("");
-  };
 
   const handleAddFeeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,7 +329,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   };
 
   const medicalAlerts = patient.medicalAlerts.filter((alert) => alert.trim() && alert.trim().toLowerCase() !== "none");
-  const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+  const money = (amount: number) => formatINR(amount);
   const tabs = [
     { id: "overview", label: "Overview", icon: User },
     { id: "financials", label: "Billing", icon: CreditCard },
@@ -462,8 +437,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     type="button"
                     onClick={() => {
                       setIsMenuOpen(false);
-                      setActiveTab("financials");
-                      setShowPaymentForm(true);
+                      setPaymentDefaults({
+                        patientId: patient._id,
+                        amount: outstandingBalance > 0 ? outstandingBalance : undefined,
+                      });
                     }}
                     className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
                   >
@@ -666,11 +643,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
-                      setShowPaymentForm(!showPaymentForm);
-                      setShowFeeForm(false);
-                      if (!payAmount && outstandingBalance > 0) {
-                        setPayAmount(outstandingBalance.toString());
-                      }
+                      setPaymentDefaults({
+                        patientId: patient._id,
+                        amount: outstandingBalance > 0 ? outstandingBalance : undefined,
+                      });
                     }}
                     className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
                   >
@@ -681,7 +657,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   <button
                     onClick={() => {
                       setShowFeeForm(!showFeeForm);
-                      setShowPaymentForm(false);
                     }}
                     className="px-4 py-2 rounded-xl bg-[#EDF7FA] hover:bg-[#D4EDF3] text-[#00738E] font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all"
                   >
@@ -700,85 +675,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   Share Bill
                 </a>
               </div>
-
-              {/* INLINE PAYMENT FORM */}
-              {showPaymentForm && (
-                <form
-                  onSubmit={handleRecordPaymentSubmit}
-                  className="p-4 sm:p-5 rounded-2xl bg-white border border-[#0089A8] space-y-3 animate-in fade-in"
-                >
-                  <h4 className="font-bold text-sm text-[#111C3A] flex items-center justify-between">
-                    <span>Record Payment</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPaymentForm(false)}
-                      aria-label="Close form" className="text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
-                        Amount Paid (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
-                        placeholder="e.g. 2500"
-                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
-                        Payment Mode
-                      </label>
-                      <select
-                        value={payMethod}
-                        onChange={(e) => setPayMethod(e.target.value as any)}
-                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8] bg-white"
-                      >
-                        <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Credit / Debit Card</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
-                        Notes / Reference
-                      </label>
-                      <input
-                        type="text"
-                        value={payNotes}
-                        onChange={(e) => setPayNotes(e.target.value)}
-                        placeholder="e.g. GPay ref 948271"
-                        className="w-full p-2.5 rounded-xl border border-[#E4E9F0] text-xs outline-none focus:border-[#0089A8]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowPaymentForm(false)}
-                      className="px-3 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-xl bg-[#0089A8] text-white font-semibold text-xs hover:bg-[#00738E] transition-all"
-                    >
-                      Save Payment
-                    </button>
-                  </div>
-                </form>
-              )}
 
               {/* INLINE FEE FORM */}
               {showFeeForm && (
@@ -1655,6 +1551,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Standard Record Payment Dialog */}
+      {paymentDefaults && (
+        <RecordPaymentDialog
+          defaults={paymentDefaults}
+          onClose={() => setPaymentDefaults(null)}
+        />
       )}
     </div>
   );

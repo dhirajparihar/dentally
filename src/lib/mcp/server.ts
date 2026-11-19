@@ -10,81 +10,12 @@ import {
 } from "@/lib/db/repository";
 import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import {
-  initialPatients,
-  initialAppointments,
-  initialFees,
-  initialPayments,
-  clinicProfile,
   ClinicProfile,
   Patient,
   Appointment,
   FeeItem,
   PaymentTransaction,
 } from "@/lib/mockData";
-
-// Active in-memory state
-let patientsState: Patient[] = [...initialPatients];
-let appointmentsState: Appointment[] = [...initialAppointments];
-let feesState: FeeItem[] = [...initialFees];
-let paymentsState: PaymentTransaction[] = [...initialPayments];
-
-export function getClinicState() {
-  return {
-    patients: patientsState,
-    appointments: appointmentsState,
-    fees: feesState,
-    payments: paymentsState,
-    clinicProfile,
-  };
-}
-
-export function updateClinicState(updates: {
-  patients?: Patient[];
-  appointments?: Appointment[];
-  fees?: FeeItem[];
-  payments?: PaymentTransaction[];
-}) {
-  if (updates.patients) patientsState = updates.patients;
-  if (updates.appointments) appointmentsState = updates.appointments;
-  if (updates.fees) feesState = updates.fees;
-  if (updates.payments) paymentsState = updates.payments;
-  return getClinicState();
-}
-
-// Helper to find patient by query (ID, phone or name)
-function findPatientHelper(query: string): Patient | undefined {
-  if (!query) return undefined;
-  const q = query.toLowerCase().trim();
-  return patientsState.find(
-    (p) =>
-      p._id.toLowerCase() === q ||
-      p.phone.replace(/\s+/g, "").includes(q.replace(/\s+/g, "")) ||
-      p.name.toLowerCase().includes(q)
-  );
-}
-
-// Helper to calculate patient balance
-function calculatePatientBalance(patientId: string) {
-  const patientFees = feesState.filter((f) => f.patientId === patientId);
-  const patientPayments = paymentsState.filter((p) => p.patientId === patientId && !p.isRefund);
-  const patientRefunds = paymentsState.filter((p) => p.patientId === patientId && p.isRefund);
-
-  const totalGross = patientFees.reduce((sum, f) => sum + f.amount, 0);
-  const totalDiscount = patientFees.reduce((sum, f) => sum + (f.discount || 0), 0);
-  const totalBilled = patientFees.reduce((sum, f) => sum + f.netAmount, 0);
-  const totalPaid = patientPayments.reduce((sum, p) => sum + p.amount, 0);
-  const totalRefunded = patientRefunds.reduce((sum, p) => sum + p.amount, 0);
-  const netPaid = totalPaid - totalRefunded;
-  const outstandingBalance = Math.max(0, totalBilled - netPaid);
-
-  return {
-    totalGross,
-    totalDiscount,
-    totalBilled,
-    totalPaid: netPaid,
-    outstandingBalance,
-  };
-}
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
   if (!dentistEmail) {
