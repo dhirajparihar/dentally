@@ -9,7 +9,7 @@ import { useClinic } from "@/context/ClinicContext";
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
-  onBookAppointment?: () => void;
+  onBookAppointment: () => void;
   title?: string;
 }
 
@@ -91,16 +91,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
             </Link>
           )}
 
-          {/* Quick Schedule Button (hidden on appointments page to avoid duplicate CTAs) */}
-          {pathname !== "/dashboard/appointments" && (
-            onBookAppointment ? (
-              <button type="button" onClick={onBookAppointment} disabled={loading} aria-haspopup="dialog" aria-label="Book Appointment" className={`${bookingButtonClass} disabled:opacity-50`}>
-                {bookingButtonLabel}
-              </button>
-            ) : (
-              <Link href="/dashboard/appointments" className={bookingButtonClass}>{bookingButtonLabel}</Link>
-            )
-          )}
+          <button type="button" onClick={onBookAppointment} disabled={loading} aria-haspopup="dialog" aria-label="Book Appointment" className={`${bookingButtonClass} disabled:opacity-50`}>
+            {bookingButtonLabel}
+          </button>
 
           {/* User Profile Avatar with Google Badge & Sign Out Dropdown */}
           <div className="relative pl-2 border-l border-[#E4E9F0]">

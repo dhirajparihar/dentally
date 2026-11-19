@@ -210,7 +210,7 @@
 }
 
 /* Appointments: compact controls, time chips, and shared cards for both views. */
-.appointment-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "date-controls selected-date" "view book"; align-items: center; gap: 12px; padding: 14px; background: #fff; border: 1px solid #e4e9f0; border-radius: 16px; }
+.appointment-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "date-controls selected-date" "view view"; align-items: center; gap: 12px; padding: 14px; background: #fff; border: 1px solid #e4e9f0; border-radius: 16px; }
 .appointment-date-controls { grid-area: date-controls; display: flex; align-items: center; gap: 4px; }
 .calendar-icon-button, .calendar-today { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 38px; border: 1px solid #e4e9f0; border-radius: 9px; color: #52627a; background: #fff; }
 .calendar-icon-button:hover, .calendar-today:hover { background: #edf7fa; color: #00738e; }
@@ -222,12 +222,9 @@
 .appointment-view-toggle { grid-area: view; display: inline-flex; justify-self: start; border: 1px solid #e4e9f0; border-radius: 10px; padding: 3px; background: #f8fafc; }
 .appointment-view-toggle button { min-height: 36px; padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 600; color: #64748b; white-space: nowrap; }
 .appointment-view-toggle button[aria-pressed="true"] { background: #edf7fa; color: #00738e; box-shadow: 0 1px 3px #111c3a0a; }
-.appointment-book-button { grid-area: book; justify-self: end; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 9px 16px; border: 1px solid #0089a8; border-radius: 10px; background: #0089a8; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.appointment-book-button:hover { background: #00738e; }
 .appointment-slots { padding: 16px; border: 1px solid #dceef2; border-radius: 16px; background: #f4fafb; }
 .appointment-slot-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.appointment-time-chip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 6px; padding: 8px 12px; min-height: 38px; border: 1px solid #cfe7ed; border-radius: 9px; background: #fff; color: #00738e; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.appointment-time-chip:hover { border-color: #0089a8; background: #eaf6f8; }
+.appointment-time-chip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 8px 12px; min-height: 38px; border: 1px solid #cfe7ed; border-radius: 9px; background: #fff; color: #00738e; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .appointment-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 18px 20px; border: 1px solid #e4e9f0; border-radius: 16px; background: #fff; }
 .appointment-card-body { min-width: 0; }
 .appointment-card-time { display: inline-flex; align-items: center; padding: 4px 8px; background: #edf7fa; border-radius: 7px; color: #00738e; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -250,7 +247,7 @@
 .appointment-timeline > .appointment-card::before { content: ''; position: absolute; top: 24px; left: -22px; width: 10px; height: 10px; border: 2px solid #36adc0; border-radius: 50%; background: #fff; }
 .appointment-text-action { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font-size: 12px; font-weight: 600; color: #00738e; }
 @media (min-width: 1280px) {
-  .appointment-toolbar { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "date-controls selected-date view book"; }
+  .appointment-toolbar { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "date-controls selected-date view"; }
   .appointment-date-picker { justify-self: start; }
 }
 @media (max-width: 639px) {
@@ -259,8 +256,6 @@
   .calendar-today { padding-inline: 8px; }
   .appointment-view-toggle { width: 100%; }
   .appointment-view-toggle button { flex: 1; padding: 6px; font-size: 11px; }
-  .appointment-book-button { width: 100%; padding: 8px; font-size: 11px; gap: 4px; min-height: 44px; white-space: normal; }
-  .appointment-book-button svg { flex-shrink: 0; }
   .appointment-slots { padding: 14px; }
   .appointment-slot-list { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; overscroll-behavior-x: contain; }
   .appointment-card { position: relative; display: block; padding: 14px; }
@@ -273,7 +268,7 @@
   .appointment-timeline > .appointment-card::before { left: -18px; width: 8px; height: 8px; }
 }
 @media (max-width: 359px) {
-  .appointment-toolbar { grid-template-areas: "date-controls date-controls" "selected-date selected-date" "view book"; }
+  .appointment-toolbar { grid-template-areas: "date-controls date-controls" "selected-date selected-date" "view view"; }
   .appointment-date-picker { justify-self: start; }
 }
 

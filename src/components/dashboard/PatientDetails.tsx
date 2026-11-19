@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   X,
@@ -11,11 +12,9 @@ import {
   Clock,
   CreditCard,
   FileText,
-  CheckCircle2,
   Plus,
   IndianRupee,
   Share2,
-  Sparkles,
   Receipt,
   User,
   Droplet,
@@ -33,11 +32,12 @@ import {
   calculateFeeSettlements,
 } from "@/lib/mockData";
 import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+import { AppointmentBookingConfirmation, BookAppointmentDialog } from "@/components/dashboard/BookAppointmentDialog";
 import { calculateFinancialSummary, formatINR } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
 import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
 import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
-import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findBookedFollowUp, getAppointmentClock, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 
 interface PatientDetailsProps {
@@ -50,7 +50,6 @@ interface PatientDetailsProps {
   appointments: Appointment[];
   onAddPayment: (payment: PaymentTransaction) => void;
   onAddFee: (fee: FeeItem) => void;
-  onBookAppointment?: (appointment: Appointment) => Promise<boolean>;
   openVisits?: boolean;
   initialFollowUpSource?: Appointment;
   focusedVisitId?: string;
@@ -66,12 +65,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   appointments,
   onAddPayment,
   onAddFee,
-  onBookAppointment,
   openVisits,
   initialFollowUpSource,
   focusedVisitId,
 }) => {
   const { clinicProfile, deletePatient } = useClinic();
+  const today = getAppointmentClock(useMinuteClock()).date;
   const [activeTab, setActiveTab] = useState<"overview" | "financials" | "appointments">(openVisits ? "appointments" : "overview");
 
   // Profile Editing State
@@ -164,119 +163,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const [feeAmount, setFeeAmount] = useState("");
   const [feeDiscount, setFeeDiscount] = useState("0");
 
-  // Chairside Recall / Follow-up Booking State
   const [followUpSource, setFollowUpSource] = useState(initialFollowUpSource);
-  const [showRecallForm, setShowRecallForm] = useState(Boolean(initialFollowUpSource));
-  const [recallDate, setRecallDate] = useState(() => shiftAppointmentDate(getAppointmentClock().date, 7));
-  const [recallTime, setRecallTime] = useState("");
-  const [recallProcedure, setRecallProcedure] = useState(initialFollowUpSource ? "Follow-Up Visit" : "Crown Cementation");
-  const [recallDuration, setRecallDuration] = useState(initialFollowUpSource ? clinicProfile.slotDuration || 30 : 30);
-  const [followUpReason, setFollowUpReason] = useState("");
-  const [recallSuccessApt, setRecallSuccessApt] = useState<Appointment | null>(null);
-  const [recallError, setRecallError] = useState("");
-  const [isBookingRecall, setIsBookingRecall] = useState(false);
-  const recallClock = getAppointmentClock(useMinuteClock());
-  const recallForm = useRef<HTMLFormElement>(null);
-  const recallSlots = getClinicAppointmentSlots(clinicProfile)
-    .filter((slot) => isFutureAppointment(recallDate, slot, recallClock));
-  const recallConflict = findAppointmentConflict(appointments, recallDate, recallTime, recallDuration);
+  const [bookingConfirmation, setBookingConfirmation] = useState<Appointment | null>(null);
 
   useEffect(() => {
-    if (activeTab !== "appointments") return;
-    if (showRecallForm) {
-      if (followUpSource) recallForm.current?.scrollIntoView({ block: "start" });
-    } else if (focusedVisitId) {
+    if (activeTab === "appointments" && !followUpSource && focusedVisitId) {
       document.getElementById(`patient-visit-${focusedVisitId}`)?.scrollIntoView({ block: "start" });
     }
-  }, [activeTab, focusedVisitId, followUpSource, showRecallForm]);
-
-  const recallProcedurePresets = [
-    ...(followUpSource ? [{ name: "Follow-Up Visit", duration: clinicProfile.slotDuration || 30 }] : []),
-    { name: "Crown Cementation", duration: 30 },
-    { name: "RCT Sitting 2 (Obturation)", duration: 45 },
-    { name: "Suture Removal & Review", duration: 15 },
-    { name: "Routine Checkup", duration: 20 },
-    { name: "Composite Restoration", duration: 30 },
-  ];
-
-  const changeRecallDate = (date: string) => {
-    setRecallDate(date);
-    setRecallError("");
-    if (followUpSource) {
-      setRecallTime("");
-    } else {
-      const clock = getAppointmentClock();
-      const availableSlots = getClinicAppointmentSlots(clinicProfile).filter((slot) =>
-        isFutureAppointment(date, slot, clock) && !findAppointmentConflict(appointments, date, slot, recallDuration)
-      );
-      setRecallTime(availableSlots.includes(recallTime) ? recallTime : availableSlots[0] ?? "");
-    }
-  };
-
-  const handleSetRecallOffset = (days: number) => {
-    changeRecallDate(shiftAppointmentDate(getAppointmentClock().date, days));
-  };
-
-  const closeRecallForm = () => {
-    setShowRecallForm(false);
-    setRecallError("");
-    if (followUpSource) {
-      setFollowUpSource(undefined);
-      setFollowUpReason("");
-      setRecallProcedure("Crown Cementation");
-      setRecallDuration(30);
-      setRecallTime("");
-    }
-  };
-
-  const handleConfirmRecall = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!onBookAppointment || !patient || isBookingRecall) return;
-    if (!recallSlots.includes(recallTime) || !isFutureAppointment(recallDate, recallTime)) {
-      setRecallError("Choose a future time to book this visit.");
-      return;
-    }
-    if (recallConflict) {
-      setRecallError("This time overlaps another appointment. Choose an available slot.");
-      return;
-    }
-
-    const newApt: Appointment = {
-      _id: `apt_${Date.now()}`,
-      patientId: patient._id,
-      followUpOfAppointmentId: followUpSource?._id,
-      patientName: patient.name,
-      patientPhone: patient.phone?.trim() || followUpSource?.patientPhone || "",
-      date: recallDate,
-      time: recallTime,
-      durationMinutes: recallDuration,
-      procedure: recallProcedure,
-      status: "scheduled",
-      notes: followUpSource ? followUpReason.trim() || undefined : `Chairside recall booked by ${clinicProfile.dentistName}`,
-    };
-
-    setRecallError("");
-    setIsBookingRecall(true);
-    const saved = await onBookAppointment(newApt);
-    setIsBookingRecall(false);
-    if (!saved) {
-      setRecallError("Could not book the visit. Check the date and time and try again.");
-      return;
-    }
-    if (!followUpSource) {
-      onUpdatePatient({ ...patient, followUpDue: recallDate });
-    }
-    setRecallSuccessApt(newApt);
-    closeRecallForm();
-  };
-
-  const getRecallWhatsAppUrl = (apt: Appointment) => {
-    const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
-    const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const text = `Hello ${apt.patientName}, your dental follow-up appointment with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${apt.date} at ${apt.time} (${apt.procedure}).\n\nClinic: ${clinicProfile.name}, ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
-    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
-  };
-
+  }, [activeTab, followUpSource, focusedVisitId]);
 
   if (!patient) return null;
 
@@ -294,7 +188,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const patientAppts = appointments.filter((a) => a.patientId === patient._id);
   const upcomingAppt =
     patientAppts
-      .filter((a) => a.status === "scheduled" && a.date >= recallClock.date)
+      .filter((a) => a.status === "scheduled" && a.date >= today)
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ||
     patientAppts.find((a) => a.status === "scheduled");
 
@@ -415,19 +309,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   >
                     <Edit3 size={14} className="text-[#0089A8] shrink-0" />
                     <span>Edit Patient Details</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setActiveTab("appointments");
-                      setShowRecallForm(true);
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
-                  >
-                    <Calendar size={14} className="text-[#0089A8] shrink-0" />
-                    <span>Book Appointment</span>
                   </button>
 
                   <button
@@ -909,223 +790,25 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
           {/* Appointments */}
           {activeTab === "appointments" && (
             <div className="space-y-5">
-              {/* Top Banner: Header + Book Next Visit Trigger */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-base text-[#111C3A] flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-[#0089A8]" />
-                    Visits
-                  </h3>
-                </div>
+              <h3 className="font-bold text-base text-[#111C3A] flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#0089A8]" />
+                Visits
+              </h3>
 
-                <button
-                  type="button"
-                  onClick={showRecallForm ? closeRecallForm : () => setShowRecallForm(true)}
-                  disabled={isBookingRecall}
-                  className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all self-start sm:self-auto"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{showRecallForm ? "Cancel" : "Book Visit"}</span>
-                </button>
-              </div>
-
-              {/* SUCCESS RECALL ALERT BANNER */}
-              {recallSuccessApt && (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold">
-                        Follow-Up Confirmed: {recallSuccessApt.date} at {recallSuccessApt.time}
-                      </div>
-                      <div className="text-[11px] text-emerald-700 font-mono">
-                        {recallSuccessApt.procedure} &middot; {recallSuccessApt.durationMinutes} mins
-                      </div>
-                    </div>
-                  </div>
-
-                  <a
-                    href={getRecallWhatsAppUrl(recallSuccessApt)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold flex items-center gap-1.5 transition-all self-start sm:self-auto"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>Send WhatsApp Slip</span>
-                  </a>
-                </div>
+              {bookingConfirmation && (
+                <AppointmentBookingConfirmation appointment={bookingConfirmation} onDismiss={() => setBookingConfirmation(null)} />
               )}
 
-              {/* CHAIRSIDE RECALL STUDIO FORM */}
-              {showRecallForm && (
-                <form
-                  ref={recallForm}
-                  onSubmit={handleConfirmRecall}
-                  aria-labelledby="visit-booking-heading"
-                  className="scroll-mt-24 p-5 rounded-2xl bg-white border border-[#0089A8] shadow-card-subtle space-y-4 animate-in fade-in"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E4E9F0]">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-[#0089A8]" />
-                      <h4 id="visit-booking-heading" className="font-bold text-sm text-[#111C3A]">
-                        {followUpSource ? "Book Follow-Up" : "Book Visit"}
-                      </h4>
-                    </div>
-                    <span className="text-[11px] font-mono text-[#8291A7]">
-                      Phone: {patient.phone || followUpSource?.patientPhone}
-                    </span>
-                  </div>
-                  {followUpSource && <p className="text-xs text-[#52627A]">Follow-up for {followUpSource.procedure}</p>}
-
-                  {/* 1. Date Fast Presets */}
-                  <div className="space-y-1.5">
-                    <label htmlFor="visit-date" className="text-[11px] font-mono text-[#64748B] uppercase block">
-                      Date
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { label: "+3 Days", days: 3 },
-                        { label: "+1 Week", days: 7 },
-                        { label: "+2 Weeks", days: 14 },
-                        { label: "+1 Month", days: 30 },
-                      ].map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => handleSetRecallOffset(preset.days)}
-                          className="px-3 py-1.5 rounded-xl bg-[#EDF7FA] hover:bg-[#BEE3E9]/50 text-[#111C3A] border border-[#D4EDF3] text-xs font-semibold font-mono transition-colors"
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-
-                      <input
-                        id="visit-date"
-                        type="date"
-                        required
-                        min={recallClock.date}
-                        value={recallDate}
-                        onChange={(e) => changeRecallDate(e.target.value)}
-                        className="p-1.5 px-3 rounded-xl border border-[#E4E9F0] text-xs font-mono outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 2. Procedure Presets */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-mono text-[#64748B] uppercase block">
-                      Procedure
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {recallProcedurePresets.map((proc) => (
-                        <button
-                          key={proc.name}
-                          type="button"
-                          onClick={() => {
-                            setRecallProcedure(proc.name);
-                            setRecallDuration(proc.duration);
-                            setRecallError("");
-                          }}
-                          className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
-                            recallProcedure === proc.name
-                              ? "bg-[#0089A8] text-white border-[#0089A8] font-semibold"
-                              : "bg-[#FAFBFC] border-[#E4E9F0] text-[#64748B] hover:bg-[#EDF7FA]"
-                          }`}
-                        >
-                          {proc.name} ({proc.duration}m)
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 3. Visual Slot Grid */}
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-[11px] font-mono text-[#64748B] uppercase">
-                        Time on {recallDate}
-                      </label>
-                      <span className="text-[10px] font-mono text-[#8291A7]">
-                        {clinicProfile.dentistName} • Operatory 1
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 pt-1">
-                      {recallSlots.length === 0 && (
-                        <p className="col-span-full p-4 rounded-xl bg-[#FAFBFC] border border-[#E4E9F0] text-center text-xs text-[#64748B]">
-                          No future times available for {recallDate}. Choose another date.
-                        </p>
-                      )}
-                      {recallSlots.map((slot) => {
-                        const isBooked = findAppointmentConflict(appointments, recallDate, slot, recallDuration);
-                        const isSelected = recallTime === slot;
-
-                        if (isBooked) {
-                          return (
-                            <div
-                              key={slot}
-                              className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-center text-slate-400 text-xs font-mono cursor-not-allowed opacity-60"
-                              title="Slot already booked"
-                            >
-                              <div className="line-through">{slot}</div>
-                              <span className="text-[9px]">Busy</span>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <button
-                            key={slot}
-                            type="button"
-                            onClick={() => {
-                              setRecallTime(slot);
-                              setRecallError("");
-                            }}
-                            className={`p-2 rounded-xl text-center text-xs font-mono transition-all border ${
-                              isSelected
-                                ? "bg-[#0089A8] text-white border-[#0089A8] font-bold shadow-xs scale-102"
-                                : "bg-[#FAFBFC] hover:bg-[#EDF7FA] border-[#E4E9F0] text-[#111C3A]"
-                            }`}
-                          >
-                            <div>{slot}</div>
-                            <span className={`text-[9px] ${isSelected ? "text-white" : "text-[#0089A8]"}`}>
-                              {isSelected ? "Selected" : "Open"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {followUpSource && (
-                    <div className="space-y-1.5">
-                      <label htmlFor="visit-reason" className="block text-xs font-semibold text-[#52627A]">Follow-Up Reason (Optional)</label>
-                      <input id="visit-reason" type="text" value={followUpReason} onChange={(event) => setFollowUpReason(event.target.value)} className="w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5 text-xs outline-none focus:border-[#0089A8]" />
-                    </div>
-                  )}
-
-                  {/* Submit Bar */}
-                  {recallError && <p role="alert" className="text-xs text-rose-700 font-medium">{recallError}</p>}
-                  <div className="flex justify-end gap-2 pt-2 border-t border-[#E4E9F0]">
-                    <button
-                      type="button"
-                      onClick={closeRecallForm}
-                      disabled={isBookingRecall}
-                      className="px-3.5 py-1.5 rounded-xl text-xs text-[#64748B] hover:text-[#111C3A]"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isBookingRecall || !recallSlots.includes(recallTime) || Boolean(recallConflict)}
-                      className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isBookingRecall ? "Booking..." : followUpSource ? "Book Follow-Up" : "Book Visit"}</span>
-                    </button>
-                  </div>
-                </form>
+              {followUpSource && (
+                <BookAppointmentDialog
+                  initialDate={shiftAppointmentDate(today, 7)}
+                  followUpSource={followUpSource}
+                  onClose={() => setFollowUpSource(undefined)}
+                  onBooked={(appointment) => {
+                    setBookingConfirmation(appointment);
+                    setFollowUpSource(undefined);
+                  }}
+                />
               )}
 
               {patientAppts.length === 0 ? (
@@ -1135,40 +818,54 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {patientAppts.map((a) => (
-                    <div
-                      key={a._id}
-                      id={`patient-visit-${a._id}`}
-                      className={`scroll-mt-24 p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle space-y-2.5${focusedVisitId === a._id ? " ring-2 ring-[#0089A8]/60" : ""}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {a.date} at {a.time}
-                        </span>
-                        <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full uppercase font-bold ${
-                            a.status === "completed"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : a.status === "scheduled"
-                              ? "bg-[#EDF7FA] text-[#0089A8]"
-                              : "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {a.status}
-                        </span>
-                      </div>
+                  {patientAppts.map((a) => {
+                    const followUp = a.status === "completed" ? findBookedFollowUp(patientAppts, a._id) : undefined;
+                    return (
+                      <div
+                        key={a._id}
+                        id={`patient-visit-${a._id}`}
+                        className={`scroll-mt-24 p-4 rounded-2xl bg-white border border-[#E4E9F0] shadow-card-subtle space-y-2.5${focusedVisitId === a._id ? " ring-2 ring-[#0089A8]/60" : ""}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {a.date} at {a.time}
+                          </span>
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full uppercase font-bold ${
+                              a.status === "completed"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : a.status === "scheduled"
+                                ? "bg-[#EDF7FA] text-[#0089A8]"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {a.status}
+                          </span>
+                        </div>
 
-                      <div className="space-y-1">
-                        <h4 className="font-bold text-sm text-[#111C3A]">{a.procedure}</h4>
-                        {a.notes && <p className="text-xs text-[#64748B] italic">&quot;{a.notes}&quot;</p>}
-                      </div>
+                        <div className="space-y-1">
+                          <h4 className="font-bold text-sm text-[#111C3A]">{a.procedure}</h4>
+                          {a.notes && <p className="text-xs text-[#64748B] italic">&quot;{a.notes}&quot;</p>}
+                        </div>
 
-                      <div className="pt-2 border-t border-[#E4E9F0] flex flex-wrap gap-2 items-center justify-between text-[11px] font-mono text-[#8291A7]">
-                        <span>Duration: {a.durationMinutes || 30} mins</span>
+                        <div className="pt-2 border-t border-[#E4E9F0] flex flex-wrap gap-2 items-center justify-between text-[11px] font-mono text-[#8291A7]">
+                          <span>Duration: {a.durationMinutes || 30} mins</span>
+                          {a.status === "completed" && (
+                            followUp ? (
+                              <Link href={`?visit=${encodeURIComponent(followUp._id)}`} className="appointment-text-action">
+                                View Follow-Up
+                              </Link>
+                            ) : (
+                              <button type="button" onClick={() => setFollowUpSource(a)} className="appointment-text-action">
+                                Book Follow-Up
+                              </button>
+                            )
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

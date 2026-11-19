@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
-  Plus,
   X,
   AlertCircle,
   Phone,
@@ -20,7 +19,6 @@ import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
-import { AppointmentBookingConfirmation, BookAppointmentDialog, type AppointmentBookingDraft } from "@/components/dashboard/BookAppointmentDialog";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -77,12 +75,9 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
 
   // Modals
-  const [bookingRequest, setBookingRequest] = useState<{ date: string; time?: string } | null>(null);
-  const [bookingDraft, setBookingDraft] = useState<AppointmentBookingDraft>();
   const [rescheduleOverride, setRescheduleOverride] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
-  const [bookedSuccessApt, setBookedSuccessApt] = useState<Appointment | null>(null);
   const [bookingError, setBookingError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const handledCalendarLink = useRef(false);
@@ -228,11 +223,6 @@ export default function AppointmentsPage() {
 
   const availableSlots = futureSlots(selectedDate).filter((slot) => !findSlotConflict(selectedDate, slot));
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
-  const openBooking = (time?: string) => {
-    if (loading || selectedDate < getAppointmentClock().date) return;
-    setBookingError("");
-    setBookingRequest({ date: selectedDate, time });
-  };
   const openReschedule = (appointment: Appointment) => {
     const currentClock = getAppointmentClock();
     if (appointment.date < currentClock.date) return;
@@ -271,14 +261,9 @@ export default function AppointmentsPage() {
           <button type="button" aria-pressed={viewMode === "timeline"} onClick={() => setViewMode("timeline")}>Day</button>
           <button type="button" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>All Bookings</button>
         </div>
-        {!isPastDay && <button type="button" aria-haspopup="dialog" disabled={loading} onClick={() => openBooking()} className="appointment-book-button"><Plus size={17} />Book Appointment</button>}
       </section>
 
-      {bookingError && !bookingRequest && !rescheduleApt && <p role="alert" className="text-xs text-rose-700">{bookingError}</p>}
-
-      {bookedSuccessApt && !isPastDay && (
-        <AppointmentBookingConfirmation appointment={bookedSuccessApt} onDismiss={() => setBookedSuccessApt(null)} />
-      )}
+      {bookingError && !rescheduleApt && <p role="alert" className="text-xs text-rose-700">{bookingError}</p>}
 
       {viewMode === "timeline" && !isPastDay && (
         <section className="appointment-slots" aria-labelledby="slots-heading">
@@ -287,9 +272,9 @@ export default function AppointmentsPage() {
             <span className="text-xs text-[#64748B]">{loading ? "Loading..." : `${availableSlots.length} available`}</span>
           </div>
           {loading ? <p role="status" className="text-xs text-[#64748B]">Loading slots...</p> : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
-            <div className="appointment-slot-list" role="group" aria-label={`Available slots on ${selectedDateLabel}`}>
-              {availableSlots.map((slot) => <button key={slot} type="button" aria-haspopup="dialog" onClick={() => openBooking(slot)} className="appointment-time-chip" aria-label={`Book ${slot} on ${selectedDateLabel}`}><Plus size={14} aria-hidden="true" />{slot}</button>)}
-            </div>
+            <ul className="appointment-slot-list" role="list" aria-label={`Available slots on ${selectedDateLabel}`}>
+              {availableSlots.map((slot) => <li key={slot} className="appointment-time-chip">{slot}</li>)}
+            </ul>
           )}
         </section>
       )}
@@ -331,23 +316,6 @@ export default function AppointmentsPage() {
           </div>
         )}
       </section>
-
-      {bookingRequest && (
-        <BookAppointmentDialog
-          initialDate={bookingRequest.date}
-          preferredTime={bookingRequest.time}
-          draft={bookingDraft}
-          onClose={(draft) => {
-            setBookingDraft(draft);
-            setBookingRequest(null);
-          }}
-          onBooked={(appointment) => {
-            setBookedSuccessApt(appointment);
-            setBookingDraft(undefined);
-            setBookingRequest(null);
-          }}
-        />
-      )}
 
       {/* ================= RESCHEDULE MODAL ================= */}
       {rescheduleApt && (

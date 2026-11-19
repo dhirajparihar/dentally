@@ -4,8 +4,8 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Share2, X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import type { Appointment, Patient } from "@/lib/mockData";
-import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
-import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment } from "@/lib/appointmentTime";
+import { getAppointmentTreatments, treatmentKey } from "@/lib/appointmentTreatments";
+import { findAppointmentConflict, findBookedFollowUp, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
 import { PatientRegistrationForm } from "@/components/dashboard/PatientRegistrationForm";
@@ -19,14 +19,15 @@ export interface AppointmentBookingDraft {
   notes: string;
 }
 
-export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClose, onBooked }: {
+export function BookAppointmentDialog({ initialDate, draft, followUpSource, onClose, onBooked }: {
   initialDate: string;
-  preferredTime?: string;
   draft?: AppointmentBookingDraft;
+  followUpSource?: Appointment;
   onClose: (draft: AppointmentBookingDraft) => void;
   onBooked: (appointment: Appointment) => void;
 }) {
   const { appointments, patients, clinicProfile, bookAppointment } = useClinic();
+  const bookedFollowUp = followUpSource && findBookedFollowUp(appointments, followUpSource._id);
   const treatments = getAppointmentTreatments(clinicProfile.appointmentTreatments);
   const clock = getAppointmentClock(useMinuteClock());
   const dialog = useRef<HTMLDialogElement>(null);
@@ -42,17 +43,19 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
   const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const [form, setForm] = useState(() => {
     const draftTreatment = treatments.find(({ name }) => name === draft?.procedure);
-    const treatment = draftTreatment ?? treatments.find(({ name }) => name === "Root Canal Treatment (RCT)") ?? treatments[0];
+    const followUpTreatment = followUpSource && (
+      treatments.find(({ name }) => treatmentKey(name) === treatmentKey("Follow-Up Visit")) ??
+      treatments.find(({ name }) => treatmentKey(name) === treatmentKey(followUpSource.procedure))
+    );
+    const treatment = draftTreatment ?? followUpTreatment ?? treatments.find(({ name }) => name === "Root Canal Treatment (RCT)") ?? treatments[0];
     const durationMinutes = draftTreatment && draft ? draft.durationMinutes : treatment.duration;
     const slots = futureSlots(initialDate);
-    const time = preferredTime && slots.includes(preferredTime)
-      ? preferredTime
-      : slots.find((slot) => !findSlotConflict(initialDate, slot, durationMinutes || 30)) ?? slots[0] ?? "";
+    const time = slots.find((slot) => !findSlotConflict(initialDate, slot, durationMinutes || 30)) ?? slots[0] ?? "";
     return {
-      patientId: draft?.patientId ?? "",
-      phoneForAppointment: draft?.phoneForAppointment ?? "",
+      patientId: followUpSource?.patientId ?? draft?.patientId ?? "",
+      phoneForAppointment: draft?.phoneForAppointment ?? followUpSource?.patientPhone ?? "",
       date: initialDate,
-      time,
+      time: followUpSource ? "" : time,
       durationMinutes,
       procedure: treatment.name,
       notes: draft?.notes ?? "",
@@ -64,6 +67,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
   const appointmentPhone = registeredPhone || form.phoneForAppointment.trim();
   const bookingSlots = futureSlots(form.date);
   const bookingConflict = findSlotConflict(form.date, form.time, form.durationMinutes || 30);
+  const blockedByConflict = Boolean(bookingConflict && (followUpSource || !emergencyOverride));
 
   useEffect(() => {
     const element = dialog.current;
@@ -91,12 +95,12 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
 
   const handleBookSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isSubmitting || registrationSearch !== null) return;
-    if (!isFutureAppointment(form.date, form.time)) {
+    if (isSubmitting || registrationSearch !== null || bookedFollowUp) return;
+    if (!bookingSlots.includes(form.time) || !isFutureAppointment(form.date, form.time)) {
       setBookingError("Choose a future time to book this appointment.");
       return;
     }
-    if (bookingConflict && !emergencyOverride) return;
+    if (blockedByConflict) return;
     if (!selectedPatient || !appointmentPhone) return;
 
     setBookingError("");
@@ -105,6 +109,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
     const appointment: Appointment = {
       _id: `apt_${Date.now()}`,
       patientId: selectedPatient._id,
+      ...(followUpSource && { followUpOfAppointmentId: followUpSource._id }),
       patientName: selectedPatient.name.trim(),
       patientPhone: appointmentPhone,
       date: form.date,
@@ -112,7 +117,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
       durationMinutes: Number(form.durationMinutes) || 30,
       procedure: form.procedure,
       status: "scheduled",
-      notes: form.notes,
+      notes: followUpSource ? form.notes.trim() || undefined : form.notes,
     };
 
     try {
@@ -139,8 +144,9 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
         <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
           <div>
             <h3 ref={bookingHeading} id="booking-heading" tabIndex={-1} className="font-bold text-lg text-[#111C3A]">
-              Book Appointment
+              {followUpSource ? "Book Follow-Up" : "Book Appointment"}
             </h3>
+            {followUpSource && <p className="mt-1 text-[#52627A]">Follow-up for {followUpSource.procedure} on {followUpSource.date}</p>}
           </div>
           {registrationSearch === null && (
             <button
@@ -169,12 +175,19 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
         )}
 
         <form onSubmit={handleBookSubmit} hidden={registrationSearch !== null} className="mt-4 space-y-4">
-          <PatientPicker
-            patients={patients}
-            value={form.patientId}
-            onChange={selectBookingPatient}
-            onAddPatient={isSubmitting ? undefined : setRegistrationSearch}
-          />
+          {followUpSource ? (
+            <div>
+              <p className="mb-1 font-semibold text-[#111C3A]">Patient</p>
+              <p className="rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5">{selectedPatient?.name ?? "Patient unavailable"}</p>
+            </div>
+          ) : (
+            <PatientPicker
+              patients={patients}
+              value={form.patientId}
+              onChange={selectBookingPatient}
+              onAddPatient={isSubmitting ? undefined : setRegistrationSearch}
+            />
+          )}
 
           {selectedPatient && !registeredPhone && (
             <div>
@@ -293,23 +306,28 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
                     <strong>{bookingConflict.patientName}</strong> from <strong>{bookingConflict.time}</strong> ({bookingConflict.durationMinutes}m for {bookingConflict.procedure}).
                   </div>
                 </div>
-                <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={emergencyOverride}
-                    onChange={(e) => setEmergencyOverride(e.target.checked)}
-                    className="rounded border-amber-300 text-[#0089A8] focus:ring-[#0089A8]"
-                  />
-                  <span>Emergency Override: Allow double-booking operatory</span>
-                </label>
+                {!followUpSource && (
+                  <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={emergencyOverride}
+                      onChange={(e) => setEmergencyOverride(e.target.checked)}
+                      className="rounded border-amber-300 text-[#0089A8] focus:ring-[#0089A8]"
+                    />
+                    <span>Emergency Override: Allow double-booking operatory</span>
+                  </label>
+                )}
               </div>
           )}
 
           <div>
-            <label className="font-semibold text-[#111C3A] block mb-1">Notes (Optional)</label>
+            <label htmlFor="booking-notes" className="font-semibold text-[#111C3A] block mb-1">
+              {followUpSource ? "Follow-Up Reason (Optional)" : "Notes (Optional)"}
+            </label>
             <input
+              id="booking-notes"
               type="text"
-              placeholder="e.g. Advised soft diet, bring previous X-rays"
+              placeholder={followUpSource ? undefined : "e.g. Advised soft diet, bring previous X-rays"}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none focus:border-[#0089A8] bg-[#FAFBFC]"
@@ -317,6 +335,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
           </div>
 
           {bookingError && <p role="alert" className="text-rose-700">{bookingError}</p>}
+          {bookedFollowUp && <p role="status" className="text-[#52627A]">A follow-up is already booked for this visit.</p>}
 
           <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
             <button
@@ -329,7 +348,7 @@ export function BookAppointmentDialog({ initialDate, preferredTime, draft, onClo
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedPatient || !appointmentPhone || !bookingSlots.includes(form.time) || Boolean(bookingConflict && !emergencyOverride)}
+              disabled={isSubmitting || !selectedPatient || !appointmentPhone || !bookingSlots.includes(form.time) || blockedByConflict || Boolean(bookedFollowUp)}
               className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Confirm Booking
@@ -348,7 +367,8 @@ export function AppointmentBookingConfirmation({ appointment, onDismiss }: {
   const { clinicProfile } = useClinic();
   const cleanPhone = appointment.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
   const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-  const message = `Hello ${appointment.patientName}, your dental appointment with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${appointment.date} at ${appointment.time} (${appointment.procedure}).\n\nLocation: ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
+  const bookingType = appointment.followUpOfAppointmentId ? "dental follow-up appointment" : "dental appointment";
+  const message = `Hello ${appointment.patientName}, your ${bookingType} with ${clinicProfile.dentistName} at ${clinicProfile.name} is confirmed for ${appointment.date} at ${appointment.time} (${appointment.procedure}).\n\nLocation: ${clinicProfile.address}.\nPhone: ${clinicProfile.phone}`;
   const confirmationUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
 
   return (

@@ -14,15 +14,16 @@ export default function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  const isOverview = usePathname() === "/dashboard";
+  const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [bookingDate, setBookingDate] = useState<string | null>(null);
   const [bookingDraft, setBookingDraft] = useState<AppointmentBookingDraft>();
   const [bookedAppointment, setBookedAppointment] = useState<Appointment | null>(null);
 
   useEffect(() => {
-    if (!isOverview) setBookingDate(null);
-  }, [isOverview]);
+    setBookingDate(null);
+    setBookedAppointment(null);
+  }, [pathname]);
 
   return (
     <ClinicProvider>
@@ -37,16 +38,16 @@ export default function DashboardLayout({
         <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
           <Header
             onOpenMobileMenu={() => setMobileSidebarOpen(true)}
-            onBookAppointment={isOverview ? () => setBookingDate(getAppointmentClock().date) : undefined}
+            onBookAppointment={() => setBookingDate(getAppointmentClock().date)}
           />
           <main className="flex-1 p-4 sm:p-7 xl:p-10 max-w-7xl w-full mx-auto">
-            {isOverview && bookedAppointment && (
+            {bookedAppointment && (
               <div className="mb-5">
                 <AppointmentBookingConfirmation appointment={bookedAppointment} onDismiss={() => setBookedAppointment(null)} />
               </div>
             )}
             {children}
-            {isOverview && bookingDate && (
+            {bookingDate && (
               <BookAppointmentDialog
                 initialDate={bookingDate}
                 draft={bookingDraft}
