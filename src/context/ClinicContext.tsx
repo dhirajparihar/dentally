@@ -23,7 +23,6 @@ export interface ClinicContextType {
   isSyncing: boolean;
   userEmail: string;
   refreshClinic: () => Promise<void>;
-  loadSampleData: () => Promise<void>;
   addPatient: (patient: Patient) => Promise<boolean>;
   updatePatient: (patient: Patient) => Promise<void>;
   deletePatient: (patientId: string) => Promise<boolean>;
@@ -175,10 +174,6 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [userEmail]);
 
-  const loadSampleData = async () => {
-    await postMutation({ action: "load_sample_data" });
-  };
-
   const addPatient = async (newPatient: Patient) => {
     const scoped = { ...newPatient, dentistEmail: userEmail };
     return postMutation({ action: "add_patient", data: scoped });
@@ -248,7 +243,6 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isSyncing,
         userEmail,
         refreshClinic,
-        loadSampleData,
         addPatient,
         updatePatient,
         deletePatient,

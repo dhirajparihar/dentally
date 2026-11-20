@@ -157,8 +157,8 @@ export async function getPlatformAdminOverview(): Promise<{
   const mcpAvgLatencyMs = Math.round(successGroup?.avgLatency || 145);
 
   const defaultTopTools = [
-    { name: "schedule_appointment", count: 18 },
-    { name: "get_patient_odontogram", count: 14 },
+    { name: "book_appointment", count: 18 },
+    { name: "get_patient_balance", count: 14 },
     { name: "record_payment", count: 9 },
     { name: "get_today_appointments", count: 7 },
   ];

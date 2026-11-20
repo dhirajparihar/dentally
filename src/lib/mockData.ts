@@ -18,7 +18,6 @@ export interface Patient {
   registeredDate: string;
   lastVisit?: string;
   followUpDue?: string;
-  teeth?: Record<number, any>;
   notes: {
     id: string;
     date: string;

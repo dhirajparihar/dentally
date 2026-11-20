@@ -60,7 +60,7 @@ export const appointmentSchema = z.object({
   durationMinutes: appointmentDurationSchema.optional().default(30),
   procedure: z.string().min(1, "Procedure name is required"),
   status: z
-    .enum(["scheduled", "in-chair", "completed", "cancelled", "missed"])
+    .enum(["scheduled", "completed", "cancelled", "missed"])
     .optional()
     .default("scheduled"),
   notes: z.string().optional().default(""),

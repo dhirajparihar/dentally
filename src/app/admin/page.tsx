@@ -196,7 +196,8 @@ export default function AdminDashboardPage() {
       setConfirmModal(null);
       setDeleteConfirmInput("");
     } catch (err: any) {
-      alert(err?.message || "Action failed");
+      setFeedbackMessage(err?.message || "Action failed");
+      setTimeout(() => setFeedbackMessage(null), 4000);
     } finally {
       setIsExecutingConfirm(false);
       setActionLoadingEmail(null);

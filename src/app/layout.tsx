@@ -11,8 +11,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Dentally — The AI-Native Dental Operating System",
-  description: "Seamlessly connect your dental clinic to ChatGPT and Claude via Model Context Protocol (MCP). Zero API keys, 1-click Google sign-in, interactive odontograms, and chairside AI intelligence.",
-  keywords: ["dental software", "mcp server", "chatgpt dental", "dental EHR", "odontogram", "dentist dashboard"],
+  description: "Seamlessly connect your dental clinic to ChatGPT and Claude via Model Context Protocol (MCP). Zero API keys, 1-click Google sign-in, appointment management, and chairside AI collections.",
+  keywords: ["dental software", "mcp server", "chatgpt dental", "dental EHR", "appointment scheduling", "dentist dashboard"],
 };
 
 export default function RootLayout({
