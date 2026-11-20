@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { treatmentKey } from "@/lib/appointmentTreatments";
+import { isBookingMobile } from "@/lib/patientSearch";
 
 const appointmentDurationSchema = z.number().int().min(5).max(480);
 
@@ -67,11 +68,37 @@ export const appointmentSchema = z.object({
   followUpOfAppointmentId: z.string().optional(),
 });
 
+export const patientUpdateSchema = patientSchema.partial({ age: true, gender: true }).extend({
+  gender: z.enum(["Male", "Female", "Other"]).optional(),
+  registrationStatus: z.enum(["provisional", "complete"]).optional(),
+});
+
+export const provisionalPatientUpdateSchema = patientUpdateSchema.extend({
+  name: patientSchema.shape.name.trim().min(1, "Patient name is required."),
+  phone: patientSchema.shape.phone.trim().refine(isBookingMobile, "Enter a valid patient mobile number with 10 to 15 digits."),
+});
+
 export const rescheduleSchema = z.object({
   appointmentId: z.string().min(1, "Appointment ID required"),
   date: z.string().min(8, "Date required"),
   time: z.string().min(3, "Time required"),
   reason: z.string().optional().default("Patient request"),
+});
+
+export const patientBookingSchema = appointmentSchema.pick({
+  date: true,
+  time: true,
+  procedure: true,
+  durationMinutes: true,
+  notes: true,
+}).extend({
+  date: z.union([appointmentSchema.shape.date, z.enum(["today", "tomorrow"])]),
+  procedure: appointmentSchema.shape.procedure.trim().min(1, "Procedure or reason for visit is required."),
+  patientId: z.string().trim().min(1).optional(),
+  patientName: patientSchema.shape.name.trim().min(1, "Patient name is required.").optional(),
+  patientPhone: patientSchema.shape.phone.trim().optional(),
+  age: patientSchema.shape.age.optional(),
+  gender: z.enum(["Male", "Female", "Other"]).optional(),
 });
 
 export const feeSchema = z.object({

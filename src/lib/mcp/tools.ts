@@ -38,7 +38,7 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
         email: { type: "string", description: "Email address" },
         address: { type: "string", description: "Residential address or area" },
       },
-      required: ["name", "phone"],
+      required: ["name", "phone", "age", "gender"],
     },
   },
   {
@@ -165,19 +165,22 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: "book_appointment",
     category: "appointment",
-    description: "Book a new dental appointment for a patient on a specified date and time.",
+    description: "Book an appointment using a verified patient ID or the patient's exact full name and mobile number. A new patient can be registered with only name and mobile. If identity conflicts, ask the receptionist to verify and select the correct patient.",
     inputSchema: {
       type: "object",
       properties: {
-        patientName: { type: "string", description: "Patient full name" },
-        patientPhone: { type: "string", description: "Patient phone number" },
+        patientId: { type: "string", description: "Verified patient ID. Required after the receptionist selects a patient from multiple matches." },
+        patientName: { type: "string", description: "Patient full name. Required when no verified patient ID is supplied." },
+        patientPhone: { type: "string", description: "Patient phone number. Required when no verified patient ID is supplied." },
+        age: { type: "integer", minimum: 0, maximum: 130, description: "Optional actual patient age." },
+        gender: { type: "string", enum: ["Male", "Female", "Other"], description: "Optional patient-stated gender." },
         date: { type: "string", description: "Date in YYYY-MM-DD format (or 'today', 'tomorrow')" },
         time: { type: "string", description: "Time of appointment (e.g. '10:30 AM', '04:00 PM')" },
         procedure: { type: "string", description: "Reason or dental procedure (e.g. 'Consultation', 'Root Canal', 'Crown prep')" },
         durationMinutes: { type: "number", description: "Duration in minutes (default 30)" },
         notes: { type: "string", description: "Optional appointment notes" },
       },
-      required: ["patientName", "date", "time", "procedure"],
+      required: ["date", "time", "procedure"],
     },
   },
   {

@@ -3,12 +3,12 @@
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, MessageCircle, X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
-import type { Appointment, Patient } from "@/lib/mockData";
+import type { Appointment } from "@/lib/mockData";
 import { getAppointmentTreatments, treatmentKey } from "@/lib/appointmentTreatments";
 import { findAppointmentConflict, findBookedFollowUp, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
-import { PatientRegistrationForm } from "@/components/dashboard/PatientRegistrationForm";
+import { getPatientPhoneQuery, isBookingMobile } from "@/lib/patientSearch";
 import { TreatmentPicker } from "@/components/dashboard/TreatmentPicker";
 
 export interface AppointmentBookingDraft {
@@ -17,6 +17,7 @@ export interface AppointmentBookingDraft {
   durationMinutes: number;
   procedure: string;
   notes: string;
+  newPatient?: { name: string; phone: string };
 }
 
 export function BookAppointmentDialog({ initialDate, draft, followUpSource, onClose, onBooked }: {
@@ -26,13 +27,12 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
   onClose: (draft: AppointmentBookingDraft) => void;
   onBooked: (appointment: Appointment) => void;
 }) {
-  const { appointments, patients, clinicProfile, bookAppointment } = useClinic();
+  const { appointments, patients, clinicProfile, bookAppointment, bookPatientAppointment } = useClinic();
   const bookedFollowUp = followUpSource && findBookedFollowUp(appointments, followUpSource._id);
   const treatments = getAppointmentTreatments(clinicProfile.appointmentTreatments);
   const clock = getAppointmentClock(useMinuteClock());
   const dialog = useRef<HTMLDialogElement>(null);
-  const bookingHeading = useRef<HTMLHeadingElement>(null);
-  const [registrationSearch, setRegistrationSearch] = useState<string | null>(null);
+  const [newPatient, setNewPatient] = useState(followUpSource ? undefined : draft?.newPatient);
   const [emergencyOverride, setEmergencyOverride] = useState(false);
   const [bookingError, setBookingError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,6 +65,9 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
   const selectedPatient = patients.find((patient) => patient._id === form.patientId);
   const registeredPhone = selectedPatient?.phone?.trim();
   const appointmentPhone = registeredPhone || form.phoneForAppointment.trim();
+  const readyToBook = newPatient
+    ? Boolean(newPatient.name.trim() && isBookingMobile(newPatient.phone))
+    : Boolean(selectedPatient && appointmentPhone);
   const bookingSlots = futureSlots(form.date);
   const bookingConflict = findSlotConflict(form.date, form.time, form.durationMinutes || 30);
   const blockedByConflict = Boolean(bookingConflict && (followUpSource || !emergencyOverride));
@@ -77,50 +80,53 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
 
   const selectBookingPatient = (patientId: string) => {
     setForm((previous) => ({ ...previous, patientId, phoneForAppointment: "" }));
-  };
-
-  const returnToBooking = () => {
-    setRegistrationSearch(null);
-    bookingHeading.current?.focus();
-  };
-
-  const finishRegistration = (patient: Patient) => {
-    selectBookingPatient(patient._id);
-    returnToBooking();
+    setBookingError("");
   };
 
   const closeBooking = () => {
-    if (!isSubmitting && registrationSearch === null) onClose(form);
+    if (!isSubmitting) onClose({ ...form, newPatient });
   };
 
   const handleBookSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isSubmitting || registrationSearch !== null || bookedFollowUp) return;
+    if (isSubmitting || bookedFollowUp || !readyToBook) return;
     if (!bookingSlots.includes(form.time) || !isFutureAppointment(form.date, form.time)) {
       setBookingError("Choose a future time to book this appointment.");
       return;
     }
     if (blockedByConflict) return;
-    if (!selectedPatient || !appointmentPhone) return;
 
     setBookingError("");
     setIsSubmitting(true);
 
-    const appointment: Appointment = {
-      _id: `apt_${Date.now()}`,
-      patientId: selectedPatient._id,
-      ...(followUpSource && { followUpOfAppointmentId: followUpSource._id }),
-      patientName: selectedPatient.name.trim(),
-      patientPhone: appointmentPhone,
+    const details = {
       date: form.date,
       time: form.time,
       durationMinutes: Number(form.durationMinutes) || 30,
       procedure: form.procedure,
-      status: "scheduled",
       notes: followUpSource ? form.notes.trim() || undefined : form.notes,
     };
 
     try {
+      if (newPatient) {
+        const result = await bookPatientAppointment({
+          ...details, patientName: newPatient.name.trim(), patientPhone: newPatient.phone.trim(),
+        });
+        if (result.bookedAppointment) onBooked(result.bookedAppointment);
+        else setBookingError(result.error || "Could not book the appointment. Check the details and try again.");
+        return;
+      }
+      if (!selectedPatient) return;
+      const uniqueId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const appointment: Appointment = {
+        ...details,
+        _id: `apt_${uniqueId}`,
+        patientId: selectedPatient._id,
+        followUpOfAppointmentId: followUpSource?._id,
+        patientName: selectedPatient.name.trim(),
+        patientPhone: appointmentPhone,
+        status: "scheduled",
+      };
       if (await bookAppointment(appointment)) onBooked(appointment);
       else setBookingError("Could not book the appointment. Check the date and time and try again.");
     } catch {
@@ -143,12 +149,11 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs text-[#111C3A] my-auto animate-in fade-in zoom-in-95">
         <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
           <div>
-            <h3 ref={bookingHeading} id="booking-heading" tabIndex={-1} className="font-bold text-lg text-[#111C3A]">
+            <h3 id="booking-heading" className="font-bold text-lg text-[#111C3A]">
               {followUpSource ? "Book Follow-Up" : "Book Appointment"}
             </h3>
             {followUpSource && <p className="mt-1 text-[#52627A]">Follow-up for {followUpSource.procedure} on {followUpSource.date}</p>}
           </div>
-          {registrationSearch === null && (
             <button
               type="button"
               onClick={closeBooking}
@@ -158,38 +163,46 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
             >
               <X className="w-5 h-5" />
             </button>
-          )}
         </div>
 
-        {registrationSearch !== null && (
-          <section aria-labelledby="booking-registration-heading" className="mt-4 space-y-3 rounded-2xl border border-[#E4E9F0] bg-[#FAFBFC] p-4">
-            <h4 id="booking-registration-heading" className="text-sm font-bold text-[#111C3A]">Add New Patient</h4>
-            <PatientRegistrationForm
-              compact
-              initialSearch={registrationSearch}
-              onCancel={returnToBooking}
-              onSaved={finishRegistration}
-              onSelectExisting={finishRegistration}
-            />
-          </section>
-        )}
-
-        <form onSubmit={handleBookSubmit} hidden={registrationSearch !== null} className="mt-4 space-y-4">
+        <form onSubmit={handleBookSubmit} className="mt-4 space-y-4">
           {followUpSource ? (
             <div>
               <p className="mb-1 font-semibold text-[#111C3A]">Patient</p>
               <p className="rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5">{selectedPatient?.name ?? "Patient unavailable"}</p>
             </div>
+          ) : newPatient ? (
+            <fieldset disabled={isSubmitting} aria-label="New patient" className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">New Patient</span>
+                <button type="button" className="workspace-button secondary small" onClick={() => {
+                  setNewPatient(undefined);
+                  selectBookingPatient("");
+                }}>Choose Existing Patient</button>
+              </div>
+              <label className="block font-semibold">
+                Full Name
+                <input required maxLength={100} className="mt-1 w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5" autoComplete="off" value={newPatient.name} onChange={(event) => setNewPatient({ ...newPatient, name: event.target.value })} />
+              </label>
+              <label className="block font-semibold">
+                Mobile Number
+                <input required type="tel" maxLength={25} className="mt-1 w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p-2.5" autoComplete="off" value={newPatient.phone} onChange={(event) => setNewPatient({ ...newPatient, phone: event.target.value })} />
+              </label>
+            </fieldset>
           ) : (
             <PatientPicker
               patients={patients}
               value={form.patientId}
               onChange={selectBookingPatient}
-              onAddPatient={isSubmitting ? undefined : setRegistrationSearch}
+              onAddPatient={isSubmitting ? undefined : (search) => {
+                const isPhone = Boolean(getPatientPhoneQuery(search));
+                setNewPatient({ name: isPhone ? "" : search, phone: isPhone ? search : "" });
+                setBookingError("");
+              }}
             />
           )}
 
-          {selectedPatient && !registeredPhone && (
+          {!newPatient && selectedPatient && !registeredPhone && (
             <div>
               <label htmlFor="booking-contact-phone" className="font-semibold text-[#111C3A] block mb-1">Mobile Number for This Appointment *</label>
               <input
@@ -348,7 +361,7 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || !selectedPatient || !appointmentPhone || !bookingSlots.includes(form.time) || blockedByConflict || Boolean(bookedFollowUp)}
+              disabled={isSubmitting || !readyToBook || !bookingSlots.includes(form.time) || blockedByConflict || Boolean(bookedFollowUp)}
               className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Confirm Booking

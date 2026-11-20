@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { z, type ZodType } from "zod";
 import {
   getClinicData,
   savePatient,
-  saveAppointment,
   updateAppointmentStatus,
   rescheduleAppointment,
   saveFee,
@@ -9,6 +10,9 @@ import {
   saveClinicProfile,
 } from "@/lib/db/repository";
 import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { getPatientPhoneQuery } from "@/lib/patientSearch";
+import { patientSchema } from "@/lib/validations/clinic";
+import { bookPatientAppointment } from "@/lib/bookPatientAppointment";
 import {
   ClinicProfile,
   Patient,
@@ -16,6 +20,20 @@ import {
   FeeItem,
   PaymentTransaction,
 } from "@/lib/mockData";
+
+function validateToolInput<T>(schema: ZodType<T>, input: unknown, context: string): T {
+  const result = schema.safeParse(input);
+  if (result.success) return result.data;
+  const fields = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+  throw new Error(`${context}: ${fields.join("; ")}`);
+}
+
+const registrationSchema = patientSchema.extend({
+  name: patientSchema.shape.name.trim().min(1, "Patient name is required."),
+  gender: z.enum(["Male", "Female", "Other"]),
+  phone: patientSchema.shape.phone.trim().refine((value) => getPatientPhoneQuery(value).length >= 5, "Enter a valid phone number."),
+  registeredDate: patientSchema.shape.registeredDate.unwrap(),
+});
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
   if (!dentistEmail) {
@@ -35,9 +53,8 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
   const findPatientHelper = (query: string): Patient | undefined => {
     if (!query) return undefined;
     const q = query.toLowerCase().trim();
-    return patientsState.find(
+    return patientsState.find((patient) => patient._id.toLowerCase() === q) ?? patientsState.find(
       (p) =>
-        p._id.toLowerCase() === q ||
         p.phone.replace(/\s+/g, "").includes(q.replace(/\s+/g, "")) ||
         p.name.toLowerCase().includes(q)
     );
@@ -73,22 +90,18 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
     // 1. PATIENT MANAGEMENT TOOLS
     // ==========================================
     case "add_patient": {
-      const newPatient: Patient = {
-        _id: `pat_${Date.now()}`,
+      const newPatient = validateToolInput(registrationSchema, {
+        _id: `pat_${randomUUID()}`,
         name: args.name,
-        age: args.age || 30,
-        gender: args.gender || "Male",
         phone: args.phone,
-        email: args.email || "",
-        address: args.address || "",
-        medicalAlerts: args.medicalAlerts || ["None"],
-        bloodGroup: args.bloodGroup || "O+",
+        age: args.age,
+        gender: args.gender,
+        medicalAlerts: args.medicalAlerts,
+        bloodGroup: args.bloodGroup,
+        email: args.email,
+        address: args.address,
         registeredDate: todayStr,
-        lastVisit: todayStr,
-        notes: [],
-        history: [],
-      };
-      patientsState.unshift(newPatient);
+      }, "Patient registration requires valid details");
       await savePatient(newPatient, email);
 
       return {
@@ -146,22 +159,23 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
     }
 
     case "update_patient": {
-      const patient = findPatientHelper(args.patientId);
-      if (!patient) return { error: `Patient '${args.patientId}' not found.` };
+      const existing = findPatientHelper(args.patientId);
+      if (!existing) return { error: `Patient '${args.patientId}' not found.` };
+      const patient = { ...existing };
 
       if (args.name) patient.name = args.name;
       if (args.phone) patient.phone = args.phone;
-      if (args.age) patient.age = args.age;
+      if (args.age !== undefined) patient.age = args.age;
       if (args.gender) patient.gender = args.gender;
       if (args.medicalAlerts) patient.medicalAlerts = args.medicalAlerts;
       if (args.bloodGroup) patient.bloodGroup = args.bloodGroup;
       if (args.address) patient.address = args.address;
-      await savePatient(patient, email);
+      const savedPatients = await savePatient(patient, email, { requireExisting: true });
 
       return {
         success: true,
         message: `Updated patient details for ${patient.name}.`,
-        patient,
+        patient: savedPatients.find((entry) => entry._id === patient._id),
       };
     }
 
@@ -266,32 +280,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
     // 2. APPOINTMENT MANAGEMENT TOOLS
     // ==========================================
     case "book_appointment": {
-      let dateVal = args.date;
-      const appointmentClock = getAppointmentClock();
-      if (dateVal === "today") dateVal = appointmentClock.date;
-      if (dateVal === "tomorrow") dateVal = shiftAppointmentDate(appointmentClock.date, 1);
-
-      // Find or link patient
-      let patient = findPatientHelper(args.patientName);
-      if (!patient && args.patientPhone) {
-        patient = findPatientHelper(args.patientPhone);
-      }
-
-      const newApt: Appointment = {
-        _id: `apt_${Date.now()}`,
-        patientId: patient ? patient._id : `pat_${Date.now().toString().slice(-4)}`,
-        patientName: args.patientName,
-        patientPhone: args.patientPhone || (patient ? patient.phone : ""),
-        date: dateVal,
-        time: args.time,
-        durationMinutes: args.durationMinutes || 30,
-        procedure: args.procedure,
-        status: "scheduled",
-        notes: args.notes || "",
-      };
-
-      appointmentsState.unshift(newApt);
-      await saveAppointment(newApt, email);
+      const newApt = await bookPatientAppointment(args, email);
 
       return {
         success: true,

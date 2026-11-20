@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { connection, mongo, type ClientSession } from "mongoose";
 import { connectDB } from "./connect";
-import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { patientSchema, provisionalPatientUpdateSchema } from "@/lib/validations/clinic";
 import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import FeeModel from "./models/Fee";
@@ -54,6 +56,49 @@ export async function ensureDbInitialized() {
   if (!isDbConfigured()) return null;
   const conn = await connectDB();
   return conn;
+}
+
+const memoryBookingLocks = new Map<string, Promise<void>>();
+
+async function withClinicBookingLock<T>(
+  email: string,
+  work: (session?: ClientSession) => Promise<T>,
+  afterCommit: (result: T) => void
+): Promise<T> {
+  const conn = await ensureDbInitialized();
+  if (conn) {
+    const database = connection.db;
+    if (!database) throw new Error("Clinic database is unavailable.");
+    const locks = database.collection<{ _id: string; revision: number }>("clinic_booking_locks");
+    try {
+      await locks.updateOne({ _id: email }, { $setOnInsert: { revision: 0 } }, { upsert: true });
+    } catch (error) {
+      // A concurrent first request may have already created the lock document.
+      if (!(error instanceof mongo.MongoServerError) || error.code !== 11000) throw error;
+    }
+    const result = await connection.transaction(async (session) => {
+      // Take a write lock before reading patients or checking appointment availability.
+      await locks.updateOne({ _id: email }, { $inc: { revision: 1 } }, { session });
+      return work(session);
+    });
+    afterCommit(result);
+    return result;
+  }
+  if (isDbConfigured()) throw new Error("Clinic database is unavailable.");
+
+  const previous = memoryBookingLocks.get(email);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  memoryBookingLocks.set(email, pending);
+  await previous;
+  try {
+    const result = await work();
+    afterCommit(result);
+    return result;
+  } finally {
+    release();
+    if (memoryBookingLocks.get(email) === pending) memoryBookingLocks.delete(email);
+  }
 }
 
 /**
@@ -305,60 +350,62 @@ export async function saveClinicProfile(
   return updated;
 }
 
-export async function savePatient(patient: Patient, dentistEmail?: string) {
-  const email = (patient.dentistEmail || dentistEmail || "").toLowerCase().trim();
+export async function savePatient(patient: Patient, dentistEmail?: string, options?: { requireExisting?: boolean }) {
+  const email = (dentistEmail || patient.dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for patient record");
-  const patientToSave = { ...patient, dentistEmail: email };
-
-  const conn = await ensureDbInitialized();
-  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
-
   const mem = getOrCreateMemoryStore(email);
-  mem.patients = [patientToSave, ...mem.patients.filter((p) => p._id !== patientToSave._id)];
-
-  try {
-    if (conn) {
-      await PatientModel.findOneAndUpdate(
-        { _id: patientToSave._id, dentistEmail: email },
-        patientToSave,
-        { upsert: true, new: true }
+  await withClinicBookingLock(email, async (session) => {
+    const filter = { _id: patient._id, dentistEmail: email };
+    const existing = session
+      ? await PatientModel.findOne(filter).select("age gender registrationStatus").session(session).lean().exec() as Pick<Patient, "age" | "gender" | "registrationStatus"> | null
+      : mem.patients.find((entry) => entry._id === patient._id);
+    if (!existing && options?.requireExisting) throw new AppointmentNotFoundError("Patient was not found in this clinic.");
+    const patientToSave = { ...patient, dentistEmail: email, registrationStatus: existing?.registrationStatus };
+    if (existing?.registrationStatus === "provisional") {
+      patientToSave.age ??= existing.age;
+      patientToSave.gender ??= existing.gender;
+      const details = provisionalPatientUpdateSchema.parse(patientToSave);
+      patientToSave.name = details.name;
+      patientToSave.phone = details.phone;
+      if (patientToSave.age !== undefined && patientToSave.gender !== undefined) {
+        patientToSave.registrationStatus = "complete";
+      }
+    } else {
+      patientSchema.parse(patientToSave);
+      if (!existing) patientToSave.registrationStatus = "complete";
+    }
+    if (session) {
+      await PatientModel.updateOne(
+        filter,
+        { $set: patientToSave },
+        { upsert: !options?.requireExisting, runValidators: true, session }
       );
     }
-  } catch (err) {
-    console.error("Error saving patient to MongoDB:", err);
-    if (isDbConfigured()) throw err;
-  }
-
+    return patientToSave;
+  }, (patientToSave) => {
+    mem.patients = [patientToSave, ...mem.patients.filter((p) => p._id !== patientToSave._id)];
+  });
   return mem.patients;
 }
 
 export async function deletePatient(patientId: string, dentistEmail: string) {
-  const email = (dentistEmail || "").toLowerCase().trim();
+  const email = dentistEmail.toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for patient deletion");
 
-  const conn = await ensureDbInitialized();
-  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
-
   const mem = getOrCreateMemoryStore(email);
-  mem.patients = mem.patients.filter((p) => p._id !== patientId);
-  mem.appointments = mem.appointments.filter((a) => a.patientId !== patientId);
-  mem.fees = mem.fees.filter((f) => f.patientId !== patientId);
-  mem.payments = mem.payments.filter((p) => p.patientId !== patientId);
-
-  try {
-    if (conn) {
-      await Promise.all([
-        PatientModel.deleteOne({ _id: patientId, dentistEmail: email }),
-        AppointmentModel.deleteMany({ patientId, dentistEmail: email }),
-        FeeModel.deleteMany({ patientId, dentistEmail: email }),
-        PaymentModel.deleteMany({ patientId, dentistEmail: email }),
-      ]);
-    }
-  } catch (err) {
-    console.error("Error deleting patient from MongoDB:", err);
-    if (isDbConfigured()) throw err;
-  }
-
+  await withClinicBookingLock(email, async (session) => {
+    if (!session) return;
+    const patientFilter = { patientId, dentistEmail: email };
+    await PatientModel.deleteOne({ _id: patientId, dentistEmail: email }, { session });
+    await AppointmentModel.deleteMany(patientFilter, { session });
+    await FeeModel.deleteMany(patientFilter, { session });
+    await PaymentModel.deleteMany(patientFilter, { session });
+  }, () => {
+    mem.patients = mem.patients.filter((p) => p._id !== patientId);
+    mem.appointments = mem.appointments.filter((a) => a.patientId !== patientId);
+    mem.fees = mem.fees.filter((f) => f.patientId !== patientId);
+    mem.payments = mem.payments.filter((p) => p.patientId !== patientId);
+  });
   return mem.patients;
 }
 
@@ -371,73 +418,131 @@ function requireFutureAppointment(date: string, time: string) {
   }
 }
 
-export async function saveAppointment(appointment: Appointment, dentistEmail?: string) {
-  const email = (appointment.dentistEmail || dentistEmail || "").toLowerCase().trim();
-  if (!email) throw new Error("Missing dentist email for appointment record");
-
-  // Allow past/walk-in appointments if marked as completed
-  if (appointment.status !== "completed") {
-    requireFutureAppointment(appointment.date, appointment.time);
+async function requireAppointmentPatient(patientId: string, email: string, session?: ClientSession): Promise<Patient> {
+  if (typeof patientId !== "string" || !patientId.trim()) {
+    throw new AppointmentNotFoundError("A valid patient ID is required.");
   }
+  const patient = session
+    ? await PatientModel.findOne({ _id: patientId, dentistEmail: email }).session(session).lean().exec() as Patient | null
+    : getOrCreateMemoryStore(email).patients.find((entry) => entry._id === patientId);
+  if (!patient) throw new AppointmentNotFoundError("Patient was not found in this clinic.");
+  return patient;
+}
 
+async function requireAvailableSlot(
+  appointment: Pick<Appointment, "_id" | "date" | "time" | "durationMinutes">,
+  email: string,
+  session?: ClientSession
+) {
+  const { _id, date, time, durationMinutes } = appointment;
+  const dates = [shiftAppointmentDate(date, -1), date, shiftAppointmentDate(date, 1)];
+  const appointments = session
+    ? await AppointmentModel.find({ dentistEmail: email, date: { $in: dates }, status: "scheduled" }).session(session).lean().exec() as Appointment[]
+    : getOrCreateMemoryStore(email).appointments.filter((visit) => dates.includes(visit.date) && visit.status === "scheduled");
+  const conflict = findAppointmentConflict(appointments, date, time, durationMinutes || 30, _id);
+  if (conflict) throw new AppointmentTimeError(`Time slot conflicts with an existing appointment at ${conflict.time} on ${conflict.date}.`);
+}
+
+async function writeAppointment(appointment: Appointment, patient: Patient, email: string, session?: ClientSession) {
   const mem = getOrCreateMemoryStore(email);
-  const conn = await ensureDbInitialized();
-  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
-
-  // Server-side slot conflict validation for scheduled visits
-  if (appointment.status === "scheduled") {
-    const existingAppointments: Appointment[] = conn
-      ? await AppointmentModel.find({ dentistEmail: email, date: appointment.date, status: "scheduled" }).lean().exec() as Appointment[]
-      : mem.appointments.filter((a) => a.date === appointment.date && a.status === "scheduled");
-    const conflict = findAppointmentConflict(
-      existingAppointments,
-      appointment.date,
-      appointment.time,
-      appointment.durationMinutes || 30,
-      appointment._id
-    );
-    if (conflict) {
-      throw new AppointmentTimeError(
-        `Time slot conflicts with an existing appointment for ${conflict.patientName} at ${conflict.time} (${conflict.durationMinutes || 30} mins).`
-      );
-    }
+  const filter = { _id: appointment._id, dentistEmail: email };
+  const existing = session
+    ? await AppointmentModel.findOne(filter).select("patientId rescheduledToAppointmentId").session(session).lean().exec()
+    : mem.appointments.find((visit) => visit._id === appointment._id);
+  if (existing && (existing.patientId !== patient._id || existing.rescheduledToAppointmentId)) {
+    throw new AppointmentTimeError("This appointment cannot be reassigned or reopened.");
   }
 
-  const aptToSave = { ...appointment, dentistEmail: email };
+  if (appointment.status !== "completed") requireFutureAppointment(appointment.date, appointment.time);
+  if (appointment.status === "scheduled") await requireAvailableSlot(appointment, email, session);
 
+  const patientFilter = { _id: patient._id, dentistEmail: email };
   const sourceId = appointment.followUpOfAppointmentId;
   if (sourceId !== undefined) {
-    if (typeof sourceId !== "string" || !sourceId || sourceId === appointment._id || typeof appointment.patientId !== "string") {
+    if (typeof sourceId !== "string" || !sourceId || sourceId === appointment._id) {
       throw new AppointmentNotFoundError("Completed visit for this patient was not found.");
     }
-    const source = conn
-      ? await AppointmentModel.exists({ _id: sourceId, dentistEmail: email, patientId: appointment.patientId, status: "completed" })
-      : mem.appointments.some((visit) => visit._id === sourceId && visit.patientId === appointment.patientId && visit.status === "completed");
+    const source = session
+      ? await AppointmentModel.exists({ _id: sourceId, dentistEmail: email, patientId: patient._id, status: "completed" }).session(session)
+      : mem.appointments.some((visit) => visit._id === sourceId && visit.patientId === patient._id && visit.status === "completed");
     if (!source) throw new AppointmentNotFoundError("Completed visit for this patient was not found.");
   }
 
-  if (conn) {
-    await AppointmentModel.findOneAndUpdate(
-      { _id: aptToSave._id, dentistEmail: email },
-      aptToSave,
-      { upsert: true, new: true }
-    );
+  const saved = { ...appointment, patientId: patient._id, patientName: patient.name, dentistEmail: email };
+  if (session) {
+    if (existing) {
+      await AppointmentModel.updateOne(filter, { $set: saved }, { session, runValidators: true });
+    } else {
+      await AppointmentModel.create([saved], { session });
+    }
+    if (saved.status === "completed") {
+      await PatientModel.updateOne(patientFilter, { $max: { lastVisit: saved.date } }, { session });
+    }
+  } else {
+    await new AppointmentModel(saved).validate();
   }
+  return saved;
+}
 
-  mem.appointments = [aptToSave, ...mem.appointments.filter((a) => a._id !== aptToSave._id)];
-
-  // If a walk-in / completed appointment was logged, update patient lastVisit immediately
-  if (aptToSave.status === "completed") {
-    const patientFilter = { _id: aptToSave.patientId, dentistEmail: email };
-    if (conn) await PatientModel.updateOne(patientFilter, { $max: { lastVisit: aptToSave.date } });
+function cacheAppointment(appointment: Appointment, email: string) {
+  const mem = getOrCreateMemoryStore(email);
+  mem.appointments = [appointment, ...mem.appointments.filter((visit) => visit._id !== appointment._id)];
+  if (appointment.status === "completed") {
     mem.patients = mem.patients.map((patient) =>
-      patient._id === aptToSave.patientId && (!patient.lastVisit || patient.lastVisit < aptToSave.date)
-        ? { ...patient, lastVisit: aptToSave.date }
+      patient._id === appointment.patientId && (!patient.lastVisit || patient.lastVisit < appointment.date)
+        ? { ...patient, lastVisit: appointment.date }
         : patient
     );
   }
+}
 
-  return mem.appointments;
+export async function saveAppointment(appointment: Appointment, dentistEmail?: string) {
+  const email = (dentistEmail || appointment.dentistEmail || "").toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for appointment record");
+
+  await withClinicBookingLock(email, async (session) => {
+    const patient = await requireAppointmentPatient(appointment.patientId, email, session);
+    return writeAppointment(appointment, patient, email, session);
+  }, (saved) => cacheAppointment(saved, email));
+  return getOrCreateMemoryStore(email).appointments;
+}
+
+export async function bookAppointmentForPatient(
+  appointment: Omit<Appointment, "patientId" | "patientName" | "patientPhone">,
+  dentistEmail: string,
+  resolvePatient: (patients: readonly Patient[]) => { patient: Patient; isNew: boolean }
+) {
+  const email = dentistEmail.toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for appointment record");
+  const mem = getOrCreateMemoryStore(email);
+  const result = await withClinicBookingLock(email, async (session) => {
+    const patients = session
+      ? await PatientModel.find({ dentistEmail: email }).session(session).lean().exec() as Patient[]
+      : mem.patients;
+    const { patient, isNew } = resolvePatient(patients);
+    let bookablePatient = isNew
+      ? { ...patient, dentistEmail: email }
+      : await requireAppointmentPatient(patient._id, email, session);
+    if (isNew) {
+      // Use full document validation in demo mode as well as on MongoDB.
+      const document = new PatientModel(bookablePatient);
+      if (session) bookablePatient = (await document.save({ session })).toObject() as Patient;
+      else await document.validate();
+    }
+    const saved = await writeAppointment({
+      ...appointment,
+      patientId: bookablePatient._id,
+      patientName: bookablePatient.name,
+      patientPhone: bookablePatient.phone,
+    }, bookablePatient, email, session);
+    return { saved, registered: isNew ? bookablePatient : undefined };
+  }, ({ saved, registered }) => {
+    if (registered) {
+      mem.patients = [registered, ...mem.patients.filter((entry) => entry._id !== registered._id)];
+    }
+    cacheAppointment(saved, email);
+  });
+  return result.saved;
 }
 
 export async function updateAppointmentStatus(
@@ -527,82 +632,70 @@ export async function rescheduleAppointment(
 ) {
   const email = (dentistEmail || "").toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment rescheduling");
-  requireFutureAppointment(date, time);
-
   const mem = getOrCreateMemoryStore(email);
-  const conn = await ensureDbInitialized();
-  if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
+  const replacementId = `apt-${randomUUID()}`;
 
-  const filter = { _id: appointmentId, dentistEmail: email };
-  const existingApt = conn
-    ? await AppointmentModel.findOne(filter).lean().exec() as Appointment | null
-    : mem.appointments.find((a) => a._id === appointmentId);
+  const result = await withClinicBookingLock(email, async (session) => {
+    requireFutureAppointment(date, time);
+    const filter = { _id: appointmentId, dentistEmail: email };
+    const existing = session
+      ? await AppointmentModel.findOne(filter).session(session).lean().exec() as Appointment | null
+      : mem.appointments.find((visit) => visit._id === appointmentId);
 
-  if (!existingApt) throw new AppointmentNotFoundError("Appointment not found.");
-  if (existingApt.rescheduledToAppointmentId) {
-    throw new AppointmentTimeError("This missed appointment has already been rescheduled.");
-  }
+    if (!existing) throw new AppointmentNotFoundError("Appointment not found.");
+    if (existing.rescheduledToAppointmentId) {
+      throw new AppointmentTimeError("This missed appointment has already been rescheduled.");
+    }
 
-  const duration = existingApt.durationMinutes || 30;
-
-  // Server-side slot conflict validation for rescheduled slot
-  const existingAppointments: Appointment[] = conn
-    ? ((await AppointmentModel.find({ dentistEmail: email, date, status: "scheduled" }).lean().exec()) as Appointment[])
-    : mem.appointments.filter((a) => a.date === date && a.status === "scheduled");
-
-  const conflict = findAppointmentConflict(existingAppointments, date, time, duration, appointmentId);
-  if (conflict) {
-    throw new AppointmentTimeError(
-      `Time slot conflicts with an existing appointment for ${conflict.patientName} at ${conflict.time} (${conflict.durationMinutes || 30} mins).`
-    );
-  }
-
-  const notes = `${existingApt.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim();
-  const currentFilter = {
-    ...filter,
-    status: existingApt.status,
-    date: existingApt.date,
-    time: existingApt.time,
-    rescheduledToAppointmentId: { $exists: false },
-  };
-
-  if (existingApt.status === "missed") {
-    const replacement: Appointment = {
-      _id: `apt-${randomUUID()}`,
-      dentistEmail: email,
-      patientId: existingApt.patientId,
-      patientName: existingApt.patientName,
-      patientPhone: existingApt.patientPhone,
-      followUpOfAppointmentId: existingApt.followUpOfAppointmentId,
-      procedure: existingApt.procedure,
-      durationMinutes: duration,
-      status: "scheduled",
-      date,
-      time,
-      notes,
+    const patient = await requireAppointmentPatient(existing.patientId, email, session);
+    const durationMinutes = existing.durationMinutes || 30;
+    await requireAvailableSlot({ _id: appointmentId, date, time, durationMinutes }, email, session);
+    const notes = `${existing.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim();
+    const currentFilter = {
+      ...filter,
+      status: existing.status,
+      date: existing.date,
+      time: existing.time,
+      rescheduledToAppointmentId: { $exists: false },
     };
-    const link = { rescheduledToAppointmentId: replacement._id };
-    if (conn) {
-      await AppointmentModel.db.transaction(async (session) => {
+
+    if (existing.status === "missed") {
+      const updated: Appointment = {
+        _id: replacementId,
+        dentistEmail: email,
+        patientId: patient._id,
+        patientName: patient.name,
+        patientPhone: existing.patientPhone,
+        followUpOfAppointmentId: existing.followUpOfAppointmentId,
+        procedure: existing.procedure,
+        durationMinutes,
+        status: "scheduled",
+        date,
+        time,
+        notes,
+      };
+      const link = { rescheduledToAppointmentId: updated._id };
+      const original = { ...existing, ...link };
+      if (session) {
         const result = await AppointmentModel.updateOne(currentFilter, { $set: link }, { session });
         if (!result.matchedCount) throw new AppointmentTimeError("The original appointment has changed.");
-        await AppointmentModel.create([replacement], { session });
-      });
+        await AppointmentModel.create([updated], { session });
+      }
+      return { updated, original };
     }
-    mem.appointments = [replacement, ...mem.appointments.map((appointment) =>
-      appointment._id === appointmentId ? { ...appointment, ...link } : appointment
-    )];
-    return replacement;
-  }
 
-  const changes = { date, time, notes };
-  if (conn) {
-    const result = await AppointmentModel.updateOne(currentFilter, { $set: changes });
-    if (!result.matchedCount) throw new AppointmentTimeError("The original appointment has changed.");
-  }
-  const updated = { ...existingApt, ...changes };
-  mem.appointments = mem.appointments.map((appointment) => appointment._id === appointmentId ? updated : appointment);
-  return updated;
+    const changes = { date, time, notes };
+    const updated = { ...existing, ...changes };
+    if (session) {
+      const result = await AppointmentModel.updateOne(currentFilter, { $set: changes }, { session });
+      if (!result.matchedCount) throw new AppointmentTimeError("The original appointment has changed.");
+    }
+    return { updated };
+  }, ({ updated, original }) => {
+    const visits = mem.appointments.map((visit) => visit._id === appointmentId ? original ?? updated : visit);
+    mem.appointments = original ? [updated, ...visits] : visits;
+  });
+  return result.updated;
 }
 
 export async function saveFee(fee: FeeItem, dentistEmail?: string) {

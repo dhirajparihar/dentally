@@ -8,8 +8,9 @@ export interface Patient {
   _id: string;
   dentistEmail?: string;
   name: string;
-  age: number;
-  gender: "Male" | "Female" | "Other";
+  age?: number;
+  gender?: "Male" | "Female" | "Other";
+  registrationStatus?: "provisional" | "complete";
   phone: string;
   email: string;
   address?: string;

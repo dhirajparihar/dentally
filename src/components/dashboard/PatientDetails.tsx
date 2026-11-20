@@ -42,7 +42,7 @@ import { useMinuteClock } from "@/lib/useMinuteClock";
 interface PatientDetailsProps {
   patient: Patient | null;
   onBack: () => void;
-  onUpdatePatient: (updated: Patient) => void;
+  onUpdatePatient: (updated: Patient) => Promise<boolean>;
   onDeletePatient?: (patientId: string) => Promise<boolean>;
   fees: FeeItem[];
   payments: PaymentTransaction[];
@@ -72,14 +72,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
   // Profile Editing State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [editForm, setEditForm] = useState({
     name: patient?.name || "",
-    age: patient?.age?.toString() || "30",
-    gender: (patient?.gender || "Male") as "Male" | "Female" | "Other",
+    age: patient?.age?.toString() ?? "",
+    gender: (patient?.gender ?? "") as NonNullable<Patient["gender"]> | "",
     phone: patient?.phone || "",
     email: patient?.email || "",
     address: patient?.address || "",
-    bloodGroup: patient?.bloodGroup || "O+",
+    bloodGroup: patient?.bloodGroup || "",
     medicalAlerts: (patient?.medicalAlerts || []).join(", "),
     followUpDue: patient?.followUpDue || "",
   });
@@ -107,26 +109,46 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isMenuOpen]);
 
-  const handleEditProfileSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const openProfileEditor = () => {
     if (!patient) return;
-    const alerts = editForm.medicalAlerts
-      ? editForm.medicalAlerts.split(",").map((s) => s.trim()).filter(Boolean)
-      : ["None"];
+    setIsMenuOpen(false);
+    setProfileError("");
+    setEditForm({
+      name: patient.name,
+      age: patient.age?.toString() ?? "",
+      gender: patient.gender ?? "",
+      phone: patient.phone,
+      email: patient.email || "",
+      address: patient.address || "",
+      bloodGroup: patient.bloodGroup || "",
+      medicalAlerts: (patient.medicalAlerts || []).join(", "),
+      followUpDue: patient.followUpDue || "",
+    });
+    setIsEditProfileOpen(true);
+  };
 
-    onUpdatePatient({
+  const handleEditProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patient || isSavingProfile) return;
+    const alerts = editForm.medicalAlerts.split(",").map((s) => s.trim()).filter(Boolean);
+
+    setProfileError("");
+    setIsSavingProfile(true);
+    const saved = await onUpdatePatient({
       ...patient,
       name: editForm.name.trim(),
-      age: Number(editForm.age) || patient.age,
-      gender: editForm.gender,
+      age: editForm.age.trim() ? Number(editForm.age) : undefined,
+      gender: editForm.gender || undefined,
       phone: editForm.phone.trim(),
       email: editForm.email.trim(),
       address: editForm.address.trim(),
       bloodGroup: editForm.bloodGroup.trim(),
-      medicalAlerts: alerts.length > 0 ? alerts : ["None"],
+      medicalAlerts: alerts,
       followUpDue: editForm.followUpDue ? editForm.followUpDue : undefined,
     });
-    setIsEditProfileOpen(false);
+    setIsSavingProfile(false);
+    if (saved) setIsEditProfileOpen(false);
+    else setProfileError("Could not save patient details. Check the fields and try again.");
   };
 
   const handleQuickSetRecall = (months: number) => {
@@ -170,6 +192,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   }, [activeTab, followUpSource, focusedVisitId]);
 
   if (!patient) return null;
+  const isProvisional = patient.registrationStatus === "provisional";
+  const demographics = [patient.age === undefined ? "" : `${patient.age} yrs`, patient.gender].filter(Boolean).join(" · ");
 
   // Patient financial calculations (centralized single source of truth)
   const financialSummary = calculateFinancialSummary(fees, payments, patient._id);
@@ -259,8 +283,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               <h2 className="min-w-0 break-words text-xl font-bold text-[#111C3A] sm:text-2xl">{patient.name}</h2>
             </div>
             <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
-              <span>{patient.age} yrs &middot; {patient.gender}</span><span className="break-all">ID: {patient._id}</span>
+              {demographics && <span>{demographics}</span>}<span className="break-all">ID: {patient._id}</span>
             </p>
+            {isProvisional && (
+              <button type="button" onClick={openProfileEditor} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-900">
+                <Edit3 size={14} aria-hidden="true" />Incomplete Profile
+              </button>
+            )}
           </div>
           <div className="patient-medical" role="group" aria-label="Blood group and medical alerts">
             <span className="blood-badge"><Droplet size={16} aria-hidden="true" /><span className="sr-only">Blood group: </span>{patient.bloodGroup || "Not recorded"}</span>
@@ -297,21 +326,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 >
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      setEditForm({
-                        name: patient.name,
-                        age: patient.age.toString(),
-                        gender: patient.gender,
-                        phone: patient.phone,
-                        email: patient.email || "",
-                        address: patient.address || "",
-                        bloodGroup: patient.bloodGroup || "O+",
-                        medicalAlerts: (patient.medicalAlerts || []).join(", "),
-                        followUpDue: patient.followUpDue || "",
-                      });
-                      setIsEditProfileOpen(true);
-                    }}
+                    onClick={openProfileEditor}
                     className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[#111C3A] hover:bg-[#EDF7FA] transition-colors text-left font-medium"
                   >
                     <Edit3 size={14} className="text-[#0089A8] shrink-0" />
@@ -927,28 +942,33 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Age *</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Age{isProvisional ? "" : " *"}</label>
                   <input
                     type="number"
-                    required
+                    min={0}
+                    max={130}
+                    required={!isProvisional}
                     value={editForm.age}
                     onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Gender</label>
+                  <label className="font-semibold text-[#111C3A] block mb-1">Gender{isProvisional ? "" : " *"}</label>
                   <select
+                    required={!isProvisional}
                     value={editForm.gender}
                     onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as "Male" | "Female" | "Other" })}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8]"
                   >
+                    <option value="" disabled>Select gender</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
               </div>
+              {isProvisional && <p className="text-[#52627A]">Add age and gender to complete this profile.</p>}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1017,9 +1037,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 />
               </div>
 
+              {profileError && <p role="alert" className="text-rose-700">{profileError}</p>}
               <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
                 <button
                   type="button"
+                  disabled={isSavingProfile}
                   onClick={() => setIsEditProfileOpen(false)}
                   className="px-4 py-2 rounded-xl text-[#64748B] hover:bg-[#EDF7FA] font-semibold"
                 >
@@ -1027,9 +1049,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSavingProfile}
                   className="px-5 py-2 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] shadow-xs"
                 >
-                  Save Changes
+                  {isSavingProfile ? "Saving…" : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -1145,7 +1168,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               <div>
                 <span className="text-[#8291A7] font-mono text-[10px] block">PATIENT DETAILS</span>
                 <strong className="text-[#111C3A] font-semibold text-sm">{patient.name}</strong>
-                <p className="text-[#64748B] text-[11px]">{patient.age}y &middot; {patient.gender} &middot; ID: {patient._id}</p>
+                <p className="text-[#64748B] text-[11px]">{demographics && <>{demographics} &middot; </>}ID: {patient._id}</p>
                 <p className="text-[#8291A7] text-[11px] font-mono">{patient.phone}</p>
               </div>
               <div className="text-right">

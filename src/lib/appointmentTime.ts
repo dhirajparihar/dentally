@@ -89,13 +89,17 @@ export function getClinicAppointmentSlots({ workingHoursStart, workingHoursEnd, 
 
 export function findAppointmentConflict(appointments: Appointment[], date: string, time: string, durationMinutes = 30, excludeId?: string) {
   const start = parseAppointmentTime(time);
-  if (start === null) return;
+  const day = getDateMidnightUtc(date);
+  if (start === null || day === null) return;
   const end = start + durationMinutes;
 
   return appointments.find((appointment) => {
-    if (appointment._id === excludeId || appointment.date !== date) return false;
+    if (appointment._id === excludeId) return false;
     if (appointment.status === "cancelled" || appointment.status === "missed") return false;
+    const appointmentDay = appointment.date === date ? day : getDateMidnightUtc(appointment.date);
     const appointmentStart = parseAppointmentTime(appointment.time);
-    return appointmentStart !== null && start < appointmentStart + (appointment.durationMinutes || 30) && end > appointmentStart;
+    if (appointmentDay === null || appointmentStart === null) return false;
+    const adjustedStart = appointmentStart + (appointmentDay - day) / 60_000;
+    return start < adjustedStart + (appointment.durationMinutes || 30) && end > adjustedStart;
   });
 }

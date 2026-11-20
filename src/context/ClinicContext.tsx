@@ -13,6 +13,9 @@ import {
   ClinicProfile,
 } from "@/lib/mockData";
 
+type QuickBookingInput = Pick<Appointment, "patientName" | "patientPhone" | "date" | "time" | "durationMinutes" | "procedure" | "notes">;
+type QuickBookingResult = { bookedAppointment?: Appointment; error?: string };
+
 export interface ClinicContextType {
   patients: Patient[];
   appointments: Appointment[];
@@ -24,9 +27,10 @@ export interface ClinicContextType {
   userEmail: string;
   refreshClinic: () => Promise<void>;
   addPatient: (patient: Patient) => Promise<boolean>;
-  updatePatient: (patient: Patient) => Promise<void>;
+  updatePatient: (patient: Patient) => Promise<boolean>;
   deletePatient: (patientId: string) => Promise<boolean>;
   bookAppointment: (appointment: Appointment) => Promise<boolean>;
+  bookPatientAppointment: (appointment: QuickBookingInput) => Promise<QuickBookingResult>;
   completeAppointment: (appointmentId: string) => Promise<boolean>;
   cancelAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
   missAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
@@ -148,7 +152,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [appointments, loading, refreshClinic, status]);
 
   // Generic helper to post mutations scoped to current doctor
-  const postMutation = useCallback(async (payload: Record<string, any>) => {
+  const postMutation = useCallback(async (payload: Record<string, any>, onResult?: (result: QuickBookingResult) => void) => {
     try {
       setIsSyncing(true);
       const res = await fetch("/api/clinic", {
@@ -156,8 +160,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, dentistEmail: userEmail }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        if (onResult) onResult(await res.json());
+        return false;
+      }
       const data = await res.json();
+      onResult?.(data);
       if (data.patients) setPatients(data.patients);
       if (data.appointments) {
         appointmentRevision.current += 1;
@@ -190,8 +198,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const updatePatient = async (updated: Patient) => {
     const scoped = { ...updated, dentistEmail: userEmail };
-    setPatients((prev) => prev.map((p) => (p._id === scoped._id ? scoped : p)));
-    await postMutation({ action: "update_patient", data: scoped });
+    return postMutation({ action: "update_patient", data: scoped });
   };
 
   const deletePatient = async (patientId: string) => {
@@ -205,6 +212,14 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const bookAppointment = async (newApt: Appointment) => {
     const scoped = { ...newApt, dentistEmail: userEmail };
     return postMutation({ action: "book_appointment", data: scoped });
+  };
+
+  const bookPatientAppointment = async (appointment: QuickBookingInput) => {
+    let result: QuickBookingResult = {};
+    await postMutation({ action: "book_patient_appointment", data: appointment }, (response) => {
+      result = response;
+    });
+    return result;
   };
 
   const completeAppointment = (appointmentId: string) => postMutation({ action: "complete_appointment", appointmentId });
@@ -256,6 +271,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updatePatient,
         deletePatient,
         bookAppointment,
+        bookPatientAppointment,
         completeAppointment,
         cancelAppointment,
         missAppointment,

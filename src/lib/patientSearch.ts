@@ -10,3 +10,7 @@ export function normalizePatientPhone(phone: string) {
 export function getPatientPhoneQuery(query: string) {
   return /^[+\d().\s-]+$/.test(query) ? normalizePatientPhone(query) : "";
 }
+
+export function isBookingMobile(phone: string) {
+  return /^\d{10,15}$/.test(getPatientPhoneQuery(phone.trim()));
+}

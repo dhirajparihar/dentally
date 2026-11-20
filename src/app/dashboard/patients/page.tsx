@@ -187,7 +187,11 @@ export default function PatientsPage() {
                   <div className="min-w-0 flex-1">
                     <h2 className="break-words text-sm font-bold text-[#111C3A]"><Link href={detailsUrl} className="hover:text-[#0089A8]">{patient.name}</Link></h2>
                     <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
-                      <span>{patient.gender}, {patient.age}y</span><span>Blood: {patient.bloodGroup}</span><span className="break-all text-[#8291A7]">{patient._id}</span>
+                      {patient.gender && <span>{patient.gender}</span>}
+                      {patient.age !== undefined && <span>{patient.age}y</span>}
+                      {patient.bloodGroup && <span>Blood: {patient.bloodGroup}</span>}
+                      {patient.registrationStatus === "provisional" && <span className="text-amber-800">Incomplete Profile</span>}
+                      <span className="break-all text-[#8291A7]">{patient._id}</span>
                     </p>
                   </div>
                 </div>

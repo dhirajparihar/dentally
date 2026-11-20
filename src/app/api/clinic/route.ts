@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { bookPatientAppointment, PatientIdentityError } from "@/lib/bookPatientAppointment";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import {
@@ -19,6 +20,7 @@ import {
 import { Patient, Appointment, FeeItem, ClinicProfile } from "@/lib/mockData";
 import {
   patientSchema,
+  patientUpdateSchema,
   appointmentSchema,
   rescheduleSchema,
   feeSchema,
@@ -83,6 +85,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const doctorName = session?.user?.name || "Doctor";
+    let bookedAppointment: Appointment | undefined;
 
     switch (action) {
       case "load_sample_data": {
@@ -92,8 +95,8 @@ export async function POST(request: NextRequest) {
 
       case "add_patient":
       case "update_patient": {
-        const validated = patientSchema.parse(data);
-        await savePatient({ ...validated, dentistEmail: email } as Patient, email);
+        const validated = (action === "add_patient" ? patientSchema : patientUpdateSchema).parse(data);
+        await savePatient({ ...validated, dentistEmail: email } as Patient, email, { requireExisting: action === "update_patient" });
         break;
       }
 
@@ -109,6 +112,11 @@ export async function POST(request: NextRequest) {
       case "book_appointment": {
         const validated = appointmentSchema.parse(data);
         await saveAppointment({ ...validated, dentistEmail: email } as Appointment, email);
+        break;
+      }
+
+      case "book_patient_appointment": {
+        bookedAppointment = await bookPatientAppointment(data, email);
         break;
       }
 
@@ -174,7 +182,7 @@ export async function POST(request: NextRequest) {
     }
 
     const updated = await getClinicData(email);
-    return NextResponse.json(updated, { status: 200 });
+    return NextResponse.json({ ...updated, bookedAppointment }, { status: 200 });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return NextResponse.json(
@@ -183,7 +191,9 @@ export async function POST(request: NextRequest) {
       );
     }
     const status =
-      err instanceof AppointmentNotFoundError
+      err instanceof PatientIdentityError
+        ? 409
+        : err instanceof AppointmentNotFoundError
         ? 404
         : err instanceof AppointmentTimeError
         ? 400
