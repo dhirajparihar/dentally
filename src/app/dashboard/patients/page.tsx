@@ -18,8 +18,13 @@ import {
 } from "@/lib/mockData";
 import { buildPatientBalanceMap, formatINR, PatientBalance } from "@/lib/financials";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useClinic } from "@/context/ClinicContext";
-import { PatientRegistrationForm } from "@/components/dashboard/PatientRegistrationForm";
+
+const PatientRegistrationForm = dynamic(
+  () => import("@/components/dashboard/PatientRegistrationForm").then((mod) => mod.PatientRegistrationForm),
+  { ssr: false }
+);
 
 export default function PatientsPage() {
   const {

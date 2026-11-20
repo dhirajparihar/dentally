@@ -19,7 +19,13 @@ import {
 } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
-import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+import dynamic from "next/dynamic";
+import type { RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+
+const RecordPaymentDialog = dynamic(
+  () => import("@/components/dashboard/RecordPaymentDialog").then((mod) => mod.RecordPaymentDialog),
+  { ssr: false }
+);
 
 const appointmentsUrl = "/dashboard/appointments";
 const feesUrl = "/dashboard/fees";

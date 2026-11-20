@@ -28,7 +28,13 @@ import { useClinic } from "@/context/ClinicContext";
 import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
 import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
-import { RecordPaymentDialog, type RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+import dynamic from "next/dynamic";
+import type { RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
+
+const RecordPaymentDialog = dynamic(
+  () => import("@/components/dashboard/RecordPaymentDialog").then((mod) => mod.RecordPaymentDialog),
+  { ssr: false }
+);
 
 export default function FeesPage() {
   const {

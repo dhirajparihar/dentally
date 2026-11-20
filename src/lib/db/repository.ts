@@ -140,8 +140,9 @@ async function readAppointments(dentistEmail: string): Promise<Appointment[]> {
         update: { $set: { status: "missed" } },
       },
     })));
-    // Read back the stored status in case someone updated or moved a visit concurrently.
-    return await AppointmentModel.find(filter).lean().exec() as Appointment[];
+    // Avoid redundant database round-trip by updating expired appointments in-memory
+    const expiredIds = new Set(expired.map((a) => a._id));
+    return appointments.map((a) => (expiredIds.has(a._id) ? { ...a, status: "missed" as const } : a));
   } catch (error) {
     console.error("Could not update expired appointments:", error);
     return appointments;

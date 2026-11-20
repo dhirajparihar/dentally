@@ -7,6 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const nextConfig: NextConfig = {
+  compress: true,
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,

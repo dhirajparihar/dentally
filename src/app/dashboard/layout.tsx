@@ -1,13 +1,24 @@
 "use client";
 
 import { type ReactNode, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { AppointmentBookingConfirmation, BookAppointmentDialog, type AppointmentBookingDraft } from "@/components/dashboard/BookAppointmentDialog";
+import type { AppointmentBookingDraft } from "@/components/dashboard/BookAppointmentDialog";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { ClinicProvider } from "@/context/ClinicContext";
 import { getAppointmentClock } from "@/lib/appointmentTime";
 import type { Appointment } from "@/lib/mockData";
+
+const BookAppointmentDialog = dynamic(
+  () => import("@/components/dashboard/BookAppointmentDialog").then((mod) => mod.BookAppointmentDialog),
+  { ssr: false }
+);
+
+const AppointmentBookingConfirmation = dynamic(
+  () => import("@/components/dashboard/BookAppointmentDialog").then((mod) => mod.AppointmentBookingConfirmation),
+  { ssr: false }
+);
 
 export default function DashboardLayout({
   children,
