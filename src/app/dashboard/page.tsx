@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,7 +20,7 @@ import {
 } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
-import dynamic from "next/dynamic";
+import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
 import type { RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 
 const RecordPaymentDialog = dynamic(
@@ -95,6 +96,7 @@ export default function DashboardOverviewPage() {
   }, [loading, clinicProfile, router]);
 
   const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
   const [qrAmount, setQrAmount] = useState<number | null>(null);
   const [qrBalancePatient, setQrBalancePatient] = useState<Pick<Patient, "_id" | "name"> | null>(null);
   const [selectedQrPatientId, setSelectedQrPatientId] = useState("");
@@ -276,7 +278,7 @@ export default function DashboardOverviewPage() {
             Today&apos;s Appointments {!loading && <span className="ml-1 text-xs font-normal text-[#64748B]">({todayAppointments.length})</span>}
           </h2>
           <div className="flex flex-wrap items-center gap-x-4">
-            {!loading && <AppointmentStatusSummary appointments={todayAppointments} />}
+            {!loading && <AppointmentStatusSummary appointments={todayAppointments} showRescheduled />}
             <Link href={appointmentsUrl} aria-label="View all appointments" className="inline-flex min-h-9 items-center text-sm font-semibold text-[#00738E] hover:underline">
               View All
             </Link>
@@ -316,13 +318,15 @@ export default function DashboardOverviewPage() {
               const dossierUrl = patientUrl(appointment.patientId);
               const visitId = encodeURIComponent(appointment._id);
               const followUp = appointment.status === "completed" ? findBookedFollowUp(appointments, appointment._id) : undefined;
-              const isInactive = appointment.status === "missed" || appointment.status === "cancelled";
-              const canReopen = isInactive
+              const replacement = appointment.rescheduledToAppointmentId
+                ? appointments.find((visit) => visit._id === appointment.rescheduledToAppointmentId)
+                : undefined;
+              const canReopen = appointment.status === "cancelled"
                 && isFutureAppointment(appointment.date, appointment.time, clock)
                 && !findAppointmentConflict(appointments, appointment.date, appointment.time, appointment.durationMinutes, appointment._id);
 
               return (
-                <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={dossierUrl}>
+                <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={dossierUrl} showRescheduled replacement={replacement}>
                   <details
                     name="overview-appointment-actions"
                     className="appointment-menu"
@@ -360,7 +364,12 @@ export default function DashboardOverviewPage() {
                           <Calendar size={15} aria-hidden="true" />{followUp ? "View Follow-Up" : "Book Follow-Up"}
                         </Link>
                       )}
-                      {isInactive && (
+                      {appointment.status === "missed" && !appointment.rescheduledToAppointmentId && (
+                        <button type="button" aria-haspopup="dialog" onClick={() => setRescheduleAppointment(appointment)}>
+                          <Calendar size={15} aria-hidden="true" />Reschedule
+                        </button>
+                      )}
+                      {appointment.status === "cancelled" && (
                         canReopen ? (
                           <button type="button" onClick={() => bookAppointment({ ...appointment, status: "scheduled" })}>
                             <RefreshCw size={15} aria-hidden="true" />Reopen Appointment
@@ -377,6 +386,10 @@ export default function DashboardOverviewPage() {
           </div>
         )}
       </section>
+
+      {rescheduleAppointment && (
+        <RescheduleAppointmentDialog appointment={rescheduleAppointment} onClose={() => setRescheduleAppointment(null)} />
+      )}
 
       <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
         <section aria-labelledby="recalls-heading" className="min-w-0 space-y-2" aria-busy={loading}>

@@ -13,7 +13,7 @@ function PatientDetailContent() {
   const { patientId } = useParams<{ patientId: string }>();
   const search = useSearchParams();
   const router = useRouter();
-  const { patients, fees, payments, appointments, loading, updatePatient, deletePatient, recordPayment, addFee } = useClinic();
+  const { patients, fees, payments, appointments, loading, updatePatient, deletePatient, addFee } = useClinic();
   const patient = patients.find((entry) => entry._id === patientId);
 
   if (loading) return loadingPatient;
@@ -56,7 +56,6 @@ function PatientDetailContent() {
         fees={fees}
         payments={payments}
         appointments={appointments}
-        onAddPayment={recordPayment}
         onAddFee={addFee}
         openVisits={Boolean(followUpId || visitId)}
         initialFollowUpSource={bookedVisit || visitId ? undefined : source}

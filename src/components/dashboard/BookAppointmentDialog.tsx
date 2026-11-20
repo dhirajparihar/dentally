@@ -1,7 +1,7 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Share2, X } from "lucide-react";
+import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, MessageCircle, X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import type { Appointment, Patient } from "@/lib/mockData";
 import { getAppointmentTreatments, treatmentKey } from "@/lib/appointmentTreatments";
@@ -365,6 +365,16 @@ export function AppointmentBookingConfirmation({ appointment, onDismiss }: {
   onDismiss: () => void;
 }) {
   const { clinicProfile } = useClinic();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const detailsId = useId();
+
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+
   const cleanPhone = appointment.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
   const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
   const bookingType = appointment.followUpOfAppointmentId ? "dental follow-up appointment" : "dental appointment";
@@ -372,14 +382,36 @@ export function AppointmentBookingConfirmation({ appointment, onDismiss }: {
   const confirmationUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
 
   return (
-    <div className="appointment-success" role="status">
-      <CheckCircle2 size={19} className="shrink-0" aria-hidden="true" />
-      <p className="min-w-0 flex-1 text-xs leading-5">
-        <strong>{appointment.patientName}</strong> booked for {appointment.date} at {appointment.time}
-        <span className="block text-[#52627A]">{appointment.procedure} &middot; {appointment.patientPhone}</span>
-      </p>
-      <a href={confirmationUrl} target="_blank" rel="noopener noreferrer" className="appointment-text-action"><Share2 size={15} aria-hidden="true" />Send Confirmation</a>
-      <button type="button" onClick={onDismiss} className="calendar-icon-button" aria-label="Dismiss booking confirmation"><X size={17} aria-hidden="true" /></button>
-    </div>
+    <dialog
+      ref={dialog}
+      aria-labelledby={titleId}
+      aria-describedby={detailsId}
+      onCancel={(event) => {
+        event.preventDefault();
+        onDismiss();
+      }}
+      className="mobile-dialog fixed inset-0 !m-0 h-full max-h-none w-full max-w-none overflow-y-auto bg-[#111C3A]/75 p-4 backdrop-blur-sm backdrop:bg-transparent open:flex open:items-center open:justify-center"
+    >
+      <div className="w-full max-w-sm rounded-3xl border border-[#E4E9F0] bg-white p-6 text-[#111C3A] shadow-2xl">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700">
+            <CheckCircle2 size={22} aria-hidden="true" />
+          </span>
+          <h3 id={titleId} className="text-lg font-bold">Booking Confirmed</h3>
+        </div>
+        <p id={detailsId} className="mt-4 break-words text-sm leading-6">
+          <strong>{appointment.patientName}</strong>
+          <span className="block">{appointment.date} at {appointment.time}</span>
+          <span className="block text-[#52627A]">{appointment.procedure} &middot; {appointment.patientPhone}</span>
+        </p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <a href={confirmationUrl} target="_blank" rel="noopener noreferrer" className="workspace-button primary">
+            <MessageCircle size={16} aria-hidden="true" />
+            Send WhatsApp Message
+          </a>
+          <button type="button" onClick={onDismiss} className="workspace-button secondary">Done</button>
+        </div>
+      </div>
+    </dialog>
   );
 }

@@ -381,13 +381,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       const apt = appointmentsState.find((a) => a._id === args.appointmentId);
       if (!apt) return { error: `Appointment ID '${args.appointmentId}' not found.` };
 
-      await rescheduleAppointment(apt._id, args.newDate, args.newTime, args.reason, email);
-      const updated = {
-        ...apt,
-        date: args.newDate,
-        time: args.newTime,
-        notes: `${apt.notes || ""} [Rescheduled: ${args.reason || "Patient request"}]`.trim(),
-      };
+      const updated = await rescheduleAppointment(apt._id, args.newDate, args.newTime, args.reason, email);
 
       return {
         success: true,

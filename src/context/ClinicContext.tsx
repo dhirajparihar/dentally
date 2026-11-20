@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { getScheduledAppointmentEnd } from "@/lib/appointmentTime";
 import type { AppointmentTreatment } from "@/lib/appointmentTreatments";
@@ -57,6 +57,15 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     email: userEmail,
     isConfigured: undefined,
   }));
+  const appointmentsWithCurrentNames = useMemo(() => {
+    const patientNames = new Map(patients.map(({ _id, name }) => [_id, name]));
+    return appointments.map((appointment) => {
+      const patientName = patientNames.get(appointment.patientId);
+      return patientName && patientName !== appointment.patientName
+        ? { ...appointment, patientName }
+        : appointment;
+    });
+  }, [appointments, patients]);
 
   // Keep clinicProfile synced with authenticated session
   useEffect(() => {
@@ -235,7 +244,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     <ClinicContext.Provider
       value={{
         patients,
-        appointments,
+        appointments: appointmentsWithCurrentNames,
         fees,
         payments,
         clinicProfile,

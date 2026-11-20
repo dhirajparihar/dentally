@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { connectDB } from "./connect";
 import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment } from "@/lib/appointmentTime";
 import PatientModel from "./models/Patient";
@@ -453,9 +454,9 @@ export async function updateAppointmentStatus(
   const conn = await ensureDbInitialized();
   if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
 
-  const filter = { _id: appointmentId, dentistEmail: email };
+  const filter = { _id: appointmentId, dentistEmail: email, rescheduledToAppointmentId: { $exists: false } };
   const changes: Partial<Appointment> = { status };
-  const cached = mem.appointments.find((appointment) => appointment._id === appointmentId);
+  const cached = mem.appointments.find((appointment) => appointment._id === appointmentId && !appointment.rescheduledToAppointmentId);
   const isOutcomeUpdate = status === "completed" || status === "missed";
   const existing = conn && (isOutcomeUpdate || reason)
     ? await AppointmentModel.findOne(filter).select("date time notes").lean().exec()
@@ -532,12 +533,15 @@ export async function rescheduleAppointment(
   const conn = await ensureDbInitialized();
   if (!conn && isDbConfigured()) throw new Error("Clinic database is unavailable.");
 
-  // Fetch the existing appointment to check duration
+  const filter = { _id: appointmentId, dentistEmail: email };
   const existingApt = conn
-    ? (await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email }).lean().exec() as Appointment | null)
+    ? await AppointmentModel.findOne(filter).lean().exec() as Appointment | null
     : mem.appointments.find((a) => a._id === appointmentId);
 
   if (!existingApt) throw new AppointmentNotFoundError("Appointment not found.");
+  if (existingApt.rescheduledToAppointmentId) {
+    throw new AppointmentTimeError("This missed appointment has already been rescheduled.");
+  }
 
   const duration = existingApt.durationMinutes || 30;
 
@@ -553,32 +557,52 @@ export async function rescheduleAppointment(
     );
   }
 
-  const finalNotes = `${existingApt.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim();
+  const notes = `${existingApt.notes || ""} [Rescheduled: ${reason || "Patient request"}]`.trim();
+  const currentFilter = {
+    ...filter,
+    status: existingApt.status,
+    date: existingApt.date,
+    time: existingApt.time,
+    rescheduledToAppointmentId: { $exists: false },
+  };
 
-  mem.appointments = mem.appointments.map((a) =>
-    a._id === appointmentId
-      ? {
-          ...a,
-          date,
-          time,
-          notes: finalNotes,
-        }
-      : a
-  );
-
-  try {
+  if (existingApt.status === "missed") {
+    const replacement: Appointment = {
+      _id: `apt-${randomUUID()}`,
+      dentistEmail: email,
+      patientId: existingApt.patientId,
+      patientName: existingApt.patientName,
+      patientPhone: existingApt.patientPhone,
+      followUpOfAppointmentId: existingApt.followUpOfAppointmentId,
+      procedure: existingApt.procedure,
+      durationMinutes: duration,
+      status: "scheduled",
+      date,
+      time,
+      notes,
+    };
+    const link = { rescheduledToAppointmentId: replacement._id };
     if (conn) {
-      await AppointmentModel.updateOne(
-        { _id: appointmentId, dentistEmail: email },
-        { date, time, notes: finalNotes }
-      );
+      await AppointmentModel.db.transaction(async (session) => {
+        const result = await AppointmentModel.updateOne(currentFilter, { $set: link }, { session });
+        if (!result.matchedCount) throw new AppointmentTimeError("The original appointment has changed.");
+        await AppointmentModel.create([replacement], { session });
+      });
     }
-  } catch (err) {
-    console.error("Error rescheduling appointment in MongoDB:", err);
-    if (isDbConfigured()) throw err;
+    mem.appointments = [replacement, ...mem.appointments.map((appointment) =>
+      appointment._id === appointmentId ? { ...appointment, ...link } : appointment
+    )];
+    return replacement;
   }
 
-  return mem.appointments;
+  const changes = { date, time, notes };
+  if (conn) {
+    const result = await AppointmentModel.updateOne(currentFilter, { $set: changes });
+    if (!result.matchedCount) throw new AppointmentTimeError("The original appointment has changed.");
+  }
+  const updated = { ...existingApt, ...changes };
+  mem.appointments = mem.appointments.map((appointment) => appointment._id === appointmentId ? updated : appointment);
+  return updated;
 }
 
 export async function saveFee(fee: FeeItem, dentistEmail?: string) {

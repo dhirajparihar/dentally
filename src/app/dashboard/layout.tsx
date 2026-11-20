@@ -52,12 +52,10 @@ export default function DashboardLayout({
             onBookAppointment={() => setBookingDate(getAppointmentClock().date)}
           />
           <main className="flex-1 p-4 sm:p-7 xl:p-10 max-w-7xl w-full mx-auto">
-            {bookedAppointment && (
-              <div className="mb-5">
-                <AppointmentBookingConfirmation appointment={bookedAppointment} onDismiss={() => setBookedAppointment(null)} />
-              </div>
-            )}
             {children}
+            {bookedAppointment && (
+              <AppointmentBookingConfirmation appointment={bookedAppointment} onDismiss={() => setBookedAppointment(null)} />
+            )}
             {bookingDate && (
               <BookAppointmentDialog
                 initialDate={bookingDate}

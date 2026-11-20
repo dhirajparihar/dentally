@@ -7,6 +7,7 @@ const AppointmentSchema = new Schema<Appointment>(
     dentistEmail: { type: String, required: true, index: true },
     patientId: { type: String, required: true, index: true },
     followUpOfAppointmentId: { type: String },
+    rescheduledToAppointmentId: { type: String },
     patientName: { type: String, required: true },
     patientPhone: { type: String, required: true },
     time: { type: String, required: true },

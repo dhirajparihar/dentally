@@ -38,6 +38,7 @@ export interface Appointment {
   dentistEmail?: string;
   patientId: string;
   followUpOfAppointmentId?: string;
+  rescheduledToAppointmentId?: string;
   patientName: string;
   patientPhone: string;
   date: string; // YYYY-MM-DD

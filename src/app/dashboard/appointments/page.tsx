@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   X,
-  AlertCircle,
   Phone,
   Share2,
   ChevronLeft,
@@ -19,6 +18,7 @@ import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
+import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
 
 interface AppointmentActionsProps {
   appointment: Appointment;
@@ -60,12 +60,10 @@ const latestAppointmentDate = "9999-12-31";
 export default function AppointmentsPage() {
   const {
     appointments,
-    patients,
     clinicProfile,
     loading,
     bookAppointment,
     cancelAppointment,
-    rescheduleAppointment,
   } = useClinic();
 
   // Selected Date for Single Dentist Practice
@@ -75,11 +73,9 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
 
   // Modals
-  const [rescheduleOverride, setRescheduleOverride] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
   const router = useRouter();
   const [bookingError, setBookingError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const handledCalendarLink = useRef(false);
 
   useEffect(() => {
@@ -118,23 +114,11 @@ export default function AppointmentsPage() {
     router.replace(`/dashboard/patients/${encodeURIComponent(visit.patientId)}?${query}=${encodeURIComponent(visit._id)}`);
   }, [appointments, loading, router]);
 
-  // Reschedule Form State
-  const [rescheduleData, setRescheduleData] = useState({
-    date: selectedDate,
-    time: "",
-    reason: "",
-  });
-
   const workingHours = useMemo(() => getClinicAppointmentSlots(clinicProfile), [clinicProfile]);
   const findSlotConflict = (date: string, time: string, durationMinutes = 30, excludeId?: string) =>
     findAppointmentConflict(appointments, date, time, durationMinutes, excludeId);
 
-  const futureSlots = (date: string, currentClock = clock) =>
-    workingHours.filter((slot) => isFutureAppointment(date, slot, currentClock));
-  const rescheduleSlots = futureSlots(rescheduleData.date);
-  const rescheduleConflict = rescheduleApt
-    ? findSlotConflict(rescheduleData.date, rescheduleData.time, rescheduleApt.durationMinutes || 30, rescheduleApt._id)
-    : undefined;
+  const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const isToday = selectedDate === clock.date;
   const isPastDay = selectedDate < clock.date;
 
@@ -172,39 +156,6 @@ export default function AppointmentsPage() {
     if (!saved) setBookingError("Could not cancel the appointment. Try again.");
   };
 
-  const getPatientDossierUrl = ({ patientId, patientName }: Appointment) => {
-    const found = patients.find((p) => p._id === patientId || p.name === patientName);
-    return `/dashboard/patients/${encodeURIComponent(found?._id || patientId)}`;
-  };
-
-  // Reschedule submit
-  const handleRescheduleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rescheduleApt || isSubmitting) return;
-    const currentClock = getAppointmentClock();
-    if (rescheduleApt.date < currentClock.date || !isFutureAppointment(rescheduleData.date, rescheduleData.time, currentClock)) {
-      setBookingError("Choose a future time for a current appointment.");
-      return;
-    }
-    if (rescheduleConflict && !rescheduleOverride) return;
-
-    setBookingError("");
-    setIsSubmitting(true);
-    const saved = await rescheduleAppointment(
-      rescheduleApt._id,
-      rescheduleData.date,
-      rescheduleData.time,
-      rescheduleData.reason
-    );
-    setIsSubmitting(false);
-    if (!saved) {
-      setBookingError("Could not reschedule the appointment. Check the date and time and try again.");
-      return;
-    }
-    setRescheduleApt(null);
-    setRescheduleOverride(false);
-  };
-
   // WhatsApp Pre-Appointment Reminder
   const getWhatsAppReminderUrl = (apt: Appointment) => {
     const cleanPhone = apt.patientPhone.replace(/[^0-9]/g, "").replace(/^0+/, "");
@@ -223,16 +174,6 @@ export default function AppointmentsPage() {
 
   const availableSlots = futureSlots(selectedDate).filter((slot) => !findSlotConflict(selectedDate, slot));
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
-  const openReschedule = (appointment: Appointment) => {
-    const currentClock = getAppointmentClock();
-    if (appointment.date < currentClock.date) return;
-    setBookingError("");
-    setRescheduleOverride(false);
-    const appointmentTime = parseAppointmentTime(appointment.time);
-    const time = futureSlots(appointment.date, currentClock).find((slot) => parseAppointmentTime(slot) === appointmentTime);
-    setRescheduleData({ date: appointment.date, time: time ?? "", reason: "" });
-    setRescheduleApt(appointment);
-  };
   const selectedDateLabel = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
   return (
@@ -321,7 +262,7 @@ export default function AppointmentsPage() {
         ) : (
           <div className={viewMode === "list" ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "appointment-timeline space-y-3"}>
             {visibleAppointments.map((appointment) => {
-              const patientHref = getPatientDossierUrl(appointment);
+              const patientHref = `/dashboard/patients/${encodeURIComponent(appointment.patientId)}`;
               const canCall = appointment.date >= clock.date;
               return (
                 <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={patientHref} showDate={viewMode === "list"} canCall={canCall}>
@@ -331,9 +272,12 @@ export default function AppointmentsPage() {
                       reminderUrl={getWhatsAppReminderUrl(appointment)}
                       careUrl={getWhatsAppPostOpUrl(appointment)}
                       onView={() => router.push(patientHref)}
-                      onReschedule={() => openReschedule(appointment)}
+                      onReschedule={() => {
+                        setBookingError("");
+                        setRescheduleApt(appointment);
+                      }}
                       onReopen={() => handleReopen(appointment)}
-                      canReopen={isFutureAppointment(appointment.date, appointment.time, clock)}
+                      canReopen={!appointment.rescheduledToAppointmentId && isFutureAppointment(appointment.date, appointment.time, clock)}
                       onCancel={() => handleCancel(appointment)}
                     />
                   )}
@@ -344,110 +288,7 @@ export default function AppointmentsPage() {
         )}
       </section>
 
-      {/* ================= RESCHEDULE MODAL ================= */}
-      {rescheduleApt && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
-              <h3 className="font-bold text-base text-[#111C3A]">Reschedule Appointment</h3>
-              <button onClick={() => setRescheduleApt(null)} aria-label="Close reschedule form" className="text-[#8291A7] hover:text-[#111C3A]">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-[#64748B] my-3">
-              Rescheduling appointment for: <strong className="text-[#111C3A]">{rescheduleApt.patientName}</strong>
-            </p>
-
-            <form onSubmit={handleRescheduleSubmit} className="space-y-3">
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">New Date *</label>
-                <input
-                  type="date"
-                  required
-                  min={clock.date}
-                  value={rescheduleData.date}
-                  onChange={(e) => {
-                    setRescheduleOverride(false);
-                    setRescheduleData({ ...rescheduleData, date: e.target.value, time: "" });
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">New Time *</label>
-                <select
-                  required
-                  value={rescheduleSlots.includes(rescheduleData.time) ? rescheduleData.time : ""}
-                  onChange={(e) => {
-                    setRescheduleOverride(false);
-                    setRescheduleData({ ...rescheduleData, time: e.target.value });
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none font-mono bg-[#FAFBFC]"
-                >
-                  <option value="" disabled>{rescheduleSlots.length ? "Choose a time" : "No future slots"}</option>
-                  {rescheduleSlots.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Reason for Rescheduling</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Patient requested morning slot"
-                  value={rescheduleData.reason}
-                  onChange={(e) => setRescheduleData({ ...rescheduleData, reason: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-[#E4E9F0] outline-none bg-[#FAFBFC]"
-                />
-              </div>
-
-              {/* Conflict Detection for Rescheduling */}
-              {rescheduleConflict && rescheduleSlots.includes(rescheduleData.time) && (
-                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
-                    <div className="flex items-start gap-1.5">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <strong>Chair 1 Conflict:</strong> {rescheduleConflict.patientName} is scheduled at {rescheduleConflict.time} ({rescheduleConflict.durationMinutes}m for {rescheduleConflict.procedure}).
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-2 pt-1 font-semibold text-amber-950 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={rescheduleOverride}
-                        onChange={(e) => setRescheduleOverride(e.target.checked)}
-                        className="rounded border-amber-300 text-[#0089A8]"
-                      />
-                      <span>Emergency override conflict</span>
-                    </label>
-                  </div>
-              )}
-
-              {bookingError && <p role="alert" className="text-rose-700">{bookingError}</p>}
-              <div className="pt-3 flex justify-end gap-2 border-t border-[#E4E9F0]">
-                <button
-                  type="button"
-                  onClick={() => setRescheduleApt(null)}
-                  className="px-3.5 py-1.5 rounded-xl text-[#64748B] hover:bg-slate-100 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || rescheduleApt.date < clock.date || !rescheduleSlots.includes(rescheduleData.time) || Boolean(rescheduleConflict && !rescheduleOverride)}
-                  className="px-4 py-1.5 rounded-xl bg-[#0089A8] text-white font-semibold hover:bg-[#00738E] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirm Reschedule
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {rescheduleApt && <RescheduleAppointmentDialog appointment={rescheduleApt} onClose={() => setRescheduleApt(null)} />}
 
     </div>
   );

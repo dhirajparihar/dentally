@@ -39,7 +39,7 @@ export function AppointmentStatusControl({ appointment, clock }: { appointment: 
   const status = pendingStatus ?? appointment.status;
   const isFuture = isFutureAppointment(appointment.date, appointment.time, clock);
 
-  if (status === "cancelled" || isFuture) {
+  if (status === "cancelled" || isFuture || appointment.rescheduledToAppointmentId) {
     return (
       <span className={`status-pill ${status} flex items-center gap-1.5`} title={isFuture && status !== "cancelled" ? "Status can be updated at the scheduled start time." : undefined}>
         <StatusDot status={status} />

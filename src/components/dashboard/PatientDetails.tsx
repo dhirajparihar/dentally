@@ -9,7 +9,6 @@ import {
   Mail,
   Calendar,
   AlertTriangle,
-  Clock,
   CreditCard,
   FileText,
   Plus,
@@ -48,7 +47,6 @@ interface PatientDetailsProps {
   fees: FeeItem[];
   payments: PaymentTransaction[];
   appointments: Appointment[];
-  onAddPayment: (payment: PaymentTransaction) => void;
   onAddFee: (fee: FeeItem) => void;
   openVisits?: boolean;
   initialFollowUpSource?: Appointment;
@@ -63,7 +61,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   fees,
   payments,
   appointments,
-  onAddPayment,
   onAddFee,
   openVisits,
   initialFollowUpSource,
@@ -178,7 +175,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
   const financialSummary = calculateFinancialSummary(fees, payments, patient._id);
   const totalBilled = financialSummary.billed;
   const totalPaid = financialSummary.paid;
-  const netPaid = financialSummary.netPaid;
   const outstandingBalance = financialSummary.due;
   const advanceCredit = financialSummary.advance;
   const patientFees = fees.filter((f) => f.patientId === patient._id);
