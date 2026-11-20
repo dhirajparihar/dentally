@@ -3,13 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, ShieldCheck, Heart, Bot } from "lucide-react";
+import { ShieldCheck, ArrowRight } from "lucide-react";
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="bg-[#121D1B] text-white border-t border-[#243532] pt-16 pb-12">
+    <footer className="bg-[#0B132B] text-white border-t border-slate-800 pt-16 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-[#243532]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-12 border-b border-slate-800">
           {/* Brand info */}
           <div className="md:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
@@ -22,33 +22,34 @@ export const Footer: React.FC = () => {
                   className="w-full h-full object-contain"
                 />
               </div>
-              <span className="font-serif font-bold text-2xl tracking-tight text-white">
+              <span className="font-bold text-2xl tracking-tight text-white font-sans">
                 Dentally<span className="text-[#0089A8]">.</span>
               </span>
             </div>
-            <p className="text-sm text-[#A7BCB7] max-w-sm leading-relaxed">
-              The AI clinic assistant for private dental practices. Manage patients, appointments,
-              and fee collections in effortless natural language without typing notes at 8 PM.
+            <p className="text-sm text-slate-400 max-w-sm leading-relaxed">
+              The AI clinic operating system for private dental practices. Manage patients, appointments,
+              and fee collections in natural language without typing notes after exhausting surgeries.
             </p>
-            <div className="pt-2 flex items-center gap-2 text-xs text-[#7E9691] font-mono">
-              <ShieldCheck className="w-4 h-4 text-[#BDDBD1]" /> Private Clinic Data • 1-Click Google Sign-In
+            <div className="pt-2 flex items-center gap-2 text-xs text-slate-400 font-mono">
+              <ShieldCheck className="w-4 h-4 text-[#0089A8]" />
+              <span>Multi-Tenant Isolation &middot; 1-Click Google Sign-In</span>
             </div>
           </div>
 
           {/* Quick links */}
           <div>
-            <h4 className="text-xs font-mono font-semibold uppercase tracking-[0.16em] text-[#BDDBD1] mb-4">
+            <h4 className="text-xs font-mono font-semibold uppercase tracking-[0.16em] text-[#0089A8] mb-4">
               Practice Management
             </h4>
-            <ul className="space-y-2.5 text-sm text-[#A7BCB7]">
+            <ul className="space-y-2.5 text-sm text-slate-400">
               <li>
                 <Link href="/dashboard" className="hover:text-white transition-colors">
-                  Daily Assistant
+                  Clinic Overview
                 </Link>
               </li>
               <li>
                 <Link href="/dashboard/patients" className="hover:text-white transition-colors">
-                  Patient EHR & 360° Dossiers
+                  Patients & EHR Dossiers
                 </Link>
               </li>
               <li>
@@ -58,45 +59,54 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <Link href="/dashboard/fees" className="hover:text-white transition-colors">
-                  Fees & WhatsApp Billing
+                  Fees & WhatsApp Collections
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* ChatGPT Assistant Integration */}
+          {/* ChatGPT Assistant Integration & Legal */}
           <div>
-            <h4 className="text-xs font-mono font-semibold uppercase tracking-[0.16em] text-[#BDDBD1] mb-4">
-              AI & ChatGPT
+            <h4 className="text-xs font-mono font-semibold uppercase tracking-[0.16em] text-[#0089A8] mb-4">
+              AI & Governance
             </h4>
-            <ul className="space-y-2.5 text-sm text-[#A7BCB7] text-xs">
+            <ul className="space-y-2.5 text-sm text-slate-400">
               <li>
                 <Link href="/dashboard/mcp" className="hover:text-white transition-colors">
-                  1-Click Clinic Connection Link
+                  ChatGPT MCP Hub
                 </Link>
               </li>
               <li>
-                <span className="text-[#7E9691]">Auth: Clinic Gmail Account</span>
+                <Link href="/privacy" className="hover:text-white transition-colors">
+                  Privacy Policy
+                </Link>
               </li>
               <li>
-                <span className="text-[#7E9691]">Supports Voice Dictation</span>
+                <Link href="/terms" className="hover:text-white transition-colors">
+                  Terms of Service
+                </Link>
               </li>
               <li>
-                <span className="text-[#7E9691]">Works on Mobile & Desktop</span>
+                <Link href="/login" className="hover:text-white transition-colors">
+                  Dentist Sign In
+                </Link>
               </li>
             </ul>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-[#7E9691] gap-4">
-          <p>© {new Date().getFullYear()} Dentally. Built for private dental practices.</p>
+        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-4">
+          <p>© {new Date().getFullYear()} Dentally. Dedicated to Patients, Appointments, and Collections.</p>
           <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="hover:text-white transition-colors">
-              Dentist Login
+            <Link href="/privacy" className="hover:text-white transition-colors">
+              Privacy Policy
             </Link>
-            <Link href="/dashboard/mcp" className="text-[#C7E7EC] hover:underline">
-              Connect to ChatGPT
+            <Link href="/terms" className="hover:text-white transition-colors">
+              Terms of Service
+            </Link>
+            <Link href="/dashboard" className="text-[#0089A8] hover:text-[#BEE3E9] font-medium transition-colors">
+              Open Dashboard &rarr;
             </Link>
           </div>
         </div>
@@ -104,4 +114,3 @@ export const Footer: React.FC = () => {
     </footer>
   );
 };
-

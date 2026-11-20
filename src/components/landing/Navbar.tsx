@@ -4,30 +4,30 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { Sparkles, ArrowRight, Menu, X, Cpu, Users, Calendar, CreditCard, Lock } from "lucide-react";
+import { ArrowRight, Menu, X, Cpu } from "lucide-react";
 
 export const Navbar: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: session } = useSession();
 
   return (
-    <header className="sticky top-0 z-50 glass-nav">
+    <header className="sticky top-0 z-50 bg-[#FAFBFC]/90 backdrop-blur-md border-b border-[#E4E9F0]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
-          {/* Logo with Bio-Mint Neural Dot */}
+          {/* Logo with Brand Teal Dot */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
               <Image
                 src="/logo.png"
                 alt="Dentally Logo"
-                width={40}
-                height={40}
+                width={36}
+                height={36}
                 className="w-full h-full object-contain"
                 priority
               />
             </div>
             <div className="flex items-baseline">
-              <span className="font-serif font-bold text-2xl tracking-tight text-[#1E2D2B]">
+              <span className="font-bold text-2xl tracking-tight text-[#111C3A] font-sans">
                 Dentally
               </span>
               <span className="w-2 h-2 rounded-full bg-[#0089A8] ml-1" />
@@ -35,17 +35,17 @@ export const Navbar: React.FC = () => {
           </Link>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-[#586B67]">
-            <Link href="/dashboard/patients" className="hover:text-[#1E2D2B] transition-colors">
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-[#52627A]">
+            <Link href="/dashboard/patients" className="hover:text-[#0089A8] transition-colors">
               Patients
             </Link>
-            <Link href="/dashboard/appointments" className="hover:text-[#1E2D2B] transition-colors">
+            <Link href="/dashboard/appointments" className="hover:text-[#0089A8] transition-colors">
               Appointments
             </Link>
-            <Link href="/dashboard/fees" className="hover:text-[#1E2D2B] transition-colors">
-              Fees & History
+            <Link href="/dashboard/fees" className="hover:text-[#0089A8] transition-colors">
+              Fees & Collections
             </Link>
-            <Link href="/dashboard/mcp" className="hover:text-[#1E2D2B] transition-colors">
+            <Link href="/dashboard/mcp" className="hover:text-[#0089A8] transition-colors">
               ChatGPT MCP Hub
             </Link>
           </nav>
@@ -54,9 +54,9 @@ export const Navbar: React.FC = () => {
           <div className="hidden sm:flex items-center gap-3">
             <Link
               href="/dashboard/mcp"
-              className="px-3.5 py-2 text-xs font-mono font-medium rounded-xl text-[#2F8EAC] bg-[#E8F0F1] border border-[#C7E7EC] hover:bg-[#BDDBD1]/30 transition-all flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-mono font-medium rounded-xl text-[#00738E] bg-[#EDF7FA] border border-[#D4EDF3] hover:bg-[#DDF1F6] transition-all flex items-center gap-1.5"
             >
-              <Cpu className="w-3.5 h-3.5 text-[#2F8EAC]" />
+              <Cpu className="w-3.5 h-3.5 text-[#0089A8]" />
               /api/mcp
             </Link>
             {session ? (
@@ -67,20 +67,20 @@ export const Navbar: React.FC = () => {
                     ? "/admin"
                     : "/dashboard"
                 }
-                className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
+                className="px-4.5 py-2 text-sm font-semibold rounded-xl text-white bg-[#0089A8] hover:bg-[#00738E] transition-all shadow-xs flex items-center gap-2 group"
               >
                 <span>
                   {(session.user as any)?.role === "superadmin" ||
                   Boolean((session.user as any)?.isSuperAdmin)
                     ? "Admin Console"
-                    : "Operatory Dashboard"}
+                    : "Clinic Dashboard"}
                 </span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-[#2F8EAC] hover:bg-[#24728A] transition-all shadow-xs flex items-center gap-2 group"
+                className="px-4.5 py-2 text-sm font-semibold rounded-xl text-white bg-[#0089A8] hover:bg-[#00738E] transition-all shadow-xs flex items-center gap-2 group"
               >
                 <span>Dentist Sign In</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -92,7 +92,8 @@ export const Navbar: React.FC = () => {
           <div className="flex md:hidden">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              aria-label="Toggle navigation menu"
+              className="p-2 rounded-xl text-[#52627A] hover:text-[#111C3A] hover:bg-[#EDF7FA] transition-colors"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -102,41 +103,41 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-[#FBF9F1] border-b border-[#E7E9E3] px-4 pt-2 pb-6 space-y-3">
+        <div className="md:hidden bg-white border-b border-[#E4E9F0] px-4 pt-2 pb-6 space-y-3 shadow-lg">
           <Link
             href="/dashboard/patients"
             onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-base font-medium text-[#1E2D2B]"
+            className="block py-2 text-sm font-semibold text-[#111C3A] hover:text-[#0089A8]"
           >
             Patients & EHR
           </Link>
           <Link
             href="/dashboard/appointments"
             onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-base font-medium text-[#1E2D2B]"
+            className="block py-2 text-sm font-semibold text-[#111C3A] hover:text-[#0089A8]"
           >
-            Appointments & Calendar
+            Appointments & Schedule
           </Link>
           <Link
             href="/dashboard/fees"
             onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-base font-medium text-[#1E2D2B]"
+            className="block py-2 text-sm font-semibold text-[#111C3A] hover:text-[#0089A8]"
           >
             Fees & Collections
           </Link>
           <Link
             href="/dashboard/mcp"
             onClick={() => setMobileMenuOpen(false)}
-            className="block py-2 text-base font-medium text-[#1E2D2B]"
+            className="block py-2 text-sm font-semibold text-[#111C3A] hover:text-[#0089A8]"
           >
             ChatGPT MCP Hub
           </Link>
-          <div className="pt-2 border-t border-[#E7E9E3]">
+          <div className="pt-3 border-t border-[#E4E9F0] flex flex-col gap-2">
             <Link
               href="/dashboard"
-              className="w-full text-center block py-3 rounded-xl bg-[#2F8EAC] hover:bg-[#24728A] text-white font-semibold text-sm shadow-xs"
+              className="w-full text-center block py-2.5 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white font-semibold text-sm shadow-xs transition-colors"
             >
-              Open Dentist Dashboard
+              Open Clinic Dashboard
             </Link>
           </div>
         </div>

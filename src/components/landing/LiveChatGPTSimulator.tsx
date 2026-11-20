@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Terminal, Bot, User, CheckCircle2, ShieldCheck, Play, Volume2 } from "lucide-react";
+import { Terminal, Bot, User, CheckCircle2, ShieldCheck } from "lucide-react";
 
 interface Scenario {
   id: string;
@@ -110,41 +110,41 @@ export const LiveChatGPTSimulator: React.FC = () => {
     setTimeout(() => {
       setDisplayedText(s.assistantResponse);
       setIsTyping(false);
-    }, 300);
+    }, 250);
   };
 
   return (
-    <div className="w-full rounded-3xl bg-[#162321] text-slate-100 border border-[#243532] shadow-2xl overflow-hidden font-sans">
+    <div className="w-full rounded-3xl bg-[#111C3A] text-slate-100 border border-slate-700/80 shadow-2xl overflow-hidden font-sans">
       {/* Top Header */}
-      <div className="bg-[#121D1B] px-5 py-3.5 border-b border-[#243532] flex items-center justify-between">
+      <div className="bg-[#0B132B] px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
           </div>
-          <span className="text-xs font-mono text-[#A7BCB7] ml-2">ChatGPT • Connected to Your Clinic</span>
+          <span className="text-xs font-mono text-slate-300 ml-2">ChatGPT &middot; Connected to Your Clinic</span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#203330] text-[#BDDBD1] border border-[#2B423E]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#BDDBD1] animate-pulse" />
-            Google Sign-In Active
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800/90 text-[#0089A8] border border-slate-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0089A8] animate-pulse" />
+            Clinic MCP Connected
           </span>
         </div>
       </div>
 
-      {/* 4 Interactive Scenarios directly from user specification */}
-      <div className="p-3 bg-[#131D1B] border-b border-[#243532] flex items-center gap-2 overflow-x-auto text-xs font-mono">
-        <span className="text-[#7E9691] whitespace-nowrap">Try Conversations:</span>
+      {/* 4 Interactive Scenarios */}
+      <div className="p-3 bg-[#0E1726] border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+        <span className="text-slate-400 whitespace-nowrap">Try Conversations:</span>
         {scenarios.map((s) => (
           <button
             key={s.id}
             onClick={() => switchScenario(s)}
             className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all font-medium ${
               activeScenario.id === s.id
-                ? "bg-[#2F8EAC] text-white font-bold shadow-xs"
-                : "bg-[#1E2D2B] text-[#A7BCB7] hover:text-white hover:bg-[#253935]"
+                ? "bg-[#0089A8] text-white font-bold shadow-xs"
+                : "bg-slate-800/70 text-slate-300 hover:text-white hover:bg-slate-700"
             }`}
           >
             {s.label}
@@ -157,26 +157,26 @@ export const LiveChatGPTSimulator: React.FC = () => {
         <div className="space-y-4">
           {/* Dentist User Message */}
           <div className="flex items-start gap-3 justify-end">
-            <div className="bg-[#2F8EAC] text-white p-3.5 rounded-2xl rounded-tr-xs text-sm max-w-[85%] font-medium shadow-xs">
-              <span className="text-[10px] text-[#C7E7EC] font-mono block mb-0.5">Dentist</span>
+            <div className="bg-[#0089A8] text-white p-3.5 rounded-2xl rounded-tr-xs text-sm max-w-[85%] font-medium shadow-xs">
+              <span className="text-[10px] text-teal-100 font-mono block mb-0.5">Dentist</span>
               {activeScenario.userPrompt}
             </div>
-            <div className="w-8 h-8 rounded-full bg-[#203330] border border-[#2B423E] flex items-center justify-center shrink-0 text-[#BDDBD1] text-xs font-bold font-mono">
+            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-[#0089A8] text-xs font-bold font-mono">
               DR
             </div>
           </div>
 
           {/* Quick Database Activity Indicator */}
           <div className="pl-11 pr-2">
-            <div className="bg-[#1E2D2B]/90 rounded-xl p-2.5 border border-[#243532] text-xs font-mono text-[#A7BCB7] flex items-center justify-between">
+            <div className="bg-slate-800/70 rounded-xl p-2.5 border border-slate-700/80 text-xs font-mono text-slate-300 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Terminal className="w-3.5 h-3.5 text-[#BDDBD1] shrink-0" />
+                <Terminal className="w-3.5 h-3.5 text-[#0089A8] shrink-0" />
                 <span>
-                  <span className="text-[#7E9691]">Clinic Records:</span>{" "}
-                  <strong className="text-[#C7E7EC] font-normal">{activeScenario.toolCalled}</strong>
+                  <span className="text-slate-400">Clinic Records:</span>{" "}
+                  <strong className="text-teal-300 font-normal">{activeScenario.toolCalled}</strong>
                 </span>
               </div>
-              <span className="text-[10px] text-[#BDDBD1] bg-[#121D1B] px-2 py-0.5 rounded border border-[#243532]">
+              <span className="text-[10px] text-teal-300 bg-[#0B132B] px-2 py-0.5 rounded border border-slate-700">
                 ⚡ 12ms
               </span>
             </div>
@@ -184,15 +184,15 @@ export const LiveChatGPTSimulator: React.FC = () => {
 
           {/* AI Response */}
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#203330] border border-[#2B423E] flex items-center justify-center shrink-0 text-[#2F8EAC]">
+            <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-[#0089A8]">
               <Bot className="w-4 h-4" />
             </div>
 
             <div className="space-y-3 max-w-[90%] flex-1">
-              <div className="bg-[#1E2D2B] p-4 rounded-2xl rounded-tl-xs border border-[#2B423E] text-sm leading-relaxed text-[#FBF9F1] whitespace-pre-line font-sans shadow-xs">
+              <div className="bg-slate-800/90 p-4 rounded-2xl rounded-tl-xs border border-slate-700 text-sm leading-relaxed text-slate-100 whitespace-pre-line font-sans shadow-xs">
                 {isTyping ? (
-                  <div className="flex items-center gap-2 text-[#A7BCB7] py-1">
-                    <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-[#2F8EAC] border-t-transparent rounded-full" />
+                  <div className="flex items-center gap-2 text-slate-300 py-1">
+                    <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-[#0089A8] border-t-transparent rounded-full" />
                     <span>Accessing patient records...</span>
                   </div>
                 ) : (
@@ -202,17 +202,17 @@ export const LiveChatGPTSimulator: React.FC = () => {
 
               {/* Data Card */}
               {!isTyping && (
-                <div className="p-3.5 rounded-xl bg-[#121D1B] border border-[#243532] text-xs font-mono">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#243532] text-[#A7BCB7]">
+                <div className="p-3.5 rounded-xl bg-[#0B132B] border border-slate-800 text-xs font-mono">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-slate-300">
                     <span className="font-bold text-white font-sans">{activeScenario.dataCard.title}</span>
-                    <span className="px-2 py-0.5 rounded bg-[#203330] text-[#BDDBD1] text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-teal-300 text-[10px] font-bold">
                       {activeScenario.dataCard.badge}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 mt-2 pt-1 text-[11px]">
                     {activeScenario.dataCard.metrics.map((m, idx) => (
                       <div key={idx}>
-                        <span className="text-[#7E9691] block text-[10px]">{m.label}</span>
+                        <span className="text-slate-400 block text-[10px]">{m.label}</span>
                         <strong className="text-white font-bold">{m.value}</strong>
                       </div>
                     ))}
@@ -224,11 +224,11 @@ export const LiveChatGPTSimulator: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="pt-2 border-t border-[#243532] flex items-center justify-between text-[11px] text-[#7E9691] font-mono">
-          <span className="flex items-center gap-1 text-[#A7BCB7]">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#BDDBD1]" /> Google Account Security
+        <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+          <span className="flex items-center gap-1 text-slate-300">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#0089A8]" /> Multi-Tenant Scoped
           </span>
-          <span>Zero passwords or API keys needed</span>
+          <span>Zero passwords or manual API keys needed</span>
         </div>
       </div>
     </div>
