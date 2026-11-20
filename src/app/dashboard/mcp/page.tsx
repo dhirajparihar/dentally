@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { Copy, Check, ShieldCheck, Play, Search, X, Terminal, ChevronRight } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Check, ShieldCheck, Play, Search, X, Terminal, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { DENTALLY_MCP_TOOLS, McpToolDefinition } from "@/lib/mcp/tools";
 import { useClinic } from "@/context/ClinicContext";
 
@@ -16,6 +16,7 @@ const categories = [
 export default function McpSettingsPage() {
   const { clinicProfile, patients, userEmail } = useClinic();
   const [mcpUrl, setMcpUrl] = useState("");
+  const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [search, setSearch] = useState("");
@@ -60,6 +61,18 @@ export default function McpSettingsPage() {
       setCopyError("Select the URL to copy it manually.");
     }
   };
+
+  const maskedUrl = useMemo(() => {
+    if (!mcpUrl) return "";
+    const keyIdx = mcpUrl.indexOf("key=");
+    if (keyIdx === -1) return mcpUrl;
+    const base = mcpUrl.slice(0, keyIdx + 4);
+    const token = mcpUrl.slice(keyIdx + 4);
+    if (token.length <= 8) return `${base}••••••••••••••••••••••••••••••••`;
+    return `${base}${token.slice(0, 4)}••••••••••••••••••••••••${token.slice(-4)}`;
+  }, [mcpUrl]);
+
+  const displayUrl = showKey ? mcpUrl : maskedUrl;
 
   const filteredTools = DENTALLY_MCP_TOOLS.filter((tool) => (selectedCategory === "all" || tool.category === selectedCategory) && `${tool.name} ${tool.description}`.toLowerCase().includes(search.trim().toLowerCase()));
 
@@ -120,7 +133,48 @@ export default function McpSettingsPage() {
           <span className="mcp-protocol">MCP &middot; JSON-RPC 2.0</span>
         </div>
         <label htmlFor="mcp-endpoint" className="mb-2 mt-4 block text-xs font-medium text-[#52627A]">Private Server URL</label>
-        <div className="mcp-endpoint-field"><input id="mcp-endpoint" type="text" readOnly value={mcpUrl} placeholder="Loading endpoint..." onFocus={(event) => event.currentTarget.select()} /><button type="button" onClick={handleCopy} disabled={!mcpUrl} className="workspace-button primary">{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "Copied" : "Copy URL"}</button></div>
+        <div className="mcp-endpoint-field">
+          <div className="relative flex-1 min-w-0">
+            <input
+              id="mcp-endpoint"
+              type="text"
+              readOnly
+              value={displayUrl}
+              placeholder="Loading endpoint..."
+              onFocus={(event) => event.currentTarget.select()}
+              onCopy={(event) => {
+                if (!showKey && mcpUrl) {
+                  event.preventDefault();
+                  navigator.clipboard.writeText(mcpUrl);
+                  setCopied(true);
+                  if (copyTimeout.current) clearTimeout(copyTimeout.current);
+                  copyTimeout.current = setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+              className="pr-10 font-mono"
+            />
+            {mcpUrl && (
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                aria-label={showKey ? "Hide private key" : "Show private key"}
+                title={showKey ? "Hide private key" : "Show private key"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#8291A7] hover:text-[#111C3A] hover:bg-[#E4E9F0]/70 transition-colors"
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={!mcpUrl}
+            className="workspace-button primary"
+          >
+            {copied ? <Check size={15} /> : <Copy size={15} />}
+            {copied ? "Copied" : "Copy URL"}
+          </button>
+        </div>
         {copyError && <p role="status" className="mt-2 text-xs text-[#64748B]">{copyError}</p>}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-[#64748B]"><p className="flex min-w-0 items-center gap-1.5"><ShieldCheck size={14} className="shrink-0 text-[#0089A8]" /><span className="break-all">{clinicProfile.dentistName} &middot; {clinicProfile.email}</span></p><span>{DENTALLY_MCP_TOOLS.length} tools</span></div>
         <details className="mcp-connection-help"><summary>Connection details</summary><p>Add the private server URL in your MCP client and select Authentication: None. Your clinic authorization key is included in the URL.</p></details>
