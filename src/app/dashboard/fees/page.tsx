@@ -254,7 +254,7 @@ export default function FeesPage() {
             {visibleDues.map(({ patient, totalBilled, totalPaid, outstanding, latestFee }) => (
               <article key={patient._id} className="finance-due-card">
                 <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0"><h2 className="text-sm font-bold"><button type="button" onClick={() => handleOpenDossier(patient)} className="max-w-full text-left hover:text-[#0089A8]">{patient.name}</button></h2><a href={`tel:${patient.phone}`} className="mt-1 inline-block text-xs text-[#64748B]">{patient.phone}</a><p className="mt-1 break-all text-[11px] text-[#8291A7]">{patient._id}</p></div>
+                  <div className="min-w-0"><h2 className="text-sm font-bold"><button type="button" onClick={() => handleOpenDossier(patient)} className="max-w-full text-left hover:text-[#0089A8]">{patient.name}</button></h2><a href={`tel:${patient.phone}`} className="mt-1 inline-block text-xs text-[#64748B]">{patient.phone}</a></div>
                   <div className="shrink-0 text-right"><p className="text-[11px] text-[#64748B]">Due</p><p className="mt-1 text-lg font-bold text-rose-700">{money(outstanding)}</p></div>
                 </div>
                 {latestFee && <p className="mt-3 text-xs leading-5 text-[#52627A]">{latestFee.procedureName}{latestFee.tooth && <span> &middot; {latestFee.tooth}</span>}</p>}
@@ -316,7 +316,6 @@ export default function FeesPage() {
                     <dl>
                       <div><dt>Gross</dt><dd>{money(fee.amount)}</dd></div>
                       <div><dt>Discount</dt><dd>{money(fee.discount)}</dd></div>
-                      <div><dt>Patient ID</dt><dd>{fee.patientId}</dd></div>
                       {settlement && status === "partial" && (
                         <div><dt>Balance Due</dt><dd className="font-semibold text-rose-700">{money(settlement.balanceDue)}</dd></div>
                       )}
@@ -682,7 +681,6 @@ export default function FeesPage() {
               <div>
                 <span className="text-[#8291A7] font-mono text-[10px] block">PATIENT DETAILS</span>
                 <strong className="text-[#111C3A] font-semibold text-sm">{selectedInvoice.patientName}</strong>
-                <p className="text-[#64748B] text-[11px]">ID: {selectedInvoice.patientId}</p>
               </div>
               <div className="text-right">
                 <span className="text-[#8291A7] font-mono text-[10px] block">INVOICE NO & DATE</span>

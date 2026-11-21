@@ -13,6 +13,30 @@ const categories = [
   { id: "assistant", label: "Assistant" },
 ] as const;
 
+const samplePatient = "<sample patient>";
+
+function formatToolResponse(data: unknown, patientIds: ReadonlySet<string>) {
+  function hidePatientIds(this: Record<string, unknown>, key: string, value: unknown): unknown {
+    if (/^patient_?ids?$/i.test(key)) return undefined;
+    if (key === "_id" && typeof this.name === "string" && typeof this.phone === "string") return undefined;
+    if (typeof value !== "string") return value;
+    if (patientIds.has(value)) return "[hidden]";
+
+    if (key === "text" && this.type === "text") {
+      try {
+        const payload: unknown = JSON.parse(value);
+        return JSON.stringify(payload, hidePatientIds, 2);
+      } catch {
+        // MCP tools can return plain text as well as serialized JSON.
+      }
+    }
+
+    return value.replace(/\bPatient '[^']+' not found\./gi, "Patient not found.");
+  }
+
+  return JSON.stringify(data, hidePatientIds, 2);
+}
+
 export default function McpSettingsPage() {
   const { clinicProfile, patients, userEmail } = useClinic();
   const [mcpUrl, setMcpUrl] = useState("");
@@ -23,10 +47,11 @@ export default function McpSettingsPage() {
   const [selectedCategory, setSelectedCategory] = useState<typeof categories[number]["id"]>("all");
   const [selectedTool, setSelectedTool] = useState<McpToolDefinition>(DENTALLY_MCP_TOOLS.find((tool) => tool.name === "get_today_appointments") || DENTALLY_MCP_TOOLS[0]);
   const [argumentsText, setArgumentsText] = useState("{}");
-  const [testOutput, setTestOutput] = useState<unknown>(null);
+  const [testOutput, setTestOutput] = useState<string | null>(null);
   const [testError, setTestError] = useState("");
   const [loading, setLoading] = useState(false);
   const inspectorRef = useRef<HTMLElement>(null);
+  const samplePatientId = useRef<string | undefined>(undefined);
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -79,11 +104,12 @@ export default function McpSettingsPage() {
   const selectTool = (tool: McpToolDefinition) => {
     setSelectedTool(tool);
     const patient = patients[0];
+    samplePatientId.current = patient?._id;
     let parameters: Record<string, unknown> = {};
     if (tool.name === "get_clinic_profile") parameters = {};
     else if (tool.name === "update_clinic_profile") parameters = {};
     else if (tool.name === "search_patient") parameters = { query: patient?.name || "" };
-    else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history"].includes(tool.name)) parameters = { patientId: patient?._id || "" };
+    else if (["get_patient_details", "get_patient_history", "get_patient_balance", "get_patient_fees_history", "get_patient_appointment_history"].includes(tool.name)) parameters = { patientId: patient ? samplePatient : "" };
     else if (tool.name === "get_upcoming_appointments") parameters = { limit: 5 };
     else if (tool.name === "check_available_slots") parameters = { date: "today" };
     else if (tool.name === "get_patient_summary") parameters = { patientQuery: patient?.name || "" };
@@ -110,13 +136,14 @@ export default function McpSettingsPage() {
     setTestOutput(null);
     setTestError("");
     try {
+      if (parameters.patientId === samplePatient) parameters.patientId = samplePatientId.current ?? "";
       const response = await fetch(mcpUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: `mcp_req_${Date.now()}`, method: "tools/call", params: { name: selectedTool.name, arguments: parameters } }),
       });
       const data: unknown = await response.json();
-      setTestOutput(data);
+      setTestOutput(formatToolResponse(data, new Set(patients.map((patient) => patient._id))));
       if (!response.ok) setTestError(`Request failed (${response.status}). See the response below.`);
     } catch (error) {
       setTestError(error instanceof Error ? error.message : "Unable to run this tool.");
@@ -201,7 +228,7 @@ export default function McpSettingsPage() {
             <textarea id="tool-arguments" value={argumentsText} onChange={(event) => setArgumentsText(event.target.value)} disabled={loading} rows={5} spellCheck={false} className="mcp-arguments" />
             {testError && <p role="alert" className="mt-2 text-xs leading-5 text-rose-700">{testError}</p>}
             <div className="mt-3 flex justify-end"><button type="button" disabled={loading || !mcpUrl} onClick={runTestTool} className="workspace-button primary"><Play size={14} />{loading ? "Running..." : "Run Tool"}</button></div>
-            <div className="mt-5 border-t border-[#E4E9F0] pt-4"><h4 className="mb-2 text-xs font-semibold text-[#52627A]">Response</h4><div aria-busy={loading}>{loading ? <p role="status" className="mcp-response-placeholder">Running against clinic records...</p> : testOutput !== null ? <pre className="mcp-response" tabIndex={0} aria-label="MCP tool response">{JSON.stringify(testOutput, null, 2)}</pre> : <p className="mcp-response-placeholder">Select a tool and run it to see the response.</p>}</div></div>
+            <div className="mt-5 border-t border-[#E4E9F0] pt-4"><h4 className="mb-2 text-xs font-semibold text-[#52627A]">Response</h4><div aria-busy={loading}>{loading ? <p role="status" className="mcp-response-placeholder">Running against clinic records...</p> : testOutput !== null ? <pre className="mcp-response" tabIndex={0} aria-label="MCP tool response">{testOutput}</pre> : <p className="mcp-response-placeholder">Select a tool and run it to see the response.</p>}</div></div>
           </div>
         </section>
       </div>

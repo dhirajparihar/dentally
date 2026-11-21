@@ -121,7 +121,7 @@ export default function PatientsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, phone, allergy, tooth, note..."
-            aria-label="Search patients by name, phone, ID, or allergy"
+            aria-label="Search patients by name, phone, or allergy"
             className="h-11 w-full min-w-0 bg-transparent text-sm text-[#111C3A] outline-none placeholder:text-[#8291A7]"
           />
           {search && <button onClick={() => setSearch("")} aria-label="Clear search" className="flex shrink-0 items-center justify-center text-[#64748B]"><X size={16} /></button>}
@@ -168,7 +168,7 @@ export default function PatientsPage() {
         <div className="premium-card mx-auto max-w-xl space-y-3 p-6 text-center sm:p-8">
           <Users className="mx-auto h-8 w-8 text-[#0089A8]" aria-hidden="true" />
           <h2 className="text-base font-semibold">{patients.length === 0 ? "No patients yet" : "No patients found"}</h2>
-          <p className="text-sm text-[#64748B]">{patients.length === 0 ? "Add your first patient to get started." : "Try a name, phone, ID, or allergy."}</p>
+          <p className="text-sm text-[#64748B]">{patients.length === 0 ? "Add your first patient to get started." : "Try a name, phone, or allergy."}</p>
           {patients.length === 0 ? (
             <div className="flex flex-wrap justify-center gap-3 pt-1">
               <button onClick={() => setIsAddOpen(true)} className="action-primary"><Plus size={16} />Add Patient</button>
@@ -192,7 +192,6 @@ export default function PatientsPage() {
                       {patient.age !== undefined && <span>{patient.age}y</span>}
                       {patient.bloodGroup && <span>Blood: {patient.bloodGroup}</span>}
                       {patient.registrationStatus === "provisional" && <span className="text-amber-800">Incomplete Profile</span>}
-                      <span className="break-all text-[#8291A7]">{patient._id}</span>
                     </p>
                   </div>
                 </div>

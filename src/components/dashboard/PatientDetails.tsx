@@ -284,9 +284,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               <button type="button" onClick={onBack} className="detail-back" aria-label="Back to patients"><ArrowLeft size={16} /></button>
               <h2 className="min-w-0 break-words text-xl font-bold text-[#111C3A] sm:text-2xl">{patient.name}</h2>
             </div>
-            <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-[#64748B]">
-              {demographics && <span>{demographics}</span>}<span className="break-all">ID: {patient._id}</span>
-            </p>
+            {demographics && <p className="mt-1 text-xs text-[#64748B]">{demographics}</p>}
             {isProvisional && (
               <button type="button" onClick={openProfileEditor} className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-900">
                 <Edit3 size={14} aria-hidden="true" />Incomplete Profile
@@ -1170,7 +1168,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               <div>
                 <span className="text-[#8291A7] font-mono text-[10px] block">PATIENT DETAILS</span>
                 <strong className="text-[#111C3A] font-semibold text-sm">{patient.name}</strong>
-                <p className="text-[#64748B] text-[11px]">{demographics && <>{demographics} &middot; </>}ID: {patient._id}</p>
+                {demographics && <p className="text-[#64748B] text-[11px]">{demographics}</p>}
                 <p className="text-[#8291A7] text-[11px] font-mono">{patient.phone}</p>
               </div>
               <div className="text-right">

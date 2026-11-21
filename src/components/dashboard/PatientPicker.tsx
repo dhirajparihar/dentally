@@ -166,7 +166,7 @@ export function PatientPicker({ patients, value, onChange, onAddPatient, showPho
                   onClick={() => selectPatient(patient)}
                 >
                   <span className="min-w-0 break-words font-semibold">{patient.name}</span>
-                  {showPhone && <span className="break-all text-[11px] text-[#64748B]">{patient.phone || patient._id}</span>}
+                  {showPhone && patient.phone && <span className="break-all text-[11px] text-[#64748B]">{patient.phone}</span>}
                 </li>
               ))}
             </ul>
@@ -174,7 +174,7 @@ export function PatientPicker({ patients, value, onChange, onAddPatient, showPho
           </div>
         )}
       </div>
-      {showPhone && selected && <p className="text-[11px] text-[#64748B]">{selected.phone || selected._id}</p>}
+      {showPhone && selected?.phone && <p className="text-[11px] text-[#64748B]">{selected.phone}</p>}
       {needsSelection && <p id={`${id}-selection`} className="text-[11px] text-[#64748B]">{matches.length ? "Select a patient from the list." : "No matching patients."}</p>}
     </div>
   );
