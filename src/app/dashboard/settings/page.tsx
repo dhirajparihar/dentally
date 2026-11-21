@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Building2,
   User,
@@ -16,10 +14,7 @@ import {
   CheckCircle2,
   Receipt,
   Loader2,
-  Sparkles,
-  ArrowRight,
   AlertCircle,
-  X,
   CreditCard,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
@@ -27,14 +22,8 @@ import { AppointmentTreatmentsSettings } from "@/components/dashboard/Appointmen
 
 type AutoSaveStatus = "saved" | "saving" | "unsaved" | "error";
 
-function ClinicSettingsContent() {
-  const searchParams = useSearchParams();
+export default function ClinicSettingsPage() {
   const { clinicProfile, updateClinicProfile, loading, userEmail } = useClinic();
-
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const isFirstTime =
-    !bannerDismissed &&
-    (searchParams?.get("setup") === "first-time" || clinicProfile?.isConfigured === false);
 
   const [form, setForm] = useState({
     name: clinicProfile?.name || "Dentally Clinic",
@@ -102,14 +91,6 @@ function ClinicSettingsContent() {
         await updateClinicProfile(dataToSave);
         lastSavedJsonRef.current = currentJson;
         setSaveStatus("saved");
-
-        // Vanish the first-time setup banner upon successful save
-        setBannerDismissed(true);
-        if (typeof window !== "undefined" && window.location.search.includes("setup=")) {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("setup");
-          window.history.replaceState({}, "", url.pathname);
-        }
       } catch (err) {
         console.error("Auto-save failed:", err);
         setSaveStatus("error");
@@ -204,51 +185,11 @@ function ClinicSettingsContent() {
           {saveStatus === "error" && (
             <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-50 text-rose-700 text-xs font-medium border border-rose-200">
               <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-              <span>Save error, retrying...</span>
+              <span>Clinic settings could not be saved</span>
             </span>
           )}
         </div>
       </div>
-
-      {/* First-Time Dentist Setup Banner (Dismissible) */}
-      {isFirstTime && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-[#EDF7FA] to-[#E5F5F9] border border-[#B3E1ED] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
-          <div className="space-y-1 pr-4">
-            <div className="flex items-center gap-2 text-[#0089A8] font-bold text-sm">
-              <Sparkles className="w-4 h-4" />
-              <span>Welcome Dr. {form.dentistName || "Doctor"}! Set up your clinic</span>
-            </div>
-            <p className="text-xs text-[#3D5450] max-w-xl leading-relaxed">
-              Enter your clinic name, medical registration number, and chairside UPI ID.
-              <strong> Changes save automatically as you type.</strong>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-xl bg-[#0089A8] hover:bg-[#00738E] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs"
-            >
-              <span>Go to Dashboard</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setBannerDismissed(true);
-                if (typeof window !== "undefined" && window.location.search.includes("setup=")) {
-                  const url = new URL(window.location.href);
-                  url.searchParams.delete("setup");
-                  window.history.replaceState({}, "", url.pathname);
-                }
-              }}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-colors"
-              title="Dismiss banner"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Main Settings Form and Live Preview Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -544,23 +485,5 @@ function ClinicSettingsContent() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function ClinicSettingsPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="space-y-6 animate-pulse">
-          <div className="h-24 bg-white rounded-[22px] border border-[#E4E9F0]" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 h-96 bg-white rounded-[22px] border border-[#E4E9F0]" />
-            <div className="h-96 bg-white rounded-[22px] border border-[#E4E9F0]" />
-          </div>
-        </div>
-      }
-    >
-      <ClinicSettingsContent />
-    </Suspense>
   );
 }

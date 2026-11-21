@@ -8,6 +8,8 @@ import { verifyDoctorMcpToken } from "@/lib/mcp/token";
 import { connectDB } from "@/lib/db/connect";
 import { ClinicProfileModel } from "@/lib/db/models/ClinicProfile";
 import McpLogModel from "@/lib/db/models/McpLog";
+import { isClinicConfigured } from "@/lib/clinicOnboarding";
+import { clinicSetupRequired } from "@/lib/db/clinicOnboarding";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 10; // Vercel Free Tier max function timeout
@@ -121,10 +123,12 @@ export async function POST(request: NextRequest) {
 
     // Connect DB & verify tenant active status + token revocation state
     let clinic = null;
+    let clinicUnavailable = false;
     try {
-      await connectDB();
-      clinic = await ClinicProfileModel.findOne({ dentistEmail: email.toLowerCase() }).lean();
+      clinicUnavailable = !(await connectDB());
+      if (!clinicUnavailable) clinic = await ClinicProfileModel.findOne({ dentistEmail: email.toLowerCase() }).lean().exec();
     } catch (dbErr) {
+      clinicUnavailable = true;
       console.warn("[MCP Gateway] DB lookup error:", dbErr);
     }
 
@@ -200,6 +204,16 @@ export async function POST(request: NextRequest) {
 
     // Call a specific dental tool
     if (method === "tools/call") {
+      if (clinicUnavailable || !isClinicConfigured(clinic)) {
+        return respond({
+          jsonrpc: "2.0",
+          id: id ?? null,
+          error: {
+            code: clinicUnavailable ? -32000 : -32003,
+            message: clinicUnavailable ? "Clinic access could not be verified. Please try again." : clinicSetupRequired,
+          },
+        }, clinicUnavailable ? 503 : 403);
+      }
       const toolName = params?.name;
       const toolArguments = params?.arguments || {};
       const startTime = Date.now();

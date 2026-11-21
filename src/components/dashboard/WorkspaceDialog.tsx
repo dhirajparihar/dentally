@@ -4,7 +4,7 @@ import { type ReactNode, useLayoutEffect, useRef } from "react";
 
 export function WorkspaceDialog({ label, onDismiss, dismissOnBackdrop = false, children }: {
   label: string;
-  onDismiss: () => void;
+  onDismiss?: () => void;
   dismissOnBackdrop?: boolean;
   children: ReactNode;
 }) {
@@ -24,10 +24,10 @@ export function WorkspaceDialog({ label, onDismiss, dismissOnBackdrop = false, c
       className="mobile-dialog workspace-dialog"
       onCancel={(event) => {
         event.preventDefault();
-        onDismiss();
+        onDismiss?.();
       }}
       onClick={(event) => {
-        if (dismissOnBackdrop && event.target === event.currentTarget) onDismiss();
+        if (dismissOnBackdrop && event.target === event.currentTarget) onDismiss?.();
       }}
     >
       {children}

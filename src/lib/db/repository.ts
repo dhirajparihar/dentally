@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { connection, mongo, type ClientSession } from "mongoose";
 import { connectDB } from "./connect";
+import { isClinicConfigured } from "@/lib/clinicOnboarding";
 import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { patientSchema, provisionalPatientUpdateSchema } from "@/lib/validations/clinic";
 import PatientModel from "./models/Patient";
@@ -235,13 +236,7 @@ export async function getClinicData(dentistEmail?: string): Promise<{
       const mappedFees = (fees as any[]).map((f) => ({ ...f, _id: String(f._id) }));
       const mappedPayments = (payments as any[]).map((p) => ({ ...p, _id: String(p._id) }));
 
-      const isConfigured = Boolean(
-        profileDoc &&
-          (profileDoc.isConfigured === true ||
-            (profileDoc.isConfigured !== false &&
-              ((profileDoc.regNo && profileDoc.regNo !== "DCI-ONLINE") ||
-                (profileDoc.upiId && profileDoc.upiId !== "dentally@upi"))))
-      );
+      const isConfigured = isClinicConfigured(profileDoc);
 
       const resolvedProfile: ClinicProfile = profileDoc
         ? {

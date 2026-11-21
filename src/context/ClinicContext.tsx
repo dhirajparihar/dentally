@@ -25,7 +25,9 @@ export interface ClinicContextType {
   loading: boolean;
   isSyncing: boolean;
   userEmail: string;
-  refreshClinic: () => Promise<void>;
+  clinicConfigured: boolean | undefined;
+  clinicLoadError: string | undefined;
+  refreshClinic: () => Promise<boolean>;
   addPatient: (patient: Patient) => Promise<boolean>;
   updatePatient: (patient: Patient) => Promise<boolean>;
   deletePatient: (patientId: string) => Promise<boolean>;
@@ -53,7 +55,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const appointmentRevision = useRef(0);
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clinicAccess, setClinicAccess] = useState<{ email: string; configured?: boolean; error?: string }>();
+  const access = clinicAccess?.email === userEmail ? clinicAccess : undefined;
+  const loading = status === "loading" || (status === "authenticated" && Boolean(userEmail) && !access);
+  const clinicRead = useRef(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [clinicProfile, setClinicProfile] = useState<ClinicProfile>(() => ({
     ...defaultClinicProfile,
@@ -84,32 +89,47 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Fetch current state from backend scoped to the doctor's email
   const refreshClinic = useCallback(async (appointmentsOnly = false) => {
+    if (!userEmail) return false;
+    const read = appointmentsOnly ? clinicRead.current : ++clinicRead.current;
     const revisionAtStart = appointmentRevision.current;
+    let forbidden = false;
     try {
       const res = await fetch("/api/clinic", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (revisionAtStart === appointmentRevision.current) setAppointments(data.appointments || []);
-        if (appointmentsOnly) return;
+      const data = await res.json();
+      if (read !== clinicRead.current) return false;
+      if (!res.ok) {
+        forbidden = res.status === 401 || res.status === 403;
+        throw new Error(typeof data.error === "string" ? data.error : "Unable to load your clinic. Please try again.");
+      }
+      const configured = data.clinicProfile?.isConfigured;
+      if (typeof configured !== "boolean") throw new Error("Unable to verify clinic setup. Please try again.");
+      if (revisionAtStart === appointmentRevision.current) setAppointments(data.appointments || []);
+      if (appointmentsOnly && !configured) setClinicAccess({ email: userEmail, configured });
+      if (!appointmentsOnly) {
         setPatients(data.patients || []);
         setFees(data.fees || []);
         setPayments(data.payments || []);
-        if (data.clinicProfile) {
-          setClinicProfile((prev) => ({
-            ...prev,
-            ...data.clinicProfile,
-            dentistName:
-              data.clinicProfile.dentistName && data.clinicProfile.dentistName !== "Doctor"
-                ? data.clinicProfile.dentistName
-                : (session?.user?.name || prev.dentistName || "Doctor"),
-            email: userEmail || data.clinicProfile.email,
-          }));
-        }
+        setClinicProfile((prev) => ({
+          ...prev,
+          ...data.clinicProfile,
+          dentistName:
+            data.clinicProfile.dentistName && data.clinicProfile.dentistName !== "Doctor"
+              ? data.clinicProfile.dentistName
+              : (session?.user?.name || prev.dentistName || "Doctor"),
+          email: userEmail,
+        }));
+        setClinicAccess({ email: userEmail, configured });
       }
+      return configured;
     } catch (err) {
-      console.warn("Clinic fetch error:", err);
-    } finally {
-      if (!appointmentsOnly) setLoading(false);
+      if (read === clinicRead.current && (!appointmentsOnly || forbidden)) {
+        setClinicAccess((previous) => ({
+          email: userEmail,
+          configured: !forbidden && previous?.email === userEmail ? previous.configured : undefined,
+          error: err instanceof Error ? err.message : "Unable to load your clinic. Please try again.",
+        }));
+      }
+      return false;
     }
   }, [session?.user?.name, userEmail]);
 
@@ -248,9 +268,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateClinicProfile = useCallback(async (profileData: Partial<ClinicProfile>) => {
-    setClinicProfile((prev) => ({ ...prev, ...profileData, email: userEmail, isConfigured: true }));
-    await postMutation({ action: "update_clinic_profile", data: { ...profileData, email: userEmail } });
-  }, [postMutation, userEmail]);
+    if (!(await postMutation({ action: "update_clinic_profile", data: profileData }))) {
+      throw new Error("Unable to save clinic settings. Please try again.");
+    }
+  }, [postMutation]);
 
   const saveAppointmentTreatments = (appointmentTreatments: AppointmentTreatment[]) =>
     postMutation({ action: "update_clinic_profile", data: { appointmentTreatments } });
@@ -266,6 +287,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         loading,
         isSyncing,
         userEmail,
+        clinicConfigured: access?.configured,
+        clinicLoadError: access?.error,
         refreshClinic,
         addPatient,
         updatePatient,

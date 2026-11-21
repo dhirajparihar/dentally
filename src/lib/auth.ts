@@ -14,7 +14,7 @@ const adminEmails = (process.env.ADMIN_EMAILS || "")
   .filter(Boolean);
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET || "dentally-secret-key-change-in-production-2026",
+  secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
@@ -37,9 +37,10 @@ export const authOptions: NextAuthOptions = {
       : []),
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       if (!user.email) return false;
-      const normalizedEmail = user.email.toLowerCase();
+      if (account?.provider === "google" && (!profile || !("email_verified" in profile) || profile.email_verified !== true)) return false;
+      const normalizedEmail = user.email.trim().toLowerCase();
 
       // Superadmins always have access
       const isSuperAdmin = adminEmails.includes(normalizedEmail);

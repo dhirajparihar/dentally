@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { bookPatientAppointment, PatientIdentityError } from "@/lib/bookPatientAppointment";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
+import { clinicOnboardingSchema } from "@/lib/clinicOnboarding";
+import { ClinicAccessError, completeClinicOnboarding, getClinicOnboardingStatus, requireCompletedClinic } from "@/lib/db/clinicOnboarding";
 import {
   AppointmentNotFoundError,
   AppointmentTimeError,
@@ -37,14 +39,15 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const requestedEmail = searchParams.get("email");
 
-    if (!session?.user?.email) {
+    const identity = z.email().safeParse(session?.user?.email?.trim().toLowerCase());
+    if (!identity.success) {
       return NextResponse.json(
         { error: "Unauthorized: Please sign in to access clinic records." },
         { status: 401 }
       );
     }
 
-    const targetEmail = session.user.email.toLowerCase().trim();
+    const targetEmail = identity.data;
     if (requestedEmail && requestedEmail.toLowerCase().trim() !== targetEmail) {
       return NextResponse.json(
         { error: "Forbidden: You cannot access clinical records belonging to another dentist account." },
@@ -52,7 +55,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const state = await getClinicData(targetEmail);
+    const configured = await getClinicOnboardingStatus(targetEmail);
+    const state = configured
+      ? await getClinicData(targetEmail)
+      : { patients: [], appointments: [], fees: [], payments: [], clinicProfile: { email: targetEmail, isConfigured: false } };
+    if (configured && (!("storage" in state) || state.storage !== "mongodb" || !state.clinicProfile.isConfigured)) {
+      throw new ClinicAccessError("Clinic details are unavailable. Please try again.", 503);
+    }
     return NextResponse.json(state, {
       status: 200,
       headers: {
@@ -60,6 +69,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (err: any) {
+    if (err instanceof ClinicAccessError) return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json(
       { error: err.message || "Failed to fetch clinic state" },
       { status: 500 }
@@ -75,15 +85,27 @@ export async function POST(request: NextRequest) {
 
     // Secure Authorization:
     // Enforce mutations to the authenticated user's email only.
-    let email: string;
-    if (session?.user?.email) {
-      email = session.user.email.toLowerCase().trim();
-    } else {
+    const identity = z.email().safeParse(session?.user?.email?.trim().toLowerCase());
+    if (!identity.success) {
       return NextResponse.json(
         { error: "Unauthorized: Please sign in with Google to modify clinic records." },
         { status: 401 }
       );
     }
+    const email = identity.data;
+    if (action === "complete_onboarding") {
+      const setup = clinicOnboardingSchema.safeParse(data);
+      if (!setup.success) {
+        return NextResponse.json(
+          { error: "Review the clinic details below.", fieldErrors: z.flattenError(setup.error).fieldErrors },
+          { status: 400 }
+        );
+      }
+      await completeClinicOnboarding(email, setup.data);
+      return NextResponse.json({ success: true });
+    }
+
+    await requireCompletedClinic(email);
     const doctorName = session?.user?.name || "Doctor";
     let bookedAppointment: Appointment | undefined;
 
@@ -169,8 +191,8 @@ export async function POST(request: NextRequest) {
       }
 
       case "update_clinic_profile": {
-        const validated = clinicProfileSchema.parse(data);
-        await saveClinicProfile(validated as Partial<ClinicProfile>, email);
+        const validated = clinicProfileSchema.omit({ email: true, isConfigured: true }).parse(data);
+        await saveClinicProfile({ ...validated, email } as Partial<ClinicProfile>, email);
         break;
       }
 
@@ -184,6 +206,7 @@ export async function POST(request: NextRequest) {
     const updated = await getClinicData(email);
     return NextResponse.json({ ...updated, bookedAppointment }, { status: 200 });
   } catch (err: any) {
+    if (err instanceof ClinicAccessError) return NextResponse.json({ error: err.message }, { status: err.status });
     if (err instanceof z.ZodError) {
       return NextResponse.json(
         { error: `Validation error: ${err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ")}` },

@@ -4,7 +4,6 @@ import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, CreditCard, IndianRupee, Phone,
   Plus, QrCode, RefreshCw, Share2, User, X,
@@ -84,23 +83,6 @@ export default function DashboardOverviewPage() {
     bookAppointment,
     recordPayment,
   } = useClinic();
-
-  const router = useRouter();
-
-  // If a new dentist has not configured their clinic profile yet, redirect to Settings once
-  useEffect(() => {
-    if (!loading && clinicProfile && clinicProfile.isConfigured === false) {
-      const alreadyRedirected =
-        typeof window !== "undefined" &&
-        sessionStorage.getItem("dentally_setup_visited");
-      if (!alreadyRedirected) {
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem("dentally_setup_visited", "true");
-        }
-        router.replace("/dashboard/settings?setup=first-time");
-      }
-    }
-  }, [loading, clinicProfile, router]);
 
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
@@ -206,25 +188,6 @@ export default function DashboardOverviewPage() {
 
   return (
     <div className="overview space-y-5 sm:space-y-6">
-      {/* Unconfigured Clinic Profile Warning */}
-      {!loading && clinicProfile && clinicProfile.isConfigured === false && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              Your clinic profile is not yet configured. Set up your clinic name, doctor credentials, and UPI ID to ensure receipts and AI booking work seamlessly.
-            </span>
-          </div>
-          <Link
-            href="/dashboard/settings"
-            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs transition-colors shrink-0 flex items-center justify-center gap-1.5"
-          >
-            <span>Complete Setup</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      )}
-
       <div>
         <h2 className="text-xl font-bold leading-tight sm:text-2xl">{greeting}</h2>
         <p className="mt-1 text-sm text-[#64748B]">

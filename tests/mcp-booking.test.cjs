@@ -36,11 +36,16 @@ const mongoose = require("mongoose");
 const PatientModel = require("../src/lib/db/models/Patient").default;
 const AppointmentModel = require("../src/lib/db/models/Appointment").default;
 const { executeMcpTool } = require("../src/lib/mcp/server");
+const onboarding = require("../src/lib/db/clinicOnboarding");
+const configuredClinics = new Set();
 let dashboardEmail;
 const load = Module._load;
 Module._load = function (name, ...args) {
   if (name === "next-auth") return { getServerSession: async () => ({ user: { email: dashboardEmail } }) };
   if (name === "@/lib/auth") return { authOptions: {} };
+  if (!testUri && name === "@/lib/db/clinicOnboarding") {
+    return { ...onboarding, requireCompletedClinic: async (email) => assert.ok(configuredClinics.has(email)) };
+  }
   return load.call(this, name, ...args);
 };
 const { POST: clinicPost } = require("../src/app/api/clinic/route");
@@ -77,6 +82,15 @@ const book = (email, overrides = {}) => executeMcpTool("book_appointment", {
 const register = async (email, overrides = {}) =>
   (await executeMcpTool("add_patient", { ...patient, ...overrides }, email)).patient;
 const dashboardMutation = async (email, action, data) => {
+  if (!configuredClinics.has(email)) {
+    if (testUri) {
+      await onboarding.completeClinicOnboarding(email, {
+        name: "Booking Test Clinic", phone: "+91 9000000100", address: "Test address",
+        dentistName: "Test Dentist", qualification: "BDS", regNo: "TEST-01",
+      });
+    }
+    configuredClinics.add(email);
+  }
   dashboardEmail = email;
   const response = await clinicPost({ json: async () => ({ action, data }) });
   return { status: response.status, body: await response.json() };

@@ -152,6 +152,7 @@ body:has(.workspace-sidebar[data-open="true"], .mobile-dialog:modal) { overflow:
 .workspace-dialog { position: fixed; inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; padding-inline: 1rem; color: inherit; background: transparent; overflow: auto; }
 .workspace-dialog[open] { display: flex; justify-content: center; }
 .workspace-dialog::backdrop { background: rgb(17 28 58 / 75%); backdrop-filter: blur(4px); }
+.workspace-dialog > .clinic-onboarding-panel { display: flex; flex-direction: column; width: 100%; max-width: 36rem; overflow: hidden; padding: 0; }
 @media (max-width: 639px) {
   .dashboard-shell header { padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: 12px; }
   .dashboard-shell :is(button, a[title], a[aria-label], .small-outline, .view-pill) { min-height: var(--workspace-touch-size); }
