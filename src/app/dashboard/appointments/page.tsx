@@ -10,7 +10,6 @@ import {
   ChevronRight,
   User,
   ArrowRight,
-  MoreHorizontal,
 } from "lucide-react";
 import type { Appointment } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
@@ -18,6 +17,7 @@ import { useClinic } from "@/context/ClinicContext";
 import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
+import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
 import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
 
 interface AppointmentActionsProps {
@@ -33,24 +33,14 @@ interface AppointmentActionsProps {
 
 function AppointmentActions({ appointment, reminderUrl, careUrl, onView, onReschedule, onReopen, canReopen, onCancel }: AppointmentActionsProps) {
   return (
-    <details className="appointment-menu" onToggle={(event) => {
-      if (!event.currentTarget.open) return;
-      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => {
-        if (menu !== event.currentTarget) menu.open = false;
-      });
-    }}>
-      <summary aria-label={`More actions for ${appointment.patientName}`}><MoreHorizontal size={20} /></summary>
-      <div className="appointment-menu-items" role="group" aria-label={`Actions for ${appointment.patientName}`} onClick={(event) => {
-        if ((event.target as Element).closest("button, a")) event.currentTarget.closest("details")?.removeAttribute("open");
-      }}>
-        <button type="button" onClick={onView}><User size={15} />View Patient</button>
-        <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
-        <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
-        {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
-        {canReopen && appointment.status !== "scheduled" && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
-        {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
-      </div>
-    </details>
+    <AppointmentMenu patientName={appointment.patientName}>
+      <button type="button" onClick={onView}><User size={15} />View Patient</button>
+      <a href={appointment.status === "completed" ? careUrl : reminderUrl} target="_blank" rel="noopener noreferrer"><Share2 size={15} />{appointment.status === "completed" ? "WhatsApp Care" : "WhatsApp Reminder"}</a>
+      <a href={`tel:${appointment.patientPhone}`}><Phone size={15} />Call Patient</a>
+      {appointment.status === "scheduled" && <button type="button" onClick={onReschedule}><Calendar size={15} />Reschedule</button>}
+      {canReopen && appointment.status !== "scheduled" && <button type="button" onClick={onReopen}><ArrowRight size={15} />Reopen Visit</button>}
+      {appointment.status === "scheduled" && <button type="button" onClick={onCancel} className="text-rose-700"><X size={15} />Cancel Appointment</button>}
+    </AppointmentMenu>
   );
 }
 
@@ -77,26 +67,6 @@ export default function AppointmentsPage() {
   const router = useRouter();
   const [bookingError, setBookingError] = useState("");
   const handledCalendarLink = useRef(false);
-
-  useEffect(() => {
-    const closeOutside = (event: PointerEvent) => {
-      if ((event.target as Element).closest(".appointment-menu")) return;
-      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => { menu.open = false; });
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      document.querySelectorAll<HTMLDetailsElement>("details.appointment-menu[open]").forEach((menu) => {
-        menu.open = false;
-        menu.querySelector<HTMLElement>("summary")?.focus();
-      });
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, []);
 
   useEffect(() => {
     if (loading || handledCalendarLink.current) return;

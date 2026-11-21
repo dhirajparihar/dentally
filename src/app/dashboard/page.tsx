@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, CreditCard, IndianRupee, MoreHorizontal, Phone,
+  AlertCircle, ArrowRight, Calendar, Check, CheckCircle2, CreditCard, IndianRupee, Phone,
   Plus, QrCode, RefreshCw, Share2, User, X,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
@@ -20,6 +20,7 @@ import {
 } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
+import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
 import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
 import type { RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 
@@ -327,59 +328,36 @@ export default function DashboardOverviewPage() {
 
               return (
                 <AppointmentCard key={appointment._id} appointment={appointment} clock={clock} patientHref={dossierUrl} showRescheduled replacement={replacement}>
-                  <details
-                    name="overview-appointment-actions"
-                    className="appointment-menu"
-                    onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Escape" || !event.currentTarget.open) return;
-                      event.currentTarget.open = false;
-                      event.currentTarget.querySelector("summary")?.focus();
-                    }}
-                  >
-                    <summary aria-label={`More actions for ${appointment.patientName}`}>
-                      <MoreHorizontal size={20} aria-hidden="true" />
-                    </summary>
-                    <div className="appointment-menu-items" role="group" aria-label={`Actions for ${appointment.patientName}`} onClick={(event) => {
-                      if (!(event.target as Element).closest("button, a")) return;
-                      const menu = event.currentTarget.closest("details");
-                      if (menu) {
-                        menu.open = false;
-                        menu.querySelector("summary")?.focus();
-                      }
-                    }}>
-                      <a href={`tel:${appointment.patientPhone}`}><Phone size={15} aria-hidden="true" />Call Patient</a>
-                      {appointment.status === "scheduled" && (
-                        <>
-                          <a href={getReminderUrl(appointment)} target="_blank" rel="noopener noreferrer"><Share2 size={15} aria-hidden="true" />WhatsApp Reminder</a>
-                          <button type="button" onClick={() => cancelAppointment(appointment._id)} className="text-rose-700">
-                            <X size={15} aria-hidden="true" />Cancel Appointment
-                          </button>
-                        </>
-                      )}
-                      {appointment.status === "completed" && (
-                        <Link href={followUp ? `${dossierUrl}?visit=${encodeURIComponent(followUp._id)}` : `${dossierUrl}?followUp=${visitId}`}>
-                          <Calendar size={15} aria-hidden="true" />{followUp ? "View Follow-Up" : "Book Follow-Up"}
-                        </Link>
-                      )}
-                      {appointment.status === "missed" && !appointment.rescheduledToAppointmentId && (
-                        <button type="button" aria-haspopup="dialog" onClick={() => setRescheduleAppointment(appointment)}>
-                          <Calendar size={15} aria-hidden="true" />Reschedule
+                  <AppointmentMenu patientName={appointment.patientName}>
+                    <a href={`tel:${appointment.patientPhone}`}><Phone size={15} aria-hidden="true" />Call Patient</a>
+                    {appointment.status === "scheduled" && (
+                      <>
+                        <a href={getReminderUrl(appointment)} target="_blank" rel="noopener noreferrer"><Share2 size={15} aria-hidden="true" />WhatsApp Reminder</a>
+                        <button type="button" onClick={() => cancelAppointment(appointment._id)} className="text-rose-700">
+                          <X size={15} aria-hidden="true" />Cancel Appointment
                         </button>
-                      )}
-                      {appointment.status === "cancelled" && (
-                        canReopen ? (
-                          <button type="button" onClick={() => bookAppointment({ ...appointment, status: "scheduled" })}>
-                            <RefreshCw size={15} aria-hidden="true" />Reopen Appointment
-                          </button>
-                        ) : (
-                          <Link href={appointmentsUrl}><Calendar size={15} aria-hidden="true" />Reschedule</Link>
-                        )
-                      )}
-                    </div>
-                  </details>
+                      </>
+                    )}
+                    {appointment.status === "completed" && (
+                      <Link href={followUp ? `${dossierUrl}?visit=${encodeURIComponent(followUp._id)}` : `${dossierUrl}?followUp=${visitId}`}>
+                        <Calendar size={15} aria-hidden="true" />{followUp ? "View Follow-Up" : "Book Follow-Up"}
+                      </Link>
+                    )}
+                    {appointment.status === "missed" && !appointment.rescheduledToAppointmentId && (
+                      <button type="button" aria-haspopup="dialog" onClick={() => setRescheduleAppointment(appointment)}>
+                        <Calendar size={15} aria-hidden="true" />Reschedule
+                      </button>
+                    )}
+                    {appointment.status === "cancelled" && (
+                      canReopen ? (
+                        <button type="button" onClick={() => bookAppointment({ ...appointment, status: "scheduled" })}>
+                          <RefreshCw size={15} aria-hidden="true" />Reopen Appointment
+                        </button>
+                      ) : (
+                        <Link href={appointmentsUrl}><Calendar size={15} aria-hidden="true" />Reschedule</Link>
+                      )
+                    )}
+                  </AppointmentMenu>
                 </AppointmentCard>
               );
             })}
