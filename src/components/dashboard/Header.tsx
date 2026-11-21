@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Calendar, LogOut, ShieldCheck } from "lucide-react";
@@ -8,12 +8,13 @@ import { useSession, signOut } from "next-auth/react";
 import { useClinic } from "@/context/ClinicContext";
 
 interface HeaderProps {
+  mobileMenuOpen: boolean;
   onOpenMobileMenu: () => void;
   onBookAppointment: () => void;
   title?: string;
 }
 
-const bookingButtonClass = "px-3.5 sm:px-4 py-2 rounded-full bg-[#0089A8] text-white text-xs sm:text-sm font-semibold hover:bg-[#00738E] transition-all flex items-center gap-1.5 shadow-xs";
+const bookingButtonClass = "px-3.5 sm:px-4 py-2 rounded-full bg-[var(--workspace-accent)] text-white text-xs sm:text-sm font-semibold hover:bg-[var(--workspace-accent-hover)] transition-colors flex items-center gap-1.5 shadow-xs";
 const bookingButtonLabel = (
   <>
     <Calendar className="w-4 h-4" aria-hidden="true" />
@@ -22,7 +23,7 @@ const bookingButtonLabel = (
   </>
 );
 
-export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointment, title }) => {
+export const Header: React.FC<HeaderProps> = ({ mobileMenuOpen, onOpenMobileMenu, onBookAppointment, title }) => {
   const pathname = usePathname();
   const sectionTitles: Record<string, string> = {
     patients: "Patients",
@@ -35,6 +36,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
   const { isSyncing, clinicProfile, loading } = useClinic();
   const { data: session, status } = useSession();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showProfileMenu) return;
+    const dismissOutside = (event: Event) => {
+      if (event.target instanceof Node && !accountRef.current?.contains(event.target)) setShowProfileMenu(false);
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+    };
+  }, [showProfileMenu]);
 
   const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
   const userEmail = status === "loading" ? "" : (clinicProfile.email || session?.user?.email || "");
@@ -57,11 +72,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
           <button
             onClick={onOpenMobileMenu}
             aria-label="Open navigation"
+            aria-controls="dashboard-navigation"
+            aria-expanded={mobileMenuOpen}
             className="lg:hidden p-2 rounded-xl text-[#52627A] hover:bg-[#EDF7FA]"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <h1 className="min-w-0 truncate font-bold text-sm min-[400px]:text-base sm:text-xl text-[#111C3A] tracking-tight font-sans">
+          <h1 className="workspace-title">
             {pageTitle}
           </h1>
         </div>
@@ -96,12 +113,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
           </button>
 
           {/* User Profile Avatar with Google Badge & Sign Out Dropdown */}
-          <div className="relative pl-2 border-l border-[#E4E9F0]">
+          <div ref={accountRef} className="relative pl-2 border-l border-[#E4E9F0]" onKeyDown={(event) => {
+            if (event.key !== "Escape" || !showProfileMenu) return;
+            setShowProfileMenu(false);
+            event.currentTarget.querySelector("button")?.focus();
+          }}>
             <button
               onClick={() => setShowProfileMenu((prev) => !prev)}
               className="flex items-center gap-2 rounded-full focus:outline-none"
               title={`${userName} (${userEmail})`}
               aria-label="Account menu" aria-expanded={showProfileMenu}
+              aria-controls="dashboard-account-panel"
             >
               {userImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -119,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onBookAppointm
 
             {/* Profile Dropdown */}
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-[#E4E9F0] shadow-xl p-3 z-50 text-xs animate-in fade-in zoom-in-95">
+              <div id="dashboard-account-panel" className="workspace-account-panel absolute right-0 mt-2 bg-white rounded-2xl border border-[#E4E9F0] shadow-xl p-3 z-50 text-xs animate-in fade-in zoom-in-95">
                 <div className="pb-2.5 mb-2 border-b border-[#E4E9F0]">
                   <div className="font-bold text-[#111C3A] truncate">{userName}</div>
                   <div className="text-[11px] text-[#52627A] font-mono truncate">{userEmail}</div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Calendar,
   X,
@@ -18,7 +19,10 @@ import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
-import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
+const RescheduleAppointmentDialog = dynamic(
+  () => import("@/components/dashboard/RescheduleAppointmentDialog").then((mod) => mod.RescheduleAppointmentDialog),
+  { ssr: false }
+);
 
 interface AppointmentActionsProps {
   appointment: Appointment;

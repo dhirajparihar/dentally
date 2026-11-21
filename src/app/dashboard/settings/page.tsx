@@ -263,10 +263,10 @@ function ClinicSettingsContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-clinic-dental-studio-name" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Clinic / Dental Studio Name <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <input id="clinic-settings-clinic-dental-studio-name"
                   type="text"
                   required
                   value={form.name}
@@ -278,12 +278,12 @@ function ClinicSettingsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-clinic-phone-whatsapp-line" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Clinic Phone / WhatsApp Line <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
-                  <input
+                  <input id="clinic-settings-clinic-phone-whatsapp-line"
                     type="text"
                     required
                     value={form.phone}
@@ -296,12 +296,12 @@ function ClinicSettingsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-account-email" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Account Email
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
-                  <input
+                  <input id="clinic-settings-account-email"
                     type="email"
                     readOnly
                     value={form.email}
@@ -312,12 +312,12 @@ function ClinicSettingsContent() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-physical-address" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Physical Address <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
-                  <input
+                  <input id="clinic-settings-physical-address"
                     type="text"
                     required
                     value={form.address}
@@ -340,10 +340,10 @@ function ClinicSettingsContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-doctor-name" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Doctor Name <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <input id="clinic-settings-doctor-name"
                   type="text"
                   required
                   value={form.dentistName}
@@ -355,12 +355,12 @@ function ClinicSettingsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-degree-specialization" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Degree & Specialization <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Award className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
-                  <input
+                  <input id="clinic-settings-degree-specialization"
                     type="text"
                     required
                     value={form.qualification}
@@ -373,12 +373,12 @@ function ClinicSettingsContent() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-state-dental-council-dci-reg-number" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   State Dental Council / DCI Reg Number <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <ShieldCheck className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
-                  <input
+                  <input id="clinic-settings-state-dental-council-dci-reg-number"
                     type="text"
                     required
                     value={form.regNo}
@@ -401,14 +401,14 @@ function ClinicSettingsContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-doctor-clinic-upi-id" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Doctor / Clinic UPI ID <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="text-xs font-mono font-bold text-[#0089A8] absolute left-3.5 top-3">
                     UPI
                   </span>
-                  <input
+                  <input id="clinic-settings-doctor-clinic-upi-id"
                     type="text"
                     required
                     value={form.upiId}
@@ -424,10 +424,10 @@ function ClinicSettingsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-default-chair-slot-duration" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Default Chair Slot Duration
                 </label>
-                <select
+                <select id="clinic-settings-default-chair-slot-duration"
                   value={form.slotDuration}
                   onChange={(e) => {
                     const val = Number(e.target.value);
@@ -444,12 +444,13 @@ function ClinicSettingsContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <span id="clinic-settings-working-hours" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Working Hours Window
-                </label>
-                <div className="flex items-center gap-2">
+                </span>
+                <div role="group" aria-labelledby="clinic-settings-working-hours" className="flex items-center gap-2">
                   <input
                     type="text"
+                    aria-label="Opening time"
                     value={form.workingHoursStart}
                     onChange={(e) => updateField("workingHoursStart", e.target.value)}
                     onBlur={handleBlur}
@@ -459,6 +460,7 @@ function ClinicSettingsContent() {
                   <span className="text-xs text-[#8291A7]">to</span>
                   <input
                     type="text"
+                    aria-label="Closing time"
                     value={form.workingHoursEnd}
                     onChange={(e) => updateField("workingHoursEnd", e.target.value)}
                     onBlur={handleBlur}
@@ -469,10 +471,10 @@ function ClinicSettingsContent() {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#111C3A] mb-1.5">
+                <label htmlFor="clinic-settings-receipt-footer-note" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
                   Receipt Footer Note
                 </label>
-                <input
+                <input id="clinic-settings-receipt-footer-note"
                   type="text"
                   value={form.receiptFooter}
                   onChange={(e) => updateField("receiptFooter", e.target.value)}

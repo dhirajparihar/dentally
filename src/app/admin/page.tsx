@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
@@ -269,7 +270,7 @@ export default function AdminDashboardPage() {
       <div className="space-y-6 animate-pulse">
         <div className="h-20 bg-white rounded-3xl border border-[#E4E9F0] p-6 flex flex-col justify-center space-y-2">
           <div className="h-5 w-48 bg-slate-200 rounded" />
-          <div className="h-4 w-72 bg-slate-100 rounded" />
+          <div className="h-4 w-72 max-w-full bg-slate-100 rounded" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -478,7 +479,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Tenants Table */}
-          <div className="bg-white rounded-3xl border border-[#E4E9F0] overflow-hidden shadow-xs">
+          <div className="bg-white rounded-3xl border border-[#E4E9F0] shadow-xs">
             {filteredClinics.length === 0 ? (
               <div className="p-12 text-center space-y-2">
                 <Building2 className="w-8 h-8 text-[#8291A7] mx-auto opacity-50" />
@@ -488,36 +489,37 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto min-h-[320px]">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-[#E4E9F0] bg-[#FAFBFC] text-[#52627A] font-mono text-[11px] uppercase tracking-wider">
-                      <th className="py-3.5 px-4 sm:px-6">Tenant &amp; Account Owner</th>
-                      <th className="py-3.5 px-4">Contact</th>
-                      <th className="py-3.5 px-4 text-center">Plan Tier</th>
-                      <th className="py-3.5 px-4">ChatGPT MCP Status</th>
-                      <th className="py-3.5 px-4 text-center">Footprint</th>
-                      <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4 sm:px-6 text-right">Gateway Actions</th>
+              <div className="responsive-table-frame directory-table-frame">
+                <table aria-label="Clinic directory" role="table" className="responsive-table w-full text-left border-collapse text-xs">
+                  <thead role="rowgroup">
+                    <tr role="row" className="border-b border-[#E4E9F0] bg-[#FAFBFC] text-[#52627A] font-mono text-[11px] uppercase tracking-wider">
+                      <th role="columnheader" scope="col" className="py-3.5 px-4 sm:px-6">Tenant &amp; Account Owner</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4">Contact</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4 text-center">Plan Tier</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4">ChatGPT MCP Status</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4 text-center">Footprint</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4">Status</th>
+                      <th role="columnheader" scope="col" className="py-3.5 px-4 sm:px-6 text-right">Gateway Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E4E9F0]">
+                  <tbody role="rowgroup" className="divide-y divide-[#E4E9F0]">
                     {filteredClinics.map((clinic) => {
                       const isActing = actionLoadingEmail === clinic.dentistEmail;
 
                       return (
-                        <tr
+                        <tr role="row"
                           key={clinic.dentistEmail}
                           className="hover:bg-[#FAFBFC] transition-colors"
                         >
                           {/* Clinic Name & Doctor */}
-                          <td className="py-4 px-4 sm:px-6">
+                          <td role="cell" className="py-4 px-4 sm:px-6">
+                            <span className="responsive-table-label" aria-hidden="true">Clinic</span>
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-xl bg-[#EDF7FA] text-[#0089A8] border border-[#CDEBF2] flex items-center justify-center font-bold text-xs shrink-0">
                                 {clinic.dentistName.slice(0, 2).toUpperCase()}
                               </div>
                               <div className="min-w-0">
-                                <div className="font-bold text-[#111C3A] text-sm truncate max-w-[200px] sm:max-w-[240px]">
+                                <div className="font-bold text-[#111C3A] text-sm">
                                   {clinic.clinicName}
                                 </div>
                                 <div className="text-[#64748B] text-[11px]">
@@ -533,11 +535,12 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* Contact Info */}
-                          <td className="py-4 px-4 font-mono">
+                          <td role="cell" className="py-4 px-4 font-mono">
+                            <span className="responsive-table-label" aria-hidden="true">Contact</span>
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5 text-[#111C3A]">
                                 <Mail className="w-3 h-3 text-[#0089A8] shrink-0" />
-                                <span className="truncate max-w-[170px]">{clinic.dentistEmail}</span>
+                                <span>{clinic.dentistEmail}</span>
                               </div>
                               {clinic.phone && (
                                 <div className="flex items-center gap-1.5 text-[#64748B] text-[11px]">
@@ -549,7 +552,8 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* Plan Tier */}
-                          <td className="py-4 px-4 text-center">
+                          <td role="cell" className="py-4 px-4 text-center">
+                            <span className="responsive-table-label" aria-hidden="true">Plan tier</span>
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${
                               clinic.tier === "pro"
                                 ? "bg-teal-50 text-teal-800 border-teal-200"
@@ -560,7 +564,8 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* ChatGPT MCP Status */}
-                          <td className="py-4 px-4">
+                          <td role="cell" className="py-4 px-4">
+                            <span className="responsive-table-label" aria-hidden="true">ChatGPT MCP status</span>
                             {clinic.mcpTokenRevoked ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-mono text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
                                 <AlertTriangle className="w-3 h-3 text-rose-600" />
@@ -584,7 +589,8 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* Platform Footprint */}
-                          <td className="py-4 px-4 text-center">
+                          <td role="cell" className="py-4 px-4 text-center">
+                            <span className="responsive-table-label" aria-hidden="true">Footprint</span>
                             <span className="font-bold text-[#111C3A] font-mono text-sm block">
                               {clinic.patientCount} patients
                             </span>
@@ -594,7 +600,8 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* Account Status Badge */}
-                          <td className="py-4 px-4">
+                          <td role="cell" className="py-4 px-4">
+                            <span className="responsive-table-label" aria-hidden="true">Status</span>
                             {clinic.status === "active" ? (
                               <span className="status-pill scheduled text-[11px] py-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
@@ -609,8 +616,13 @@ export default function AdminDashboardPage() {
                           </td>
 
                           {/* Gateway Actions */}
-                          <td className="py-4 px-4 sm:px-6 text-right">
-                            <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
+                          <td role="cell" className="py-4 px-4 sm:px-6 text-right">
+                            <span className="responsive-table-label" aria-hidden="true">Gateway actions</span>
+                            <div className="relative inline-block max-w-full text-left" onClick={(e) => e.stopPropagation()} onKeyDown={(event) => {
+                              if (event.key !== "Escape" || openMenuEmail !== clinic.dentistEmail) return;
+                              setOpenMenuEmail(null);
+                              event.currentTarget.querySelector("button")?.focus();
+                            }}>
                               <button
                                 type="button"
                                 disabled={isActing}
@@ -624,6 +636,8 @@ export default function AdminDashboardPage() {
                                     : "border-[#E4E9F0] text-[#64748B] hover:text-[#111C3A] hover:bg-[#FAFBFC] hover:border-[#CCD5E2]"
                                 }`}
                                 title="Tenant Actions"
+                                aria-label={`Actions for ${clinic.clinicName}`}
+                                aria-expanded={openMenuEmail === clinic.dentistEmail}
                               >
                                 {isActing ? (
                                   <RefreshCw className="w-4 h-4 animate-spin text-[#0089A8]" />
@@ -634,7 +648,7 @@ export default function AdminDashboardPage() {
 
                               {openMenuEmail === clinic.dentistEmail && (
                                 <div
-                                  className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white border border-[#E4E9F0] shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95"
+                                  className="directory-action-panel mt-1.5 rounded-2xl bg-white border border-[#E4E9F0] shadow-xl py-1.5 animate-in fade-in zoom-in-95"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {/* Suspend / Reactivate Kill Switch */}
@@ -869,7 +883,7 @@ export default function AdminDashboardPage() {
 
       {/* ================= MODAL: ADD / PRE-PROVISION CLINIC ================= */}
       {isAddModalOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <WorkspaceDialog label="Provision clinic tenant" onDismiss={() => { if (!isSubmittingAdd) setIsAddModalOpen(false); }}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] space-y-4 animate-in fade-in zoom-in-95 my-auto text-xs text-[#111C3A]">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <div className="flex items-center gap-2">
@@ -900,8 +914,8 @@ export default function AdminDashboardPage() {
               )}
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Doctor Google Email *</label>
-                <input
+                <label htmlFor="admin-doctor-google-email" className="font-semibold text-[#111C3A] block mb-1">Doctor Google Email *</label>
+                <input id="admin-doctor-google-email"
                   type="email"
                   required
                   placeholder="e.g. dr.sharma@gmail.com"
@@ -913,8 +927,8 @@ export default function AdminDashboardPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Doctor Name</label>
-                  <input
+                  <label htmlFor="admin-doctor-name" className="font-semibold text-[#111C3A] block mb-1">Doctor Name</label>
+                  <input id="admin-doctor-name"
                     type="text"
                     placeholder="e.g. Ananya Sharma"
                     value={addForm.doctorName}
@@ -923,8 +937,8 @@ export default function AdminDashboardPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Clinic Name</label>
-                  <input
+                  <label htmlFor="admin-clinic-name" className="font-semibold text-[#111C3A] block mb-1">Clinic Name</label>
+                  <input id="admin-clinic-name"
                     type="text"
                     placeholder="e.g. Apex Smiles Care"
                     value={addForm.clinicName}
@@ -936,8 +950,8 @@ export default function AdminDashboardPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Contact Phone</label>
-                  <input
+                  <label htmlFor="admin-contact-phone" className="font-semibold text-[#111C3A] block mb-1">Contact Phone</label>
+                  <input id="admin-contact-phone"
                     type="tel"
                     placeholder="+91 98200 11223"
                     value={addForm.phone}
@@ -946,8 +960,8 @@ export default function AdminDashboardPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Subscription Tier</label>
-                  <select
+                  <label htmlFor="admin-subscription-tier" className="font-semibold text-[#111C3A] block mb-1">Subscription Tier</label>
+                  <select id="admin-subscription-tier"
                     value={addForm.tier}
                     onChange={(e) => setAddForm({ ...addForm, tier: e.target.value as "trial" | "pro" })}
                     className="w-full p-2.5 rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] outline-none focus:border-[#0089A8] font-mono text-xs"
@@ -989,15 +1003,12 @@ export default function AdminDashboardPage() {
               </div>
             </form>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= MODAL: ACTION CONFIRMATION ================= */}
       {confirmModal && (
-        <div
-          className="fixed inset-0 bg-[#111C3A]/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => !isExecutingConfirm && setConfirmModal(null)}
-        >
+        <WorkspaceDialog label="Confirm tenant action" onDismiss={() => { if (!isExecutingConfirm) setConfirmModal(null); }} dismissOnBackdrop>
           <div
             className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] space-y-5 animate-in fade-in zoom-in-95 my-auto text-[#111C3A]"
             onClick={(e) => e.stopPropagation()}
@@ -1111,10 +1122,10 @@ export default function AdminDashboardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-[#111C3A] mb-1">
+                    <label htmlFor="admin-type" className="block text-xs font-semibold text-[#111C3A] mb-1">
                       Type <span className="font-mono text-rose-700 font-bold">DELETE</span> to confirm:
                     </label>
-                    <input
+                    <input id="admin-type"
                       type="text"
                       autoFocus
                       value={deleteConfirmInput}
@@ -1177,7 +1188,7 @@ export default function AdminDashboardPage() {
               </button>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
     </div>
   );

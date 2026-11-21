@@ -33,8 +33,8 @@ export function AppointmentCard({ appointment, clock, patientHref, showDate = fa
           <span className="appointment-card-time">{appointment.time}</span>
           <span className="text-xs text-[#64748B]">{appointment.durationMinutes} min{showDate && <> &middot; {appointment.date}</>}</span>
         </div>
-        <h3 className="mt-2 break-words text-base font-bold">
-          <Link href={patientHref} className="inline-block text-left hover:text-[#0089A8]">{appointment.patientName}</Link>
+        <h3 className="mt-2 text-base font-bold">
+          <Link href={patientHref} className="hover:text-[#0089A8]">{appointment.patientName}</Link>
         </h3>
         <p className="mt-1 text-sm font-medium text-[#007F96]">{appointment.procedure}</p>
         {notes && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#64748B]">{notes}</p>}

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import { WorkspaceSidebar } from "@/components/dashboard/WorkspaceSidebar";
 import {
   Building2,
   LogOut,
@@ -21,6 +22,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   const isSuperAdmin =
     (session?.user as any)?.role === "superadmin" ||
@@ -78,21 +80,9 @@ export default function AdminLayout({
     .toUpperCase();
 
   return (
-    <div className="dashboard-shell min-h-screen bg-[#FAFBFC] flex flex-col lg:flex-row">
-      {/* Mobile Backdrop */}
-      {mobileMenuOpen && (
-        <div
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-[#111C3A]/60 backdrop-blur-xs z-40 lg:hidden"
-        />
-      )}
-
-      {/* ================= ADMIN SIDEBAR ================= */}
-      <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-[#52627A] border-r border-[#E4E9F0] flex flex-col justify-between transition-transform duration-200 lg:translate-x-0 ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
+    <div className="dashboard-shell workspace-shell">
+      <a href="#workspace-main" className="workspace-skip-link sr-only focus:not-sr-only" inert={mobileMenuOpen}>Skip to content</a>
+      <WorkspaceSidebar id="admin-navigation" open={mobileMenuOpen} onClose={closeMenu}>
         {/* Brand header */}
         <div className="p-5 border-b border-[#E4E9F0] flex items-center justify-between">
           <Link href="/admin" className="flex items-center gap-2.5 group">
@@ -120,7 +110,8 @@ export default function AdminLayout({
           </Link>
 
           <button
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={closeMenu}
+            data-drawer-close
             aria-label="Close navigation"
             className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-[#00738E] hover:bg-[#EDF7FA]"
           >
@@ -129,14 +120,15 @@ export default function AdminLayout({
         </div>
 
         {/* Navigation list */}
-        <div className="px-3 py-6 flex-1 space-y-1 overflow-y-auto">
+        <nav aria-label="Platform management" className="px-3 py-6 min-h-0 flex-1 space-y-1 overflow-y-auto">
           <span className="px-3 text-[10px] uppercase tracking-[0.15em] text-[#8291A7] font-semibold block mb-2 font-mono">
             Platform Management
           </span>
 
           <Link
             href="/admin"
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={closeMenu}
+            aria-current="page"
             className="flex items-center justify-between px-3 py-3 rounded-xl text-xs sm:text-sm font-semibold bg-[#EDF7FA] text-[#00738E] transition-all"
           >
             <div className="flex items-center gap-3">
@@ -147,7 +139,7 @@ export default function AdminLayout({
               Live
             </span>
           </Link>
-        </div>
+        </nav>
 
         {/* Admin Profile Footer */}
         <div className="p-4 border-t border-[#E4E9F0] bg-[#FAFBFC]">
@@ -187,10 +179,10 @@ export default function AdminLayout({
             </button>
           </div>
         </div>
-      </aside>
+      </WorkspaceSidebar>
 
       {/* ================= MAIN CONTENT AREA ================= */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+      <div className="workspace-content" inert={mobileMenuOpen}>
         {/* Sticky Header matching Header.tsx */}
         <header className="sticky top-0 z-30 bg-[#FAFBFC]/95 backdrop-blur-md border-b border-[#E4E9F0] px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <div className="flex items-center justify-between gap-2 sm:gap-4">
@@ -199,13 +191,15 @@ export default function AdminLayout({
               <button
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="Open navigation"
+                aria-controls="admin-navigation"
+                aria-expanded={mobileMenuOpen}
                 className="lg:hidden p-2 rounded-xl text-[#52627A] hover:bg-[#EDF7FA]"
               >
                 <Menu className="w-5 h-5" />
               </button>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate font-bold text-base sm:text-xl text-[#111C3A] tracking-tight font-sans">
+                  <h1 className="workspace-title">
                     Platform Operations Center
                   </h1>
                   <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#EDF7FA] text-[#00738E] border border-[#CDEBF2] font-mono">
@@ -229,14 +223,14 @@ export default function AdminLayout({
                   <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 animate-ping opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
                 </span>
-                <span>MongoDB Active</span>
+                <span className="sr-only sm:not-sr-only">MongoDB Active</span>
               </div>
             </div>
           </div>
         </header>
 
         {/* Content body */}
-        <main className="flex-1 p-4 sm:p-7 xl:p-10 max-w-7xl w-full mx-auto">
+        <main className="workspace-main" id="workspace-main" tabIndex={-1}>
           {children}
         </main>
       </div>

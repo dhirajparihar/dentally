@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import type { AppointmentBookingDraft } from "@/components/dashboard/BookAppointmentDialog";
@@ -27,6 +27,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const closeSidebar = useCallback(() => setMobileSidebarOpen(false), []);
   const [bookingDate, setBookingDate] = useState<string | null>(null);
   const [bookingDraft, setBookingDraft] = useState<AppointmentBookingDraft>();
   const [bookedAppointment, setBookedAppointment] = useState<Appointment | null>(null);
@@ -38,20 +39,22 @@ export default function DashboardLayout({
 
   return (
     <ClinicProvider>
-      <div className="dashboard-shell min-h-screen bg-[#FAFBFC] flex flex-col lg:flex-row">
+      <div className="dashboard-shell workspace-shell">
+        <a href="#workspace-main" className="workspace-skip-link sr-only focus:not-sr-only" inert={mobileSidebarOpen}>Skip to content</a>
         {/* Sidebar (Desktop sticky & Mobile drawer) */}
         <Sidebar
           isOpen={mobileSidebarOpen}
-          onClose={() => setMobileSidebarOpen(false)}
+          onClose={closeSidebar}
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+        <div className="workspace-content" inert={mobileSidebarOpen}>
           <Header
+            mobileMenuOpen={mobileSidebarOpen}
             onOpenMobileMenu={() => setMobileSidebarOpen(true)}
             onBookAppointment={() => setBookingDate(getAppointmentClock().date)}
           />
-          <main className="flex-1 p-4 sm:p-7 xl:p-10 max-w-7xl w-full mx-auto">
+          <main className="workspace-main" id="workspace-main" tabIndex={-1}>
             {children}
             {bookedAppointment && (
               <AppointmentBookingConfirmation appointment={bookedAppointment} onDismiss={() => setBookedAppointment(null)} />

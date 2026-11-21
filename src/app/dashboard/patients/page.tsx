@@ -1,5 +1,6 @@
 "use client";
 
+import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import { useState, useEffect, useMemo } from "react";
 import {
   Users,
@@ -113,7 +114,7 @@ export default function PatientsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-        <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-[#E4E9F0] bg-white px-3 focus-within:border-[#0089A8]">
+        <div className="workspace-search basis-full sm:basis-48 sm:flex-1">
           <Search className="h-4 w-4 shrink-0 text-[#8291A7]" aria-hidden="true" />
           <input
             type="search"
@@ -211,7 +212,7 @@ export default function PatientsPage() {
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                       {patient.email && <p className="flex min-w-0 flex-[1_1_160px] items-center gap-1.5"><Mail size={13} className="shrink-0" /><span className="break-all">{patient.email}</span></p>}
                       {patient.medicalAlerts.length > 0 && patient.medicalAlerts[0] !== "None" && patient.medicalAlerts.map((alert, i) => (
-                        <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800"><AlertTriangle size={12} className="shrink-0" />{alert}</span>
+                        <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800"><AlertTriangle size={12} className="shrink-0" /><span className="min-w-0">{alert}</span></span>
                       ))}
                     </div>
                   )}
@@ -246,7 +247,7 @@ export default function PatientsPage() {
 
       {/* Add Patient Modal */}
       {isAddOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Add patient" onDismiss={() => setIsAddOpen(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <h3 className="font-bold text-base text-[#111C3A]">
@@ -261,7 +262,7 @@ export default function PatientsPage() {
               <PatientRegistrationForm onCancel={() => setIsAddOpen(false)} onSaved={() => setIsAddOpen(false)} />
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
     </div>
   );

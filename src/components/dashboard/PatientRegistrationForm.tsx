@@ -99,7 +99,7 @@ export function PatientRegistrationForm({ compact = false, initialSearch = "", o
 
   const additionalDetails = (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="workspace-form-grid">
         <div>
           <label className={labelClass} htmlFor={`${id}-email`}>Email</label>
           <input id={`${id}-email`} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className={fieldClass} />
@@ -188,7 +188,7 @@ export function PatientRegistrationForm({ compact = false, initialSearch = "", o
           <label className={labelClass} htmlFor={`${id}-phone`}>Mobile Number *</label>
           <input id={`${id}-phone`} type="tel" autoComplete="tel" required placeholder="+91 98201 44521" value={form.phone} onChange={(event) => updateIdentity("phone", event.target.value)} className={fieldClass} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="workspace-form-grid">
           <div>
             <label className={labelClass} htmlFor={`${id}-age`}>Age *</label>
             <input id={`${id}-age`} type="number" min="0" required value={form.age} onChange={(event) => setForm({ ...form, age: event.target.value })} className={fieldClass} />

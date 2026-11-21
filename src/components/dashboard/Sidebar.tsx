@@ -15,10 +15,11 @@ import {
   Settings,
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
+import { WorkspaceSidebar } from "@/components/dashboard/WorkspaceSidebar";
 
 interface SidebarProps {
-  isOpen?: boolean;
-  onClose?: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 const navItems = [
@@ -30,7 +31,7 @@ const navItems = [
   { href: "/dashboard/settings", label: "Clinic Settings", icon: Settings },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const { clinicProfile } = useClinic();
@@ -38,19 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
 
   return (
-    <>
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden"
-        />
-      )}
-
-      <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 max-w-[85vw] bg-white text-[#52627A] border-r border-[#E4E9F0] flex flex-col justify-between transition-transform duration-200 lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
+    <WorkspaceSidebar id="dashboard-navigation" open={isOpen} onClose={onClose}>
         {/* Brand header */}
         <div className="p-5 border-b border-[#E4E9F0] flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -75,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           {onClose && (
             <button
               onClick={onClose}
+              data-drawer-close
               aria-label="Close navigation"
               className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-[#00738E] hover:bg-[#EDF7FA]"
             >
@@ -84,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         </div>
 
         {/* Navigation list */}
-        <div className="px-3 py-7 flex-1 space-y-1 overflow-y-auto">
+        <nav aria-label="Practice management" className="px-3 py-7 min-h-0 flex-1 space-y-1 overflow-y-auto">
           <span className="px-3 text-[10px] uppercase tracking-[0.15em] text-[#8291A7] font-semibold block mb-2">
             Practice Management
           </span>
@@ -96,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center justify-between px-3 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                   isActive
                     ? "bg-[#EDF7FA] text-[#00738E] font-semibold"
@@ -124,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
               </Link>
             );
           })}
-        </div>
+        </nav>
 
         {/* Practice info footer */}
         <div className="p-4 border-t border-[#E4E9F0] bg-[#FAFBFC]">
@@ -145,7 +136,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
             <Settings className="w-3.5 h-3.5 text-[#8291A7] group-hover:text-[#0089A8] transition-colors shrink-0" />
           </Link>
         </div>
-      </aside>
-    </>
+    </WorkspaceSidebar>
   );
 };

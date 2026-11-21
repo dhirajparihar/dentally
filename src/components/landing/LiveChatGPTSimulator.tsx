@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Terminal, Bot, User, CheckCircle2, ShieldCheck } from "lucide-react";
 
 interface Scenario {
@@ -101,13 +101,17 @@ export const LiveChatGPTSimulator: React.FC = () => {
   const [activeScenario, setActiveScenario] = useState<Scenario>(scenarios[0]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [displayedText, setDisplayedText] = useState<string>(scenarios[0].assistantResponse);
+  const responseTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(responseTimer.current), []);
 
   const switchScenario = (s: Scenario) => {
     setActiveScenario(s);
     setIsTyping(true);
     setDisplayedText("");
 
-    setTimeout(() => {
+    window.clearTimeout(responseTimer.current);
+    responseTimer.current = window.setTimeout(() => {
       setDisplayedText(s.assistantResponse);
       setIsTyping(false);
     }, 250);
@@ -116,7 +120,7 @@ export const LiveChatGPTSimulator: React.FC = () => {
   return (
     <div className="w-full rounded-3xl bg-[#111C3A] text-slate-100 border border-slate-700/80 shadow-2xl overflow-hidden font-sans">
       {/* Top Header */}
-      <div className="bg-[#0B132B] px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+      <div className="bg-[#0B132B] px-4 sm:px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
@@ -209,7 +213,7 @@ export const LiveChatGPTSimulator: React.FC = () => {
                       {activeScenario.dataCard.badge}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-2 pt-1 text-[11px]">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 pt-1 text-[11px]">
                     {activeScenario.dataCard.metrics.map((m, idx) => (
                       <div key={idx}>
                         <span className="text-slate-400 block text-[10px]">{m.label}</span>

@@ -1,5 +1,7 @@
 "use client";
 
+import { TreatmentBreakdown } from "@/components/dashboard/TreatmentBreakdown";
+import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -252,7 +254,7 @@ export default function FeesPage() {
             {visibleDues.map(({ patient, totalBilled, totalPaid, outstanding, latestFee }) => (
               <article key={patient._id} className="finance-due-card">
                 <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0"><h2 className="break-words text-sm font-bold"><button type="button" onClick={() => handleOpenDossier(patient)} className="text-left hover:text-[#0089A8]">{patient.name}</button></h2><a href={`tel:${patient.phone}`} className="mt-1 inline-block text-xs text-[#64748B]">{patient.phone}</a><p className="mt-1 break-all text-[11px] text-[#8291A7]">{patient._id}</p></div>
+                  <div className="min-w-0"><h2 className="text-sm font-bold"><button type="button" onClick={() => handleOpenDossier(patient)} className="max-w-full text-left hover:text-[#0089A8]">{patient.name}</button></h2><a href={`tel:${patient.phone}`} className="mt-1 inline-block text-xs text-[#64748B]">{patient.phone}</a><p className="mt-1 break-all text-[11px] text-[#8291A7]">{patient._id}</p></div>
                   <div className="shrink-0 text-right"><p className="text-[11px] text-[#64748B]">Due</p><p className="mt-1 text-lg font-bold text-rose-700">{money(outstanding)}</p></div>
                 </div>
                 {latestFee && <p className="mt-3 text-xs leading-5 text-[#52627A]">{latestFee.procedureName}{latestFee.tooth && <span> &middot; {latestFee.tooth}</span>}</p>}
@@ -360,7 +362,7 @@ export default function FeesPage() {
 
       {/* ================= 1-TAP PROCEDURE BILLING MODAL ================= */}
       {isAddFeeOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <WorkspaceDialog label="Add fee" onDismiss={() => setIsAddFeeOpen(false)}>
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs my-auto animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
@@ -399,8 +401,8 @@ export default function FeesPage() {
                 </div>
 
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Tooth #</label>
-                  <input
+                  <label htmlFor="fees-tooth" className="font-semibold text-[#111C3A] block mb-1">Tooth #</label>
+                  <input id="fees-tooth"
                     type="text"
                     placeholder="46, 11, etc."
                     value={feeForm.tooth}
@@ -410,10 +412,10 @@ export default function FeesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="workspace-form-grid">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Fee Amount (₹) *</label>
-                  <input
+                  <label htmlFor="fees-fee-amount" className="font-semibold text-[#111C3A] block mb-1">Fee Amount (₹) *</label>
+                  <input id="fees-fee-amount"
                     type="number"
                     required
                     min={0}
@@ -425,8 +427,8 @@ export default function FeesPage() {
                 </div>
 
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Discount (₹)</label>
-                  <input
+                  <label htmlFor="fees-discount" className="font-semibold text-[#111C3A] block mb-1">Discount (₹)</label>
+                  <input id="fees-discount"
                     type="number"
                     value={feeForm.discount}
                     onChange={(e) => setFeeForm({ ...feeForm, discount: e.target.value })}
@@ -436,8 +438,8 @@ export default function FeesPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Billing Notes (Optional)</label>
-                <input
+                <label htmlFor="fees-billing-notes-optional" className="font-semibold text-[#111C3A] block mb-1">Billing Notes (Optional)</label>
+                <input id="fees-billing-notes-optional"
                   type="text"
                   placeholder="e.g. Tooth #46 obturation complete, shade A2"
                   value={feeForm.notes}
@@ -464,7 +466,7 @@ export default function FeesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {paymentDefaults && (
@@ -473,7 +475,7 @@ export default function FeesPage() {
 
       {/* ================= INSTANT CHAIRSIDE UPI QR MODAL ================= */}
       {qrModalData && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="UPI payment" onDismiss={() => { if (!isRecordingQrPayment) setQrModalData(null); }}>
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-center space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-2 border-b border-[#E4E9F0]">
               <span className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1">
@@ -576,12 +578,12 @@ export default function FeesPage() {
               </div>
             )}
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= OFFICIAL RECEIPT MODAL ================= */}
       {selectedReceipt && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Payment receipt" onDismiss={() => setSelectedReceipt(null)}>
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 printable-document">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <span className="font-mono text-xs font-bold text-[#0089A8]">Official Payment Receipt</span>
@@ -645,12 +647,12 @@ export default function FeesPage() {
               </button>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= OFFICIAL TREATMENT TAX INVOICE MODAL ================= */}
       {selectedInvoice && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Treatment tax invoice" onDismiss={() => setSelectedInvoice(null)}>
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 printable-document">
             <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
@@ -691,39 +693,7 @@ export default function FeesPage() {
             </div>
 
             {/* Table */}
-            <div className="border border-[#E4E9F0] rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#EDF7FA] text-[#00738E] font-semibold font-mono text-[11px]">
-                  <tr>
-                    <th className="p-2.5">Treatment / Procedure</th>
-                    <th className="p-2.5 text-center">Tooth</th>
-                    <th className="p-2.5 text-right">Gross</th>
-                    <th className="p-2.5 text-right">Disc</th>
-                    <th className="p-2.5 text-right">Net Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E4E9F0] text-[#111C3A]">
-                  <tr>
-                    <td className="p-2.5 font-medium">
-                      {selectedInvoice.procedureName}
-                      {selectedInvoice.notes && <span className="block text-[10px] text-[#64748B] italic">{selectedInvoice.notes}</span>}
-                    </td>
-                    <td className="p-2.5 text-center font-mono text-[#0089A8] font-bold">
-                      {selectedInvoice.tooth || "Arch"}
-                    </td>
-                    <td className="p-2.5 text-right font-mono text-[#64748B]">
-                      ₹{selectedInvoice.amount.toLocaleString()}
-                    </td>
-                    <td className="p-2.5 text-right font-mono text-emerald-700">
-                      ₹{selectedInvoice.discount.toLocaleString()}
-                    </td>
-                    <td className="p-2.5 text-right font-mono font-bold text-[#111C3A]">
-                      ₹{selectedInvoice.netAmount.toLocaleString()}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <TreatmentBreakdown invoice={selectedInvoice} />
 
             {/* Settlement summary */}
             {(() => {
@@ -783,7 +753,7 @@ export default function FeesPage() {
               </button>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
     </div>

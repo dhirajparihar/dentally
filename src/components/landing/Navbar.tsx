@@ -11,7 +11,11 @@ export const Navbar: React.FC = () => {
   const { data: session } = useSession();
 
   return (
-    <header className="sticky top-0 z-50 bg-[#FAFBFC]/90 backdrop-blur-md border-b border-[#E4E9F0]">
+    <header className="sticky top-0 z-50 bg-[#FAFBFC]/90 backdrop-blur-md border-b border-[#E4E9F0]" onKeyDown={(event) => {
+      if (event.key !== "Escape" || !mobileMenuOpen) return;
+      setMobileMenuOpen(false);
+      event.currentTarget.querySelector<HTMLButtonElement>("[aria-controls='landing-mobile-navigation']")?.focus();
+    }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo with Brand Teal Dot */}
@@ -93,7 +97,9 @@ export const Navbar: React.FC = () => {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle navigation menu"
-              className="p-2 rounded-xl text-[#52627A] hover:text-[#111C3A] hover:bg-[#EDF7FA] transition-colors"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="landing-mobile-navigation"
+              className="size-11 grid place-items-center rounded-xl text-[#52627A] hover:text-[#111C3A] hover:bg-[#EDF7FA] transition-colors"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -103,7 +109,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-[#E4E9F0] px-4 pt-2 pb-6 space-y-3 shadow-lg">
+        <nav id="landing-mobile-navigation" aria-label="Main navigation" className="md:hidden max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-y-contain bg-white border-b border-[#E4E9F0] px-4 pt-2 pb-6 space-y-3 shadow-lg">
           <Link
             href="/dashboard/patients"
             onClick={() => setMobileMenuOpen(false)}
@@ -140,7 +146,7 @@ export const Navbar: React.FC = () => {
               Open Clinic Dashboard
             </Link>
           </div>
-        </div>
+        </nav>
       )}
     </header>
   );

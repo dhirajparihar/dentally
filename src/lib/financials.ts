@@ -171,3 +171,20 @@ export function formatINR(amount: number): string {
   }).format(amount || 0);
 }
 
+export function getOutstandingPatientBalances(patients: Patient[], fees: FeeItem[], payments: PaymentTransaction[]) {
+  const billed = new Map<string, number>();
+  const paid = new Map<string, number>();
+
+  for (const { patientId, netAmount } of fees) {
+    billed.set(patientId, (billed.get(patientId) ?? 0) + netAmount);
+  }
+  for (const { patientId, amount, isRefund } of payments) {
+    paid.set(patientId, (paid.get(patientId) ?? 0) + (isRefund ? -amount : amount));
+  }
+
+  return patients.flatMap((patient) => {
+    const balance = Number(((billed.get(patient._id) ?? 0) - (paid.get(patient._id) ?? 0)).toFixed(2));
+    return balance > 0 ? [{ patient, balance }] : [];
+  });
+}
+

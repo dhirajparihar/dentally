@@ -227,7 +227,7 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
             }))}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="workspace-form-grid">
             <div>
               <label className="font-semibold text-[#111C3A] block mb-1">Date *</label>
               <input

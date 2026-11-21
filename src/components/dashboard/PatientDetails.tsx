@@ -1,5 +1,7 @@
 "use client";
 
+import { TreatmentBreakdown } from "@/components/dashboard/TreatmentBreakdown";
+import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -653,10 +655,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
+                      <label htmlFor="patient-profile-tooth-opt" className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Tooth (Opt.)
                       </label>
-                      <input
+                      <input id="patient-profile-tooth-opt"
                         type="text"
                         value={feeTooth}
                         onChange={(e) => setFeeTooth(e.target.value)}
@@ -666,10 +668,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
+                      <label htmlFor="patient-profile-gross-fee" className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Gross Fee (₹) *
                       </label>
-                      <input
+                      <input id="patient-profile-gross-fee"
                         type="number"
                         required
                         min={0}
@@ -682,10 +684,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-mono text-[#64748B] block mb-1">
+                      <label htmlFor="patient-profile-discount" className="text-[11px] font-mono text-[#64748B] block mb-1">
                         Discount (₹)
                       </label>
-                      <input
+                      <input id="patient-profile-discount"
                         type="number"
                         min="0"
                         value={feeDiscount}
@@ -911,7 +913,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
       {/* ================= EDIT PATIENT PROFILE MODAL ================= */}
       {isEditProfileOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Edit patient details" onDismiss={() => setIsEditProfileOpen(false)}>
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
@@ -930,8 +932,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
             <form onSubmit={handleEditProfileSubmit} className="mt-4 space-y-3">
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
-                <input
+                <label htmlFor="patient-profile-full-name" className="font-semibold text-[#111C3A] block mb-1">Full Name *</label>
+                <input id="patient-profile-full-name"
                   type="text"
                   required
                   value={editForm.name}
@@ -942,8 +944,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Age{isProvisional ? "" : " *"}</label>
-                  <input
+                  <label htmlFor="patient-profile-age" className="font-semibold text-[#111C3A] block mb-1">Age{isProvisional ? "" : " *"}</label>
+                  <input id="patient-profile-age"
                     type="number"
                     min={0}
                     max={130}
@@ -954,8 +956,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Gender{isProvisional ? "" : " *"}</label>
-                  <select
+                  <label htmlFor="patient-profile-gender" className="font-semibold text-[#111C3A] block mb-1">Gender{isProvisional ? "" : " *"}</label>
+                  <select id="patient-profile-gender"
                     required={!isProvisional}
                     value={editForm.gender}
                     onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as "Male" | "Female" | "Other" })}
@@ -972,8 +974,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
-                  <input
+                  <label htmlFor="patient-profile-phone" className="font-semibold text-[#111C3A] block mb-1">Phone *</label>
+                  <input id="patient-profile-phone"
                     type="tel"
                     required
                     value={editForm.phone}
@@ -982,8 +984,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
-                  <input
+                  <label htmlFor="patient-profile-blood-group" className="font-semibold text-[#111C3A] block mb-1">Blood Group</label>
+                  <input id="patient-profile-blood-group"
                     type="text"
                     placeholder="e.g. B+, O-"
                     value={editForm.bloodGroup}
@@ -994,8 +996,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Email</label>
-                <input
+                <label htmlFor="patient-profile-email" className="font-semibold text-[#111C3A] block mb-1">Email</label>
+                <input id="patient-profile-email"
                   type="email"
                   placeholder="patient@example.com"
                   value={editForm.email}
@@ -1005,8 +1007,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Medical Alerts & Drug Allergies</label>
-                <input
+                <label htmlFor="patient-profile-medical-alerts-drug-allergies" className="font-semibold text-[#111C3A] block mb-1">Medical Alerts & Drug Allergies</label>
+                <input id="patient-profile-medical-alerts-drug-allergies"
                   type="text"
                   placeholder="e.g. Penicillin Allergy, Diabetic, Hypertensive"
                   value={editForm.medicalAlerts}
@@ -1017,8 +1019,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Address</label>
-                <input
+                <label htmlFor="patient-profile-address" className="font-semibold text-[#111C3A] block mb-1">Address</label>
+                <input id="patient-profile-address"
                   type="text"
                   placeholder="Residential address / locality"
                   value={editForm.address}
@@ -1028,8 +1030,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-[#111C3A] block mb-1">Follow-up / Recall Due</label>
-                <input
+                <label htmlFor="patient-profile-follow-up-recall-due" className="font-semibold text-[#111C3A] block mb-1">Follow-up / Recall Due</label>
+                <input id="patient-profile-follow-up-recall-due"
                   type="date"
                   value={editForm.followUpDue}
                   onChange={(e) => setEditForm({ ...editForm, followUpDue: e.target.value })}
@@ -1057,12 +1059,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= OFFICIAL PAYMENT RECEIPT MODAL ================= */}
       {selectedReceipt && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Payment receipt" onDismiss={() => setSelectedReceipt(null)}>
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
             <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
               <span className="font-mono text-xs font-bold text-[#0089A8]">Official Payment Receipt</span>
@@ -1133,12 +1135,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= OFFICIAL DENTAL TREATMENT TAX INVOICE MODAL ================= */}
       {selectedInvoice && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Treatment tax invoice" onDismiss={() => setSelectedInvoice(null)}>
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E4E9F0] text-xs space-y-4 animate-in fade-in zoom-in-95 my-auto printable-document">
             <div className="flex items-start justify-between pb-3 border-b border-[#E4E9F0]">
               <div>
@@ -1180,39 +1182,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
             </div>
 
             {/* Treatment Breakdown Table */}
-            <div className="border border-[#E4E9F0] rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#EDF7FA] text-[#00738E] font-semibold font-mono text-[11px]">
-                  <tr>
-                    <th className="p-2.5">Treatment / Procedure</th>
-                    <th className="p-2.5 text-center">Tooth</th>
-                    <th className="p-2.5 text-right">Gross</th>
-                    <th className="p-2.5 text-right">Disc</th>
-                    <th className="p-2.5 text-right">Net Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E4E9F0] text-[#111C3A]">
-                  <tr>
-                    <td className="p-2.5 font-medium">
-                      {selectedInvoice.procedureName}
-                      {selectedInvoice.notes && <span className="block text-[10px] text-[#64748B] italic">{selectedInvoice.notes}</span>}
-                    </td>
-                    <td className="p-2.5 text-center font-mono text-[#0089A8] font-bold">
-                      {selectedInvoice.tooth || "Arch"}
-                    </td>
-                    <td className="p-2.5 text-right font-mono text-[#64748B]">
-                      ₹{selectedInvoice.amount.toLocaleString()}
-                    </td>
-                    <td className="p-2.5 text-right font-mono text-emerald-700">
-                      ₹{selectedInvoice.discount.toLocaleString()}
-                    </td>
-                    <td className="p-2.5 text-right font-mono font-bold text-[#111C3A]">
-                      ₹{selectedInvoice.netAmount.toLocaleString()}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <TreatmentBreakdown invoice={selectedInvoice} />
 
             {/* Settlement summary */}
             {(() => {
@@ -1276,12 +1246,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* ================= DELETE PATIENT CONFIRMATION MODAL ================= */}
       {isDeleteModalOpen && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/75 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4">
+        <WorkspaceDialog label="Delete patient record" onDismiss={() => { if (!isDeleting) setIsDeleteModalOpen(false); }}>
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95 my-auto">
             <div className="flex items-center gap-3 text-rose-600 mb-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 border border-rose-200 shrink-0">
@@ -1331,7 +1301,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
 
       {/* Standard Record Payment Dialog */}

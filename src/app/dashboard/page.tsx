@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,11 +22,15 @@ import {
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
-import { RescheduleAppointmentDialog } from "@/components/dashboard/RescheduleAppointmentDialog";
+import { getOutstandingPatientBalances } from "@/lib/financials";
 import type { RecordPaymentDefaults } from "@/components/dashboard/RecordPaymentDialog";
 
 const RecordPaymentDialog = dynamic(
   () => import("@/components/dashboard/RecordPaymentDialog").then((mod) => mod.RecordPaymentDialog),
+  { ssr: false }
+);
+const RescheduleAppointmentDialog = dynamic(
+  () => import("@/components/dashboard/RescheduleAppointmentDialog").then((mod) => mod.RescheduleAppointmentDialog),
   { ssr: false }
 );
 
@@ -149,15 +154,10 @@ export default function DashboardOverviewPage() {
   const collectedToday = todayPayments.reduce((total, payment) => total + payment.amount, 0);
   const upiToday = todayPayments.filter((p) => p.paymentMethod === "UPI").reduce((sum, p) => sum + p.amount, 0);
   const cashToday = todayPayments.filter((p) => p.paymentMethod === "Cash").reduce((sum, p) => sum + p.amount, 0);
-  const patientsWithBalances = patients.map((patient) => {
-    const billed = fees
-      .filter((fee) => fee.patientId === patient._id)
-      .reduce((sum, fee) => sum + fee.netAmount, 0);
-    const paid = payments
-      .filter((payment) => payment.patientId === patient._id)
-      .reduce((sum, payment) => sum + (payment.isRefund ? -payment.amount : payment.amount), 0);
-    return { patient, balance: Number((billed - paid).toFixed(2)) };
-  }).filter(({ balance }) => balance > 0);
+  const patientsWithBalances = useMemo(
+    () => getOutstandingPatientBalances(patients, fees, payments),
+    [patients, fees, payments]
+  );
   const outstanding = patientsWithBalances.reduce((total, { balance }) => total + balance, 0);
   const weekAhead = shiftAppointmentDate(today, 7);
   const scheduledPatients = new Set(
@@ -230,7 +230,7 @@ export default function DashboardOverviewPage() {
         </p>
       </div>
 
-      <section aria-label="Dashboard summary" aria-busy={loading} className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="Dashboard summary" aria-busy={loading} className="overview-metrics">
         {metrics.map(({ label, value, subtext, icon: Icon, href, tone }) => (
           <Link key={label} href={href} className="overview-metric" data-tone={tone}>
             <div className="flex items-center justify-between gap-1.5">
@@ -524,7 +524,7 @@ export default function DashboardOverviewPage() {
       )}
 
       {qrAmount !== null && (
-        <div className="mobile-dialog fixed inset-0 bg-[#111C3A]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <WorkspaceDialog label="UPI payment" onDismiss={() => { if (!isRecordingQrPayment) closeQr(); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="desk-qr-heading" className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-[#E4E9F0] text-center space-y-4 animate-in fade-in zoom-in-95 my-auto">
             <div className="flex items-center justify-between pb-2 border-b border-[#E4E9F0]">
               <h2 id="desk-qr-heading" className="font-mono text-xs font-bold text-[#0089A8] flex items-center gap-1.5">
@@ -675,7 +675,7 @@ export default function DashboardOverviewPage() {
               </div>
             )}
           </div>
-        </div>
+        </WorkspaceDialog>
       )}
     </div>
   );
