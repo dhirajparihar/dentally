@@ -20,6 +20,7 @@ import {
   shiftAppointmentDate,
 } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
+import { AddPatientDialog } from "@/components/dashboard/AddPatientDialog";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
 import { getOutstandingPatientBalances } from "@/lib/financials";
@@ -101,6 +102,7 @@ export default function DashboardOverviewPage() {
     }
   }, [loading, clinicProfile, router]);
 
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
   const [paymentDefaults, setPaymentDefaults] = useState<RecordPaymentDefaults | null>(null);
   const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
   const [qrAmount, setQrAmount] = useState<number | null>(null);
@@ -254,6 +256,16 @@ export default function DashboardOverviewPage() {
       <section aria-labelledby="quick-actions-heading" className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 id="quick-actions-heading" className="text-sm font-semibold">Quick Actions</h2>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="workspace-button secondary small"
+            aria-haspopup="dialog"
+            disabled={loading}
+            onClick={() => setIsAddPatientOpen(true)}
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add Patient
+          </button>
           <button
             type="button"
             className="workspace-button secondary small"
@@ -518,6 +530,8 @@ export default function DashboardOverviewPage() {
           </div>
         </section>
       </div>
+
+      {isAddPatientOpen && <AddPatientDialog onClose={() => setIsAddPatientOpen(false)} />}
 
       {paymentDefaults && (
         <RecordPaymentDialog defaults={paymentDefaults} onClose={() => setPaymentDefaults(null)} />

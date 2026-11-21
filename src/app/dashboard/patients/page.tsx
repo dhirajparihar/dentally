@@ -2,17 +2,11 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, Users, X } from "lucide-react";
+import { AddPatientDialog } from "@/components/dashboard/AddPatientDialog";
 import { PatientDirectory } from "@/components/dashboard/PatientDirectory";
-import { WorkspaceDialog } from "@/components/dashboard/WorkspaceDialog";
 import type { Patient } from "@/lib/mockData";
 import { buildPatientBalanceMap, type PatientBalance } from "@/lib/financials";
-import dynamic from "next/dynamic";
 import { useClinic } from "@/context/ClinicContext";
-
-const PatientRegistrationForm = dynamic(
-  () => import("@/components/dashboard/PatientRegistrationForm").then((mod) => mod.PatientRegistrationForm),
-  { ssr: false }
-);
 
 export default function PatientsPage() {
   const {
@@ -127,25 +121,7 @@ export default function PatientsPage() {
         <PatientDirectory patients={filtered} balances={balancesMap} getShareHref={getWhatsAppLink} loading={loading} />
       )}
 
-      {/* Add Patient Modal */}
-      {isAddOpen && (
-        <WorkspaceDialog label="Add patient" onDismiss={() => setIsAddOpen(false)}>
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#E4E9F0] text-xs animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E4E9F0]">
-              <h3 className="font-bold text-base text-[#111C3A]">
-                Add Patient
-              </h3>
-              <button onClick={() => setIsAddOpen(false)} aria-label="Close add patient form" className="text-[#8291A7] hover:text-[#111C3A]">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="mt-4">
-              <PatientRegistrationForm onCancel={() => setIsAddOpen(false)} onSaved={() => setIsAddOpen(false)} />
-            </div>
-          </div>
-        </WorkspaceDialog>
-      )}
+      {isAddOpen && <AddPatientDialog onClose={() => setIsAddOpen(false)} />}
     </div>
   );
 }

@@ -38,7 +38,7 @@ import { calculateFinancialSummary, formatINR } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
 import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
 import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
-import { findBookedFollowUp, getAppointmentClock, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findBookedFollowUp, getAppointmentClock, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 
 interface PatientDetailsProps {
@@ -855,7 +855,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {patientAppts.map((a) => {
+                  {[...patientAppts].sort((a, b) => (
+                    b.date.localeCompare(a.date) || (parseAppointmentTime(b.time) ?? -1) - (parseAppointmentTime(a.time) ?? -1)
+                  )).map((a) => {
                     const followUp = a.status === "completed" ? findBookedFollowUp(patientAppts, a._id) : undefined;
                     return (
                       <div
