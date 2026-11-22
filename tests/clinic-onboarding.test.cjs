@@ -138,9 +138,21 @@ test("setup validates required fields and international phone syntax without per
   const response = await app.post("complete_onboarding", { ...details, name: " ", phone: "+01 23456789", regNo: "" });
   assert.equal(response.status, 400);
   const { fieldErrors } = await response.json();
-  assert.ok(fieldErrors.name && fieldErrors.phone && fieldErrors.regNo);
+  assert.ok(fieldErrors.name && fieldErrors.phone);
+  assert.equal(fieldErrors.regNo, undefined);
   assert.equal(app.writes(), 0);
   assert.equal(setup.clinicOnboardingSchema.safeParse({ ...details, phone: "+44 (20) 7946-0958" }).success, true);
+});
+
+test("clinics can complete setup without a registration number", async () => {
+  for (const regNo of [undefined, "", "  "]) {
+    const app = fixture();
+    const response = await app.post("complete_onboarding", { ...details, regNo });
+    assert.equal(response.status, 200);
+    const { clinicProfile } = await (await app.get()).json();
+    assert.equal(clinicProfile.isConfigured, true);
+    assert.equal(clinicProfile.regNo, "");
+  }
 });
 
 test("completion trims fields and binds them to the verified session, and subsequent reads skip setup", async () => {

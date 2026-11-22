@@ -29,7 +29,7 @@ export default function ClinicSettingsPage() {
     name: clinicProfile?.name || "Dentally Clinic",
     dentistName: clinicProfile?.dentistName || "Doctor",
     qualification: clinicProfile?.qualification || "BDS, MDS",
-    regNo: clinicProfile?.regNo || "DCI-ONLINE",
+    regNo: clinicProfile?.regNo ?? "DCI-ONLINE",
     phone: clinicProfile?.phone || "+91 98200 11223",
     email: userEmail || clinicProfile?.email || "",
     address: clinicProfile?.address || "Dental Operatory",
@@ -58,7 +58,7 @@ export default function ClinicSettingsPage() {
           name: clinicProfile.name || "Dentally Clinic",
           dentistName: clinicProfile.dentistName || "Doctor",
           qualification: clinicProfile.qualification || "BDS, MDS",
-          regNo: clinicProfile.regNo || "DCI-ONLINE",
+          regNo: clinicProfile.regNo ?? "DCI-ONLINE",
           phone: clinicProfile.phone || "+91 98200 11223",
           email: userEmail || clinicProfile.email || "",
           address: clinicProfile.address || "Dental Operatory",
@@ -315,13 +315,12 @@ export default function ClinicSettingsPage() {
 
               <div className="sm:col-span-2">
                 <label htmlFor="clinic-settings-state-dental-council-dci-reg-number" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
-                  State Dental Council / DCI Reg Number <span className="text-rose-500">*</span>
+                  State Dental Council / DCI Reg Number <span className="font-normal">(optional)</span>
                 </label>
                 <div className="relative">
                   <ShieldCheck className="w-4 h-4 text-[#8291A7] absolute left-3.5 top-3" />
                   <input id="clinic-settings-state-dental-council-dci-reg-number"
                     type="text"
-                    required
                     value={form.regNo}
                     onChange={(e) => updateField("regNo", e.target.value)}
                     onBlur={handleBlur}
@@ -452,8 +451,8 @@ export default function ClinicSettingsPage() {
                   {form.dentistName || "Doctor Name"}
                 </p>
                 <p className="text-[11px] text-[#64748B]">
-                  {form.qualification || "Degrees"} &bull; Reg:{" "}
-                  <span className="font-mono text-[#111C3A] font-medium">{form.regNo || "DCI-REG"}</span>
+                  {form.qualification || "Degrees"}
+                  {form.regNo && <> &bull; Reg: <span className="font-mono text-[#111C3A] font-medium">{form.regNo}</span></>}
                 </p>
                 <p className="text-[11px] text-[#8291A7] pt-1 leading-snug">
                   {form.address || "Clinic Address"}

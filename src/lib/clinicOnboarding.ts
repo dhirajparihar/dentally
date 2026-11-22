@@ -10,7 +10,7 @@ export const clinicOnboardingSchema = z.object({
   address: z.string().trim().min(1, "Enter your clinic address."),
   dentistName: z.string().trim().min(1, "Enter the dentist’s name."),
   qualification: z.string().trim().min(1, "Enter your degree and specialization."),
-  regNo: z.string().trim().min(1, "Enter your dental registration number."),
+  regNo: z.string().trim().default(""),
 });
 
 export type ClinicOnboardingInput = z.infer<typeof clinicOnboardingSchema>;

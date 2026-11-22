@@ -244,7 +244,7 @@ export async function getClinicData(dentistEmail?: string): Promise<{
             name: profileDoc.name || clinicProfile.name,
             dentistName: profileDoc.dentistName || clinicProfile.dentistName,
             qualification: profileDoc.qualification || clinicProfile.qualification,
-            regNo: profileDoc.regNo || clinicProfile.regNo,
+            regNo: profileDoc.regNo ?? clinicProfile.regNo,
             phone: profileDoc.phone || clinicProfile.phone,
             email: normalized,
             address: profileDoc.address || clinicProfile.address,

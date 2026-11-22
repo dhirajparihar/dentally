@@ -660,7 +660,8 @@ export default function FeesPage() {
                 </span>
                 <h3 className="font-bold text-lg text-[#111C3A] mt-0.5">{clinicProfile.name}</h3>
                 <p className="text-[11px] text-[#64748B]">
-                  Dr. {clinicProfile.dentistName} ({clinicProfile.qualification}) &middot; Reg: {clinicProfile.regNo}
+                  Dr. {clinicProfile.dentistName} ({clinicProfile.qualification})
+                  {clinicProfile.regNo && <> &middot; Reg: {clinicProfile.regNo}</>}
                 </p>
                 <p className="text-[10px] font-mono text-[#8291A7] mt-0.5">
                   {clinicProfile.address} &middot; Phone: {clinicProfile.phone}
@@ -729,7 +730,9 @@ export default function FeesPage() {
               <div className="text-right">
                 <div className="w-36 border-b border-slate-700 mb-1"></div>
                 <strong className="text-xs text-slate-900 font-bold block">Dr. {clinicProfile.dentistName}</strong>
-                <span className="text-[10px] text-slate-600 font-mono">Authorized Signatory &middot; {clinicProfile.regNo}</span>
+                <span className="text-[10px] text-slate-600 font-mono">
+                  Authorized Signatory{clinicProfile.regNo && <> &middot; {clinicProfile.regNo}</>}
+                </span>
               </div>
             </div>
 

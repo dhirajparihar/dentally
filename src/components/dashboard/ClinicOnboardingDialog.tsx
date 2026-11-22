@@ -69,15 +69,19 @@ export function ClinicOnboardingDialog({ email, doctorName, onComplete }: {
   const field = (name: keyof ClinicOnboardingInput, label: string, type = "text", autoComplete?: string) => {
     const id = `clinic-setup-${name}`;
     const message = fieldErrors[name]?.[0];
+    const required = name !== "regNo";
     return (
       <div>
-        <label htmlFor={id} className={labelClass}>{label} <span className="text-rose-700" aria-hidden="true">*</span></label>
+        <label htmlFor={id} className={labelClass}>
+          {label}{" "}
+          {required ? <span className="text-rose-700" aria-hidden="true">*</span> : <span className="font-normal">(optional)</span>}
+        </label>
         <input
           id={id}
           name={name}
           type={type}
           autoComplete={autoComplete}
-          required
+          required={required}
           className={inputClass}
           value={details[name]}
           aria-invalid={Boolean(message)}

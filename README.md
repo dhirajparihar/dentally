@@ -80,3 +80,5 @@ Dentally is streamlined strictly around a single dentist's daily practice operat
 * **Fees & Collections**: `http://localhost:3000/dashboard/fees`
 * **ChatGPT MCP Hub**: `http://localhost:3000/dashboard/mcp`
 * **MCP Server Endpoint**: `http://localhost:3000/api/mcp`
+
+You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
