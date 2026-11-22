@@ -36,7 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { data: session, status } = useSession();
   const { clinicProfile } = useClinic();
 
-  const userName = status === "loading" ? "Doctor" : (clinicProfile.dentistName || session?.user?.name || "Doctor");
+  const dentistName = clinicProfile.dentistName?.trim() || (status === "loading" ? "" : session?.user?.name?.trim());
+  const dentistNameWithoutTitle = dentistName?.replace(/^(?:dr(?:\.\s*|\s+|$))+/i, "");
 
   return (
     <WorkspaceSidebar id="dashboard-navigation" open={isOpen} onClose={onClose}>
@@ -130,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 {clinicProfile.name || "Dentally Practice"}
               </h5>
               <p className="text-[10px] text-[#64748B] font-mono truncate">
-                Dr. {clinicProfile.dentistName || userName}
+                Dr. {dentistNameWithoutTitle || "Doctor"}
               </p>
             </div>
             <Settings className="w-3.5 h-3.5 text-[#8291A7] group-hover:text-[#0089A8] transition-colors shrink-0" />
