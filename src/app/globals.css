@@ -37,6 +37,29 @@
   }
 }
 
+.floating-chatgpt-link {
+  position: fixed;
+  z-index: 35;
+  inset-block-end: var(--chatgpt-link-bottom);
+  inset-inline-end: max(var(--chatgpt-link-gap), env(safe-area-inset-right));
+  min-block-size: var(--chatgpt-link-size);
+  min-inline-size: var(--chatgpt-link-size);
+}
+
+@media screen {
+  html {
+    --chatgpt-link-size: 2.75rem;
+    --chatgpt-link-gap: clamp(.75rem, 2vw, 1.5rem);
+    --chatgpt-link-bottom: max(var(--chatgpt-link-gap), env(safe-area-inset-bottom));
+    --chatgpt-link-clearance: calc(var(--chatgpt-link-size) + var(--chatgpt-link-bottom) + var(--chatgpt-link-gap));
+    scroll-padding-block-end: var(--chatgpt-link-clearance);
+  }
+
+  body { padding-block-end: var(--chatgpt-link-clearance); }
+}
+
+body:has(.workspace-sidebar[data-open="true"]) .floating-chatgpt-link { visibility: hidden; }
+
 /* Glassmorphism Navigation */
 .glass-nav {
   background: rgba(251, 249, 241, 0.88);

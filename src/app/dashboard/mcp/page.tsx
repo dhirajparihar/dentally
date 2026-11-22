@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check, ShieldCheck, Play, Search, X, Terminal, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChatGPTLink } from "@/components/ChatGPTLink";
 import { DENTALLY_MCP_TOOLS, McpToolDefinition } from "@/lib/mcp/tools";
 import { useClinic } from "@/context/ClinicContext";
 
@@ -14,6 +15,7 @@ const categories = [
 ] as const;
 
 const samplePatient = "<sample patient>";
+const starterPrompt = "Show me tomorrow’s open appointment slots.";
 
 function formatToolResponse(data: unknown, patientIds: ReadonlySet<string>) {
   function hidePatientIds(this: Record<string, unknown>, key: string, value: unknown): unknown {
@@ -43,6 +45,7 @@ export default function McpSettingsPage() {
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
+  const [promptCopyMessage, setPromptCopyMessage] = useState("");
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<typeof categories[number]["id"]>("all");
   const [selectedTool, setSelectedTool] = useState<McpToolDefinition>(DENTALLY_MCP_TOOLS.find((tool) => tool.name === "get_today_appointments") || DENTALLY_MCP_TOOLS[0]);
@@ -51,6 +54,7 @@ export default function McpSettingsPage() {
   const [testError, setTestError] = useState("");
   const [loading, setLoading] = useState(false);
   const inspectorRef = useRef<HTMLElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const samplePatientId = useRef<string | undefined>(undefined);
   const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -84,6 +88,16 @@ export default function McpSettingsPage() {
       copyTimeout.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopyError("Select the URL to copy it manually.");
+    }
+  };
+
+  const copyStarterPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(starterPrompt);
+      setPromptCopyMessage("Prompt copied.");
+    } catch {
+      promptRef.current?.focus();
+      setPromptCopyMessage("Copy the selected prompt manually.");
     }
   };
 
@@ -205,6 +219,29 @@ export default function McpSettingsPage() {
         {copyError && <p role="status" className="mt-2 text-xs text-[#64748B]">{copyError}</p>}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-[#64748B]"><p className="flex min-w-0 items-center gap-1.5"><ShieldCheck size={14} className="shrink-0 text-[#0089A8]" /><span className="break-all">{clinicProfile.dentistName} &middot; {clinicProfile.email}</span></p><span>{DENTALLY_MCP_TOOLS.length} tools</span></div>
         <details className="mcp-connection-help"><summary>Connection details</summary><p>Add the private server URL in your MCP client and select Authentication: None. Your clinic authorization key is included in the URL.</p></details>
+      </section>
+
+      <section className="mcp-connection" aria-labelledby="chatgpt-heading">
+        <h2 id="chatgpt-heading" className="text-base font-bold">Use Dentally in ChatGPT</h2>
+        <p className="mt-1 text-xs leading-5 text-[#64748B]">
+          Once connected, open ChatGPT, select <strong>@Dentally</strong>, and paste the starter prompt.
+        </p>
+        <textarea
+          ref={promptRef}
+          value={starterPrompt}
+          readOnly
+          rows={2}
+          aria-label="Starter prompt"
+          onFocus={(event) => event.currentTarget.select()}
+          className="mcp-arguments mt-3"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={copyStarterPrompt} className="workspace-button secondary">
+            <Copy size={15} aria-hidden="true" /> Copy Prompt
+          </button>
+          <ChatGPTLink className="workspace-button primary" />
+        </div>
+        <p role="status" className="mt-2 text-xs text-[#52627A] empty:mt-0">{promptCopyMessage}</p>
       </section>
 
       <div className="mcp-layout">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { ChatGPTLink } from "@/components/ChatGPTLink";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -27,6 +28,10 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-[#FBF9F1] text-[#1E2D2B] selection:bg-[#BDDBD1] selection:text-[#162321] font-sans antialiased">
         <AuthProvider>{children}</AuthProvider>
+        <ChatGPTLink
+          iconOnly
+          className="floating-chatgpt-link no-print inline-flex items-center justify-center rounded-full border border-dental-limestone bg-white shadow-md transition-colors hover:bg-dental-cerulean-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-dental-cerulean-dark"
+        />
       </body>
     </html>
   );

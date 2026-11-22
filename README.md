@@ -82,3 +82,7 @@ Dentally is streamlined strictly around a single dentist's daily practice operat
 * **MCP Server Endpoint**: `http://localhost:3000/api/mcp`
 
 You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
+
+After connecting Dentally to ChatGPT, use **Copy Prompt** and **Open ChatGPT** in the MCP Hub. Select `@Dentally` in ChatGPT and paste the prompt.
+
+The floating ChatGPT icon opens ChatGPT in a new tab from any Dentally page. The Blossom logo belongs to OpenAI. [OpenAI brand guidelines](https://openai.com/brand/)
