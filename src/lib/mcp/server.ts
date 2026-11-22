@@ -3,6 +3,7 @@ import { z, type ZodType } from "zod";
 import {
   getClinicData,
   savePatient,
+  saveVisitNote,
   updateAppointmentStatus,
   rescheduleAppointment,
   saveFee,
@@ -11,7 +12,8 @@ import {
 } from "@/lib/db/repository";
 import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { getPatientPhoneQuery } from "@/lib/patientSearch";
-import { patientSchema } from "@/lib/validations/clinic";
+import { patientSchema, visitNoteSchema, visitNoteTargetSchema, visitNoteUpdateSchema } from "@/lib/validations/clinic";
+import { getVisitNoteAppointmentId, getVisitNotes } from "@/lib/visitNotes";
 import { bookPatientAppointment } from "@/lib/bookPatientAppointment";
 import {
   ClinicProfile,
@@ -34,6 +36,10 @@ const registrationSchema = patientSchema.extend({
   phone: patientSchema.shape.phone.trim().refine((value) => getPatientPhoneQuery(value).length >= 5, "Enter a valid phone number."),
   registeredDate: patientSchema.shape.registeredDate.unwrap(),
 });
+
+const visitNoteDoctor = { doctor: z.string().trim().min(1).optional() };
+const addVisitNoteToolSchema = visitNoteSchema.extend(visitNoteDoctor);
+const updateVisitNoteToolSchema = visitNoteUpdateSchema.extend(visitNoteDoctor);
 
 export async function executeMcpTool(name: string, args: any, dentistEmail?: string): Promise<any> {
   if (!dentistEmail) {
@@ -58,6 +64,16 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
         p.phone.replace(/\s+/g, "").includes(q.replace(/\s+/g, "")) ||
         p.name.toLowerCase().includes(q)
     );
+  };
+
+  let visitsById: Map<string, Appointment> | undefined;
+  const getLinkedNotes = (patient: Patient) => {
+    const visits = visitsById ??= new Map(appointmentsState.map((visit) => [visit._id, visit]));
+    return (patient.notes ?? []).flatMap((note) => {
+      const appointmentId = getVisitNoteAppointmentId(note.id);
+      const visit = appointmentId ? visits.get(appointmentId) : undefined;
+      return visit?.patientId === patient._id ? [{ ...note, appointmentId, date: visit.date }] : [];
+    });
   };
 
   // Helper to calculate patient balance scoped to current doctor
@@ -153,7 +169,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       }
       const bal = calculatePatientBalance(patient._id);
       return {
-        patient,
+        patient: { ...patient, notes: getLinkedNotes(patient) },
         balanceSummary: bal,
       };
     }
@@ -171,11 +187,12 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       if (args.bloodGroup) patient.bloodGroup = args.bloodGroup;
       if (args.address) patient.address = args.address;
       const savedPatients = await savePatient(patient, email, { requireExisting: true });
+      const saved = savedPatients.find((entry) => entry._id === patient._id);
 
       return {
         success: true,
         message: `Updated patient details for ${patient.name}.`,
-        patient: savedPatients.find((entry) => entry._id === patient._id),
+        patient: saved && { ...saved, notes: getLinkedNotes(saved) },
       };
     }
 
@@ -192,35 +209,30 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
     }
 
     case "get_patient_notes": {
-      const patient = findPatientHelper(args.patientId);
-      if (!patient) return { error: `Patient '${args.patientId}' not found.` };
+      const { appointmentId } = validateToolInput(visitNoteTargetSchema, args, "Select a visit to view its clinical note");
+      const visit = appointmentsState.find((appointment) => appointment._id === appointmentId);
+      if (!visit) throw new Error("Visit not found in this clinic.");
+      const patient = patientsState.find((record) => record._id === visit.patientId);
+      if (!patient) throw new Error("The patient for this visit was not found in this clinic.");
+      const notes = getVisitNotes(patient, appointmentId).map((note) => ({ ...note, appointmentId, date: visit.date }));
 
       return {
+        appointmentId,
         patientName: patient.name,
-        notesCount: patient.notes.length,
-        notes: patient.notes,
+        notesCount: notes.length,
+        notes,
       };
     }
 
-    case "add_patient_notes": {
-      const patient = findPatientHelper(args.patientId);
-      if (!patient) return { error: `Patient '${args.patientId}' not found.` };
-
-      const newNote = {
-        id: `note_${Date.now()}`,
-        date: todayStr,
-        text: args.note,
-        doctor: args.doctor || clinicProfile.dentistName,
-      };
-      patient.notes.unshift(newNote);
-      patient.lastVisit = todayStr;
-      await savePatient(patient, email);
-
-      return {
-        success: true,
-        message: `Consultation note recorded for ${patient.name}.`,
-        addedNote: newNote,
-      };
+    case "add_patient_notes":
+    case "update_patient_notes": {
+      const adding = name === "add_patient_notes";
+      const schema = adding ? addVisitNoteToolSchema : updateVisitNoteToolSchema;
+      const input = validateToolInput(schema, args, "Select a visit and enter its clinical note");
+      const note = await saveVisitNote(input, email, input.doctor ?? clinicProfile.dentistName);
+      return adding
+        ? { success: true, message: "Clinical note added to the visit.", addedNote: note }
+        : { success: true, message: "Visit clinical note updated.", updatedNote: note };
     }
 
     case "get_patient_fees_history": {
@@ -773,7 +785,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
           phone: p.phone,
           dueDate: p.followUpDue,
           lastProcedure: p.history[0]?.procedure || "General",
-          lastNotes: p.notes[0]?.text || "",
+          lastNotes: getLinkedNotes(p)[0]?.text || "",
         })),
       };
     }
@@ -802,7 +814,7 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
           outstandingBalanceINR: bal.outstandingBalance,
         },
         upcomingAppointments: upcoming,
-        recentNotes: patient.notes.slice(0, 2),
+        recentNotes: getLinkedNotes(patient).slice(0, 2),
         recentHistory: patient.history.slice(0, 3),
       };
     }

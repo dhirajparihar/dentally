@@ -304,3 +304,60 @@ test("booking cannot reassign an existing appointment and rescheduling preserves
   assert.equal(original.status, "missed");
   assert.equal(original.rescheduledToAppointmentId, replacement._id);
 });
+
+test("dashboard and MCP share independently editable notes on each visit", async () => {
+  const email = newTenant();
+  const patientRecord = await register(email);
+  const first = (await book(email, { patientId: patientRecord._id, notes: "Booking reminder" })).appointment;
+  const second = (await book(email, { patientId: patientRecord._id, time: "11:00 AM" })).appointment;
+  const input = { appointmentId: first._id, note: "  Post-visit instructions recorded.  " };
+
+  const added = await dashboardMutation(email, "add_patient_notes", input);
+  assert.equal(added.status, 200);
+  assert.equal(added.body.patients[0].notes[0].text, input.note.trim());
+  const firstNote = await executeMcpTool("get_patient_notes", { appointmentId: first._id }, email);
+  assert.equal(firstNote.notesCount, 1);
+  assert.equal(firstNote.notes[0].appointmentId, first._id);
+  assert.equal(firstNote.notes[0].date, first.date);
+  assert.equal((await executeMcpTool("get_patient_notes", { appointmentId: second._id }, email)).notesCount, 0);
+
+  assert.equal((await dashboardMutation(email, "add_patient_notes", input)).status, 200);
+  const [newNote, edited] = await Promise.all([
+    executeMcpTool("add_patient_notes", { ...input, note: "Additional observations." }, email),
+    executeMcpTool("update_patient_notes", { ...input, noteId: firstNote.notes[0].id, note: "Updated instructions." }, email),
+  ]);
+  const finalEdit = { ...input, noteId: edited.updatedNote.id, note: "Final instructions." };
+  assert.equal((await dashboardMutation(email, "update_patient_notes", finalEdit)).status, 200);
+  assert.equal((await dashboardMutation(email, "update_patient_notes", { ...finalEdit, appointmentId: second._id })).status, 404);
+  const notes = (await executeMcpTool("get_patient_notes", { appointmentId: first._id }, email)).notes;
+  assert.equal(notes.length, 2);
+  assert.equal(notes.find((note) => note.id === firstNote.notes[0].id).text, finalEdit.note);
+  assert.equal(notes.find((note) => note.id === newNote.addedNote.id).text, "Additional observations.");
+
+  const profileEdit = await dashboardMutation(email, "update_patient", { ...patientRecord, name: "Maya Patel" });
+  assert.equal(profileEdit.status, 200);
+  assert.equal(profileEdit.body.patients[0].notes.length, 2);
+  assert.equal(profileEdit.body.patients[0].notes.find((note) => note.id === finalEdit.noteId).text, finalEdit.note);
+  assert.equal(profileEdit.body.appointments.find((visit) => visit._id === first._id).notes, "Booking reminder");
+});
+
+test("clinical note tools and dashboard saves require an existing visit in the current clinic", async () => {
+  const email = newTenant();
+  const otherEmail = newTenant();
+  const patientRecord = await register(email);
+  const appointment = (await book(email, { patientId: patientRecord._id })).appointment;
+  const input = { appointmentId: appointment._id, note: "Clinical note" };
+
+  assert.equal((await dashboardMutation(email, "add_patient_notes", { patientId: patientRecord._id, note: input.note })).status, 400);
+  assert.equal((await dashboardMutation(email, "add_patient_notes", { ...input, note: "   " })).status, 400);
+  assert.equal((await dashboardMutation(email, "update_patient_notes", input)).status, 400);
+  assert.equal((await dashboardMutation(email, "update_patient_notes", { ...input, noteId: "missing-note" })).status, 404);
+  assert.equal((await dashboardMutation(otherEmail, "add_patient_notes", input)).status, 404);
+  await assert.rejects(executeMcpTool("get_patient_notes", { appointmentId: appointment._id }, otherEmail), /visit not found/i);
+  await assert.rejects(executeMcpTool("add_patient_notes", { patientId: patientRecord._id, note: input.note }, email), /appointmentId/);
+
+  const { addedNote } = await executeMcpTool("add_patient_notes", input, email);
+  await deletePatient(patientRecord._id, email);
+  await assert.rejects(executeMcpTool("get_patient_notes", { appointmentId: appointment._id }, email), /visit not found/i);
+  assert.equal((await dashboardMutation(email, "update_patient_notes", { ...input, noteId: addedNote.id })).status, 404);
+});

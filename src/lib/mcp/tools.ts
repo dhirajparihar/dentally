@@ -3,6 +3,8 @@
  * Strictly structured around Patients, Appointments, Fees & Payment History, and Daily Assistant.
  */
 
+import { maxVisitNoteLength } from "@/lib/visitNotes";
+
 export interface McpToolDefinition {
   name: string;
   category: "patient" | "appointment" | "fee" | "assistant";
@@ -13,6 +15,17 @@ export interface McpToolDefinition {
     required?: string[];
   };
 }
+
+const visitNoteAppointmentId = {
+  type: "string",
+  description: "ID of an existing visit. Use get_patient_appointment_history to find the correct visit ID.",
+};
+
+const visitNoteProperties = {
+  appointmentId: visitNoteAppointmentId,
+  note: { type: "string", maxLength: maxVisitNoteLength, description: "Full clinical note for the visit" },
+  doctor: { type: "string", description: "Attending dentist name" },
+};
 
 export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
   // ==========================================
@@ -99,27 +112,33 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: "get_patient_notes",
     category: "patient",
-    description: "View dentist's clinical consultation notes recorded for a patient.",
+    description: "View the clinical notes and their IDs for one existing patient visit.",
     inputSchema: {
       type: "object",
       properties: {
-        patientId: { type: "string", description: "Unique patient ID" },
+        appointmentId: visitNoteAppointmentId,
       },
-      required: ["patientId"],
+      required: ["appointmentId"],
     },
   },
   {
     name: "add_patient_notes",
     category: "patient",
-    description: "Add a new clinical consultation or treatment note to a patient's record.",
+    description: "Add a new clinical note to an existing visit.",
     inputSchema: {
       type: "object",
-      properties: {
-        patientId: { type: "string", description: "Unique patient ID or name" },
-        note: { type: "string", description: "Clinical observation, procedure details, or advice" },
-        doctor: { type: "string", description: "Attending dentist name" },
-      },
-      required: ["patientId", "note"],
+      properties: visitNoteProperties,
+      required: ["appointmentId", "note"],
+    },
+  },
+  {
+    name: "update_patient_notes",
+    category: "patient",
+    description: "Edit one clinical note on an existing visit. Use get_patient_notes to find the correct note ID and current text.",
+    inputSchema: {
+      type: "object",
+      properties: { ...visitNoteProperties, noteId: { type: "string", description: "ID of the clinical note on this visit" } },
+      required: ["appointmentId", "noteId", "note"],
     },
   },
   {

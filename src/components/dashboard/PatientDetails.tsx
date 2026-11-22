@@ -38,8 +38,10 @@ import { calculateFinancialSummary, formatINR } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
 import { getAppointmentTreatments } from "@/lib/appointmentTreatments";
 import { FeeProcedurePicker } from "@/components/dashboard/FeeProcedurePicker";
+import { VisitClinicalNote } from "@/components/dashboard/VisitClinicalNote";
 import { findBookedFollowUp, getAppointmentClock, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
+import { getVisitNotes } from "@/lib/visitNotes";
 
 interface PatientDetailsProps {
   patient: Patient | null;
@@ -887,6 +889,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({
                           <h4 className="font-bold text-sm text-[#111C3A]">{a.procedure}</h4>
                           {a.notes && <p className="text-xs text-[#64748B] italic">&quot;{a.notes}&quot;</p>}
                         </div>
+
+                        {a.status === "completed" && (
+                          <VisitClinicalNote appointmentId={a._id} notes={getVisitNotes(patient, a._id)} />
+                        )}
 
                         <div className="pt-2 border-t border-[#E4E9F0] flex flex-wrap gap-2 items-center justify-between text-[11px] font-mono text-[#8291A7]">
                           <span>Duration: {a.durationMinutes || 30} mins</span>

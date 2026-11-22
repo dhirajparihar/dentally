@@ -103,6 +103,7 @@ function fixture() {
       "@/lib/appointmentTime": load("lib/appointmentTime.ts"),
       "@/lib/patientSearch": load("lib/patientSearch.ts"),
       "@/lib/appointmentTreatments": load("lib/appointmentTreatments.ts"),
+      "@/lib/visitNotes": load("lib/visitNotes.ts"),
     }),
   });
   return {

@@ -4,6 +4,7 @@ import { connectDB } from "./connect";
 import { isClinicConfigured } from "@/lib/clinicOnboarding";
 import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { patientSchema, provisionalPatientUpdateSchema } from "@/lib/validations/clinic";
+import { getVisitNotes, visitNoteId } from "@/lib/visitNotes";
 import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
 import FeeModel from "./models/Fee";
@@ -352,10 +353,10 @@ export async function savePatient(patient: Patient, dentistEmail?: string, optio
   await withClinicBookingLock(email, async (session) => {
     const filter = { _id: patient._id, dentistEmail: email };
     const existing = session
-      ? await PatientModel.findOne(filter).select("age gender registrationStatus").session(session).lean().exec() as Pick<Patient, "age" | "gender" | "registrationStatus"> | null
+      ? await PatientModel.findOne(filter).select("age gender registrationStatus notes").session(session).lean().exec() as Pick<Patient, "age" | "gender" | "registrationStatus" | "notes"> | null
       : mem.patients.find((entry) => entry._id === patient._id);
     if (!existing && options?.requireExisting) throw new AppointmentNotFoundError("Patient was not found in this clinic.");
-    const patientToSave = { ...patient, dentistEmail: email, registrationStatus: existing?.registrationStatus };
+    const patientToSave = { ...patient, dentistEmail: email, registrationStatus: existing?.registrationStatus, notes: existing?.notes ?? [] };
     if (existing?.registrationStatus === "provisional") {
       patientToSave.age ??= existing.age;
       patientToSave.gender ??= existing.gender;
@@ -422,6 +423,53 @@ async function requireAppointmentPatient(patientId: string, email: string, sessi
     : getOrCreateMemoryStore(email).patients.find((entry) => entry._id === patientId);
   if (!patient) throw new AppointmentNotFoundError("Patient was not found in this clinic.");
   return patient;
+}
+
+export async function saveVisitNote(
+  { appointmentId, note, noteId }: { appointmentId: string; note: string; noteId?: string },
+  dentistEmail: string,
+  doctor: string,
+) {
+  const email = dentistEmail.toLowerCase().trim();
+  if (!email) throw new Error("Missing dentist email for clinical note.");
+  const mem = getOrCreateMemoryStore(email);
+
+  const result = await withClinicBookingLock(email, async (session) => {
+    const visit = session
+      ? await AppointmentModel.findOne({ _id: appointmentId, dentistEmail: email }).session(session).lean().exec() as Appointment | null
+      : mem.appointments.find((appointment) => appointment._id === appointmentId);
+    if (!visit) throw new AppointmentNotFoundError("Visit not found in this clinic.");
+
+    const patient = await requireAppointmentPatient(visit.patientId, email, session);
+    const notes = patient.notes ?? [];
+    const existing = getVisitNotes(patient, appointmentId).find((entry) =>
+      noteId ? entry.id === noteId : entry.text === note && entry.doctor === doctor
+    );
+    if (existing?.text === note) return { visit, note: existing, notes };
+    if (noteId && !existing) {
+      throw new AppointmentNotFoundError("Clinical note not found on this visit.");
+    }
+
+    const savedNote = {
+      id: noteId ?? visitNoteId(appointmentId, randomUUID()),
+      date: visit.date,
+      text: note,
+      doctor,
+    };
+    const updatedNotes = existing ? notes.map((entry) => entry.id === savedNote.id ? savedNote : entry) : [savedNote, ...notes];
+    if (session) {
+      await PatientModel.updateOne(
+        { _id: visit.patientId, dentistEmail: email },
+        { $set: { notes: updatedNotes } },
+        { session, runValidators: true },
+      );
+    }
+    return { visit, note: savedNote, notes: updatedNotes };
+  }, ({ visit, notes }) => {
+    mem.patients = mem.patients.map((patient) => patient._id === visit.patientId ? { ...patient, notes } : patient);
+  });
+
+  return { appointmentId: result.visit._id, ...result.note, date: result.visit.date };
 }
 
 async function requireAvailableSlot(

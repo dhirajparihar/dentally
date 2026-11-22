@@ -34,6 +34,7 @@ export interface ClinicContextType {
   bookAppointment: (appointment: Appointment) => Promise<boolean>;
   bookPatientAppointment: (appointment: QuickBookingInput) => Promise<QuickBookingResult>;
   completeAppointment: (appointmentId: string) => Promise<boolean>;
+  saveVisitNote: (appointmentId: string, note: string, noteId?: string) => Promise<string | undefined>;
   cancelAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
   missAppointment: (appointmentId: string, reason?: string) => Promise<boolean>;
   rescheduleAppointment: (appointmentId: string, date: string, time: string, reason?: string) => Promise<boolean>;
@@ -106,7 +107,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (revisionAtStart === appointmentRevision.current) setAppointments(data.appointments || []);
       if (appointmentsOnly && !configured) setClinicAccess({ email: userEmail, configured });
       if (!appointmentsOnly) {
-        setPatients(data.patients || []);
+        if (revisionAtStart === appointmentRevision.current) setPatients(data.patients || []);
         setFees(data.fees || []);
         setPayments(data.payments || []);
         setClinicProfile((prev) => ({
@@ -244,6 +245,15 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const completeAppointment = (appointmentId: string) => postMutation({ action: "complete_appointment", appointmentId });
 
+  const saveVisitNote = async (appointmentId: string, note: string, noteId?: string) => {
+    let error: string | undefined;
+    const saved = await postMutation({
+      action: noteId ? "update_patient_notes" : "add_patient_notes",
+      data: { appointmentId, note, noteId },
+    }, (result) => { error = result.error; });
+    return saved ? undefined : error || "Could not save the clinical note. Please try again.";
+  };
+
   const cancelAppointment = (appointmentId: string, reason?: string) => postMutation({ action: "cancel_appointment", appointmentId, reason });
 
   const missAppointment = (appointmentId: string, reason?: string) => postMutation({ action: "miss_appointment", appointmentId, reason });
@@ -296,6 +306,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         bookAppointment,
         bookPatientAppointment,
         completeAppointment,
+        saveVisitNote,
         cancelAppointment,
         missAppointment,
         rescheduleAppointment,

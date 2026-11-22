@@ -14,7 +14,7 @@ Dentally is streamlined strictly around a single dentist's daily practice operat
 
 ---
 
-## ⚡ MCP Toolset Matrix (36 Tools)
+## ⚡ MCP Toolset Matrix
 
 ### 1. Patient Management Tools
 * `add_patient`: Register a new patient
@@ -22,8 +22,9 @@ Dentally is streamlined strictly around a single dentist's daily practice operat
 * `get_patient_details`: View complete patient details
 * `update_patient`: Update patient information
 * `get_patient_history`: View previous visits and treatments
-* `get_patient_notes`: View dentist's notes
-* `add_patient_notes`: Add consultation notes
+* `get_patient_notes`: View clinical notes for an existing visit
+* `add_patient_notes`: Add a clinical note to an existing visit
+* `update_patient_notes`: Edit a clinical note on an existing visit
 * `get_patient_fees_history`: View patient's complete fee history
 * `get_patient_appointment_history`: View all previous and upcoming appointments
 * `get_patient_balance`: Check outstanding patient balance
@@ -80,6 +81,8 @@ Dentally is streamlined strictly around a single dentist's daily practice operat
 * **Fees & Collections**: `http://localhost:3000/dashboard/fees`
 * **ChatGPT MCP Hub**: `http://localhost:3000/dashboard/mcp`
 * **MCP Server Endpoint**: `http://localhost:3000/api/mcp`
+
+Open **Patients → patient profile → Visits → Clinical Notes** on a completed visit to view, add, or edit its notes. MCP note tools require an `appointmentId` from `get_patient_appointment_history`. Editing also requires the note's ID from `get_patient_notes`.
 
 You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
 

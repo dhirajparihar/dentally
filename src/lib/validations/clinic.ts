@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { treatmentKey } from "@/lib/appointmentTreatments";
 import { isBookingMobile } from "@/lib/patientSearch";
+import { maxVisitNoteLength } from "@/lib/visitNotes";
 
 const appointmentDurationSchema = z.number().int().min(5).max(480);
 
@@ -83,6 +84,18 @@ export const rescheduleSchema = z.object({
   date: z.string().min(8, "Date required"),
   time: z.string().min(3, "Time required"),
   reason: z.string().optional().default("Patient request"),
+});
+
+export const visitNoteTargetSchema = z.object({
+  appointmentId: z.string().trim().min(1, "Select an existing visit."),
+});
+
+export const visitNoteSchema = visitNoteTargetSchema.extend({
+  note: z.string().trim().min(1, "Enter a clinical note.").max(maxVisitNoteLength),
+});
+
+export const visitNoteUpdateSchema = visitNoteSchema.extend({
+  noteId: z.string().trim().min(1, "Select a clinical note from this visit."),
 });
 
 export const patientBookingSchema = appointmentSchema.pick({

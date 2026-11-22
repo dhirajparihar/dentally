@@ -12,6 +12,7 @@ import {
   savePatient,
   deletePatient,
   saveAppointment,
+  saveVisitNote,
   updateAppointmentStatus,
   rescheduleAppointment,
   saveFee,
@@ -28,6 +29,8 @@ import {
   feeSchema,
   paymentSchema,
   clinicProfileSchema,
+  visitNoteSchema,
+  visitNoteUpdateSchema,
 } from "@/lib/validations/clinic";
 
 export const dynamic = "force-dynamic";
@@ -147,6 +150,13 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Valid appointment ID required" }, { status: 400 });
         }
         await updateAppointmentStatus(appointmentId, "completed", email);
+        break;
+      }
+
+      case "add_patient_notes":
+      case "update_patient_notes": {
+        const schema = action === "add_patient_notes" ? visitNoteSchema : visitNoteUpdateSchema;
+        await saveVisitNote(schema.parse(data), email, doctorName);
         break;
       }
 
