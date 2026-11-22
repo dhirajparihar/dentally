@@ -131,7 +131,12 @@ body:has(.workspace-sidebar[data-open="true"]) .floating-chatgpt-link { visibili
 .workspace-account-panel { width: min(16rem, calc(100vw - 2 * var(--workspace-gutter))); max-height: min(60dvh, 24rem); overflow: auto; overscroll-behavior: contain; }
 .workspace-form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
 @screen sm { .workspace-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-html:has(.workspace-shell) { scroll-padding-block-start: 6rem; }
+@media screen {
+  html:has(.workspace-shell) { scroll-padding-block-start: 6rem; overscroll-behavior-y: none; }
+  body:has(.workspace-shell) { min-height: 0; padding-block-end: 0; }
+  /* Keep space for the floating ChatGPT link inside the workspace background. */
+  .workspace-main { padding-block-end: max(var(--workspace-gutter), var(--chatgpt-link-clearance)); }
+}
 body:has(.workspace-sidebar[data-open="true"], .mobile-dialog:modal) { overflow: hidden; }
 @screen lg {
   .workspace-content { margin-inline-start: var(--workspace-sidebar-width); }
