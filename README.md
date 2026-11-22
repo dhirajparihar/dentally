@@ -88,4 +88,4 @@ You can leave the State Dental Council / DCI registration number blank during fi
 
 After connecting Dentally to ChatGPT, use **Copy Prompt** and **Open ChatGPT** in the MCP Hub. Select `@Dentally` in ChatGPT and paste the prompt.
 
-The floating ChatGPT icon opens ChatGPT in a new tab from any Dentally page. The Blossom logo belongs to OpenAI. [OpenAI brand guidelines](https://openai.com/brand/)
+The floating ChatGPT icon in the clinic workspace opens ChatGPT in a new tab. The Blossom logo belongs to OpenAI. [OpenAI brand guidelines](https://openai.com/brand/)
