@@ -86,6 +86,6 @@ Open **Patients → patient profile → Visits → Clinical Notes** on a complet
 
 You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
 
-After connecting Dentally to ChatGPT, use **Copy Prompt** and **Open ChatGPT** in the MCP Hub. Select `@Dentally` in ChatGPT and paste the prompt.
+Use **Copy URL** in the ChatGPT MCP Hub. In ChatGPT, go to **Plugins → + → Add custom MCP server** and paste it into **Server URL**.
 
 The floating ChatGPT icon in the clinic workspace opens ChatGPT in a new tab. The Blossom logo belongs to OpenAI. [OpenAI brand guidelines](https://openai.com/brand/)
