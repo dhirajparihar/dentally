@@ -7,6 +7,10 @@ import { PatientDirectory } from "@/components/dashboard/PatientDirectory";
 import type { Patient } from "@/lib/mockData";
 import { buildPatientBalanceMap, type PatientBalance } from "@/lib/financials";
 import { useClinic } from "@/context/ClinicContext";
+import { isOnlineRegistrationPatient } from "@/lib/onlineBookingIds";
+import { getPatientPhoneQuery, normalizePatientPhone } from "@/lib/patientSearch";
+
+const filterClass = "h-11 w-full min-w-0 rounded-xl border border-[#E4E9F0] bg-white px-3 text-xs font-semibold text-[#111C3A] focus:border-[#0089A8] sm:w-auto";
 
 export default function PatientsPage() {
   const {
@@ -18,7 +22,8 @@ export default function PatientsPage() {
   } = useClinic();
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered" | "recall">("recent");
+  const [sortBy, setSortBy] = useState<"name" | "recent" | "due" | "registered" | "recall" | "online">("recent");
+  const [onlineOnly, setOnlineOnly] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -34,13 +39,16 @@ export default function PatientsPage() {
   const balancesMap = useMemo(() => buildPatientBalanceMap(patients, fees, payments), [patients, fees, payments]);
   const query = search.trim().toLowerCase();
   const phoneQuery = query.replace(/\D/g, "");
+  const normalizedPhoneQuery = getPatientPhoneQuery(query);
 
   const filtered = patients
     .filter((p) => {
+      if (onlineOnly && !isOnlineRegistrationPatient(p._id)) return false;
       if (!query) return true;
       return (
         p.name.toLowerCase().includes(query) ||
         (phoneQuery && p.phone?.replace(/\D/g, "").includes(phoneQuery)) ||
+        (normalizedPhoneQuery && normalizePatientPhone(p.phone ?? "").includes(normalizedPhoneQuery)) ||
         p._id.toLowerCase().includes(query) ||
         (p.address && p.address.toLowerCase().includes(query)) ||
         (p.medicalAlerts && p.medicalAlerts.some((a) => a.toLowerCase().includes(query))) ||
@@ -57,6 +65,10 @@ export default function PatientsPage() {
       }
       if (sortBy === "due") return (balancesMap.get(b._id)?.due ?? 0) - (balancesMap.get(a._id)?.due ?? 0);
       if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "online") {
+        return Number(isOnlineRegistrationPatient(b._id)) - Number(isOnlineRegistrationPatient(a._id))
+          || (b.registeredDate || "").localeCompare(a.registeredDate || "");
+      }
       if (sortBy === "registered") return (b.registeredDate || "").localeCompare(a.registeredDate || "");
       // Default: recent visits first
       return (b.lastVisit || b.registeredDate || "").localeCompare(a.lastVisit || a.registeredDate || "");
@@ -88,17 +100,29 @@ export default function PatientsPage() {
         </div>
 
         <select
+          value={onlineOnly ? "online" : "all"}
+          onChange={(event) => setOnlineOnly(event.target.value === "online")}
+          aria-label="Filter patients by registration source"
+          disabled={loading}
+          className={filterClass + " col-span-2"}
+        >
+          <option value="all">All patients</option>
+          <option value="online">Registered online</option>
+        </select>
+
+        <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           aria-label="Sort patients"
           disabled={loading}
-          className="h-11 w-full min-w-0 rounded-xl border border-[#E4E9F0] bg-white px-3 text-xs font-semibold text-[#111C3A] focus:border-[#0089A8] sm:w-auto"
+          className={filterClass}
         >
           <option value="recent">Sort: Recent Visits</option>
           <option value="recall">Sort: Recall Due</option>
           <option value="due">Sort: Highest Dues</option>
           <option value="name">Sort: Name (A-Z)</option>
           <option value="registered">Sort: Newest Registered</option>
+          <option value="online">Sort: Online First</option>
         </select>
 
         <button type="button" onClick={() => setIsAddOpen(true)} disabled={loading} className="workspace-button primary min-h-11 shrink-0">
@@ -109,13 +133,13 @@ export default function PatientsPage() {
       {!loading && filtered.length === 0 ? (
         <div className="premium-card mx-auto max-w-xl space-y-3 p-6 text-center sm:p-8">
           <Users className="mx-auto h-8 w-8 text-[#0089A8]" aria-hidden="true" />
-          <h2 className="text-base font-semibold">{patients.length === 0 ? "No patients yet" : "No patients found"}</h2>
-          <p className="text-sm text-[#64748B]">{patients.length === 0 ? "Add your first patient to get started." : "Try a name, phone, or allergy."}</p>
-          {patients.length === 0 ? (
+          <h2 className="text-base font-semibold">{onlineOnly ? "No online registrations found" : patients.length === 0 ? "No patients yet" : "No patients found"}</h2>
+          <p className="text-sm text-[#64748B]">{onlineOnly ? "Try a different search or switch to all patients." : patients.length === 0 ? "Add your first patient to get started." : "Try a name, phone, or allergy."}</p>
+          {patients.length === 0 && !onlineOnly ? (
             <div className="flex flex-wrap justify-center gap-3 pt-1">
               <button onClick={() => setIsAddOpen(true)} className="action-primary"><Plus size={16} />Add Patient</button>
             </div>
-          ) : <button onClick={() => setSearch("")} className="small-outline">Clear Search</button>}
+          ) : <button type="button" onClick={() => { setSearch(""); setOnlineOnly(false); }} className="small-outline">{onlineOnly ? "Clear filters" : "Clear Search"}</button>}
         </div>
       ) : (
         <PatientDirectory patients={filtered} balances={balancesMap} getShareHref={getWhatsAppLink} loading={loading} />

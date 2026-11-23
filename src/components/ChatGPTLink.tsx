@@ -6,7 +6,7 @@ import { ExternalLink } from "lucide-react";
 
 export function FloatingChatGPTLink() {
   const pathname = usePathname();
-  if (pathname === "/") return null;
+  if (pathname === "/" || pathname?.startsWith("/book/")) return null;
 
   return (
     <ChatGPTLink

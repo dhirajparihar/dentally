@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import { AppointmentTreatmentsSettings } from "@/components/dashboard/AppointmentTreatmentsSettings";
+import { OnlineBookingSettings } from "@/components/dashboard/OnlineBookingSettings";
 
 type AutoSaveStatus = "saved" | "saving" | "unsaved" | "error";
 
@@ -425,6 +426,7 @@ export default function ClinicSettingsPage() {
               </div>
             </div>
           </div>
+          <OnlineBookingSettings />
           <AppointmentTreatmentsSettings />
         </div>
 

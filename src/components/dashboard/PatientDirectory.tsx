@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import type { Patient } from "@/lib/mockData";
+import { isOnlineRegistrationPatient } from "@/lib/onlineBookingIds";
 import { formatINR, type PatientBalance } from "@/lib/financials";
 import { PatientActionMenu } from "./PatientActionMenu";
 
@@ -22,6 +23,7 @@ function PatientDirectoryRow({ patient, balance, shareHref }: {
   const gender = patient.gender?.trim();
   const demographics = [patient.age == null ? "" : `${patient.age} yrs`, gender].filter(Boolean).join(" · ");
   const incomplete = patient.registrationStatus === "provisional" || patient.age == null || !gender;
+  const registeredOnline = isOnlineRegistrationPatient(patient._id);
   const alerts = (patient.medicalAlerts ?? []).filter((alert) => alert.trim() && alert.trim().toLowerCase() !== "none");
   const balanceTone = balance.due > 0 ? "due" : balance.advance > 0 ? "advance" : "settled";
   const balanceLabel = balance.due > 0
@@ -37,8 +39,9 @@ function PatientDirectoryRow({ patient, balance, shareHref }: {
           <div className="min-w-0">
             <Link href={detailsHref} className="patient-directory-name">{patient.name}</Link>
             {demographics && <p className="patient-directory-meta">{demographics}</p>}
-            {(incomplete || alerts.length > 0) && (
+            {(registeredOnline || incomplete || alerts.length > 0) && (
               <div className="patient-directory-notices">
+                {registeredOnline && <span className="rounded bg-[#EDF7FA] px-1.5 font-semibold text-[var(--workspace-accent)]">Registered online</span>}
                 {incomplete && <span className="patient-directory-warning">Incomplete profile</span>}
                 {alerts.length > 0 && (
                   <span className="patient-directory-alert">

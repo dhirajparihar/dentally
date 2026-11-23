@@ -86,6 +86,14 @@ Open **Patients → patient profile → Visits → Clinical Notes** on a complet
 
 You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
 
+In **Clinic Settings → Online Booking**, enable booking, choose the visit type and duration, and save. Copy the clinic link to share it with patients. The link uses the clinic's working hours and lets you block specific dates. Replacing the link disables the previous URL.
+
+Patients can book as new or existing patients for the next 30 calendar days in India Standard Time. Existing patients enter their name and mobile number. Confirmed visits and their booking references appear in the clinic calendar. Patients can call the clinic to cancel or reschedule.
+
+New patients who register through the booking link use a 10-digit Indian mobile number. The form accepts a `+91` prefix and common separators and saves the 10 digits. In **Patients**, select **Registered online** to filter or **Online First** to sort. In **Appointments**, select **Booked online** in either view or **Online First** in the all-bookings view.
+
+The patient filter uses registration source recorded for new online sign-ups. The appointment filter also includes earlier bookings made through the clinic link.
+
 Use **Copy URL** in the ChatGPT MCP Hub. In ChatGPT, go to **Plugins → + → Add custom MCP server** and paste it into **Server URL**.
 
 The floating ChatGPT icon in the clinic workspace opens ChatGPT in a new tab. The Blossom logo belongs to OpenAI. [OpenAI brand guidelines](https://openai.com/brand/)

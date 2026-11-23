@@ -33,6 +33,7 @@ require.extensions[".ts"] = (module, filename) => {
 };
 
 const mongoose = require("mongoose");
+const { ClinicProfileModel } = require("../src/lib/db/models/ClinicProfile");
 const PatientModel = require("../src/lib/db/models/Patient").default;
 const AppointmentModel = require("../src/lib/db/models/Appointment").default;
 const { executeMcpTool } = require("../src/lib/mcp/server");
@@ -49,8 +50,14 @@ Module._load = function (name, ...args) {
   return load.call(this, name, ...args);
 };
 const { POST: clinicPost } = require("../src/app/api/clinic/route");
+const { GET: getOnlineSettings, POST: saveOnlineSettings } = require("../src/app/api/clinic/online-booking/route");
 Module._load = load;
+const { GET: getPublicSlots, POST: postPublicBooking } = require("../src/app/api/booking/[code]/route");
 const { getAppointmentClock, shiftAppointmentDate } = require("../src/lib/appointmentTime");
+const { bookingIdentitySchema, defaultOnlineBookingPreferences, findOnlineBookingPatient, getOnlineAvailableSlots, getOnlineBookingDateRange } = require("../src/lib/onlineBooking");
+const { isOnlineBookingAppointment, isOnlineRegistrationPatient } = require("../src/lib/onlineBookingIds");
+const { normalizeOnlineRegistrationPhone } = require("../src/lib/patientSearch");
+const { submitOnlineBooking } = require("../src/lib/submitOnlineBooking");
 const {
   deletePatient, ensureDbInitialized, getClinicData, rescheduleAppointment, saveAppointment, updateAppointmentStatus,
 } = require("../src/lib/db/repository");
@@ -58,7 +65,7 @@ const {
 if (testUri) {
   before(async () => {
     assert.ok(await ensureDbInitialized(), "MongoDB test connection failed");
-    await Promise.all([PatientModel.init(), AppointmentModel.init()]);
+    await Promise.all([PatientModel.init(), AppointmentModel.init(), ClinicProfileModel.init()]);
   });
   after(async () => {
     if (mongoose.connection.name?.startsWith("dentally_booking_test_")) {
@@ -95,6 +102,234 @@ const dashboardMutation = async (email, action, data) => {
   const response = await clinicPost({ json: async () => ({ action, data }) });
   return { status: response.status, body: await response.json() };
 };
+
+const jsonRequest = (path, data) => new Request("http://localhost" + path, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(data),
+});
+const bookingContext = (code) => ({ params: Promise.resolve({ code }) });
+const checkSlots = (code, selectedDate = date) =>
+  getPublicSlots(new Request("http://localhost/api/booking/" + code + "?date=" + selectedDate), bookingContext(code));
+const publicBooking = (code, data) =>
+  postPublicBooking(jsonRequest("/api/booking/" + code, data), bookingContext(code));
+
+test("booking routes reject unauthenticated settings access, invalid codes, and invalid request bodies", async () => {
+  dashboardEmail = undefined;
+  assert.equal((await getOnlineSettings()).status, 401);
+  assert.equal((await saveOnlineSettings(jsonRequest("/api/clinic/online-booking", {}))).status, 401);
+  const missing = await checkSlots("invalid");
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await missing.json(), { code: "link_unavailable", error: "This booking link is no longer accepting appointments." });
+  assert.equal((await checkSlots("invalid", "2026-11-31")).status, 400);
+  assert.equal((await postPublicBooking(
+    new Request("http://localhost/api/booking/invalid", { method: "POST", body: "{}" }),
+    bookingContext("invalid")
+  )).status, 415);
+  assert.equal((await publicBooking("invalid", { action: "identify", padding: "x".repeat(4200) })).status, 413);
+});
+
+test("clinic links are scoped, durable, replaceable, and share transactional booking with staff", { skip: !testUri }, async () => {
+  const firstEmail = newTenant();
+  const secondEmail = newTenant();
+  const profile = {
+    name: "Online Booking Test Clinic", phone: "+91 9000000100", address: "Test address",
+    dentistName: "Test Dentist", qualification: "BDS", regNo: "TEST-01",
+  };
+  await Promise.all([
+    onboarding.completeClinicOnboarding(firstEmail, profile),
+    onboarding.completeClinicOnboarding(secondEmail, profile),
+  ]);
+  await ClinicProfileModel.updateOne({ dentistEmail: secondEmail }, {
+    $unset: { workingHoursStart: 1, workingHoursEnd: 1, slotDuration: 1 },
+  });
+  const closedDate = shiftAppointmentDate(date, 1);
+  const preferences = { ...defaultOnlineBookingPreferences, action: "save", enabled: true, closedDates: [closedDate] };
+  const saveSettings = (data) => saveOnlineSettings(jsonRequest("/api/clinic/online-booking", data));
+  dashboardEmail = firstEmail;
+  assert.equal((await (await getOnlineSettings()).json()).enabled, false);
+  const [firstSave, concurrentSave] = await Promise.all([saveSettings(preferences), saveSettings(preferences)]);
+  assert.equal(firstSave.status, 200);
+  assert.equal(concurrentSave.status, 200);
+  const { code } = await firstSave.json();
+  assert.match(code, /^[a-f0-9]{32}$/);
+  assert.equal((await concurrentSave.json()).code, code);
+  assert.equal((await (await getOnlineSettings()).json()).code, code);
+
+  dashboardEmail = secondEmail;
+  const secondCode = (await (await saveSettings({ ...preferences, dentistEmail: firstEmail })).json()).code;
+  assert.match(secondCode, /^[a-f0-9]{32}$/);
+  assert.notEqual(secondCode, code);
+  const uniqueIndex = (await ClinicProfileModel.collection.indexes()).find(({ key }) => key["onlineBooking.code"] === 1);
+  assert.equal(uniqueIndex?.unique, true);
+
+  const newIdentity = { kind: "new", ...patient };
+  const existingIdentity = { kind: "existing", name: patient.name, phone: patient.phone };
+  const input = { action: "book", identity: newIdentity, date, time: "10:00 AM", durationMinutes: 30, visitType: "Consultation", requestId: randomUUID() };
+  assert.deepEqual((await (await checkSlots(code, closedDate)).json()).times, []);
+  assert.equal((await publicBooking(code, { ...input, date: closedDate })).status, 409);
+  assert.equal((await publicBooking(code, { action: "identify", identity: newIdentity })).status, 200);
+  assert.equal((await getClinicData(firstEmail)).patients.length, 0);
+  const [booked, retry] = await Promise.all([publicBooking(code, input), publicBooking(code, input)]);
+  assert.equal(booked.status, 200);
+  assert.equal(retry.status, 200);
+  const confirmed = await booked.json();
+  assert.deepEqual(await retry.json(), confirmed);
+  assert.deepEqual(Object.keys(confirmed).sort(), ["date", "durationMinutes", "reference", "time", "visitType"]);
+  assert.equal((await getClinicData(firstEmail)).appointments.length, 1);
+  assert.equal((await getClinicData(firstEmail)).patients.length, 1);
+  assert.equal((await publicBooking(code, { action: "identify", identity: existingIdentity })).status, 200);
+  assert.equal((await publicBooking(secondCode, { action: "identify", identity: existingIdentity })).status, 409);
+  assert.equal((await (await checkSlots(code)).json()).times.includes(input.time), false);
+  assert.equal((await (await checkSlots(secondCode)).json()).times.includes(input.time), true);
+  const staffTime = "11:00 AM";
+  const staffBooking = await dashboardMutation(firstEmail, "book_patient_appointment", {
+    patientName: patient.name, patientPhone: patient.phone, date, time: staffTime, procedure: "Consultation",
+  });
+  assert.equal(staffBooking.status, 200);
+  assert.equal((await (await checkSlots(code)).json()).times.includes(staffTime), false);
+  assert.equal((await publicBooking(code, { ...input, time: staffTime, requestId: randomUUID() })).status, 409);
+
+  dashboardEmail = firstEmail;
+  assert.equal((await (await saveSettings({ ...preferences, enabled: false })).json()).code, code);
+  assert.equal((await checkSlots(code)).status, 404);
+  assert.equal((await (await saveSettings(preferences)).json()).code, code);
+  const replace = { action: "replace", currentCode: code };
+  const replacement = (await (await saveSettings(replace)).json()).code;
+  assert.notEqual(replacement, code);
+  assert.equal((await (await saveSettings(replace)).json()).code, replacement);
+  assert.equal((await checkSlots(code)).status, 404);
+  assert.equal((await checkSlots(replacement)).status, 200);
+
+  const rateWindow = Math.floor(Date.now() / 300_000);
+  await ClinicProfileModel.collection.updateOne({ dentistEmail: firstEmail }, { $set: { onlineBookingRate: { window: rateWindow, count: 60 } } });
+  const limited = await publicBooking(replacement, { action: "identify", identity: existingIdentity });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get("Retry-After")) > 0);
+
+  await ClinicProfileModel.updateOne({ dentistEmail: firstEmail }, { $set: { status: "suspended" } });
+  assert.equal((await getOnlineSettings()).status, 403);
+  assert.equal((await checkSlots(replacement)).status, 404);
+});
+
+test("online booking matches the full name and normalized mobile without guessing between shared records", () => {
+  const maya = { _id: "maya", name: "Maya  Rao", phone: "+91 90000 00101" };
+  const family = [maya, { _id: "ria", name: "Ria Rao", phone: "9000000101" }];
+  const returning = { kind: "existing", name: " MAYA RAO ", phone: "09000000101" };
+  assert.deepEqual(findOnlineBookingPatient(family, returning), { status: "matched", patient: maya });
+  assert.deepEqual(findOnlineBookingPatient([...family, { ...maya, _id: "duplicate" }], returning), { status: "unresolved" });
+  assert.deepEqual(findOnlineBookingPatient(family, { ...returning, name: "Asha Rao" }), { status: "unresolved" });
+  assert.deepEqual(findOnlineBookingPatient(family, { ...returning, kind: "new", name: "Asha Rao", age: 4, gender: "Female" }), { status: "new" });
+  assert.equal(bookingIdentitySchema.safeParse({ ...returning, phone: "90000abc101" }).success, false);
+});
+
+test("new online registrations require a 10-digit number after normalizing supported Indian formats", () => {
+  const identity = { kind: "new", ...patient };
+  for (const phone of ["9000000101", "09000000101", "+91 90000-00101", "0091 (90000) 00101"]) {
+    assert.equal(normalizeOnlineRegistrationPhone(phone), patient.phone);
+    assert.equal(bookingIdentitySchema.safeParse({ ...identity, phone }).success, true);
+  }
+  for (const phone of ["900000010", "90000001012", "+1 90000-00101", "+9000000101", "90000+00101", "90000abc101"]) {
+    assert.equal(normalizeOnlineRegistrationPhone(phone), "");
+    assert.equal(bookingIdentitySchema.safeParse({ ...identity, phone }).success, false);
+  }
+  assert.equal(bookingIdentitySchema.safeParse({ ...identity, kind: "existing", phone: "+1 90000-00101" }).success, true);
+});
+
+test("online slots respect calendar boundaries, working hours, closing time, and overlaps", () => {
+  const clock = { date: "2026-11-23", minutes: 10 * 60 };
+  const hours = { workingHoursStart: "09:30 AM", workingHoursEnd: "12:00 PM", slotDuration: 30 };
+  const preferences = { closedDates: ["2026-11-24"], durationMinutes: 45 };
+  const busy = { _id: "visit", date: clock.date, time: "11:00 AM", durationMinutes: 30, status: "scheduled" };
+  const slots = (date, appointments = []) => getOnlineAvailableSlots(hours, preferences, date, appointments, clock);
+  assert.deepEqual(slots(clock.date), ["10:30 AM", "11:00 AM"]);
+  assert.deepEqual(slots(clock.date, [busy]), []);
+  assert.deepEqual(slots(clock.date, [{ ...busy, status: "cancelled" }]), ["10:30 AM", "11:00 AM"]);
+  assert.deepEqual(slots("2026-11-24"), []);
+  assert.deepEqual(slots("2026-11-22"), []);
+  assert.deepEqual(slots("2026-11-31"), []);
+  assert.deepEqual(slots(shiftAppointmentDate(getOnlineBookingDateRange(clock).lastDate, 1)), []);
+  assert.deepEqual(getOnlineAvailableSlots({ ...hours, workingHoursStart: "invalid" }, preferences, clock.date, [], clock), []);
+  assert.deepEqual(getOnlineAvailableSlots(hours, { ...preferences, durationMinutes: 180 }, clock.date, [], clock), []);
+});
+
+test("online booking retries replay one committed visit and conflicting attempts cannot register extra patients", async () => {
+  const tenant = { email: newTenant(), code: randomUUID().replaceAll("-", "") };
+  const readPolicy = async () => ({
+    hours: { workingHoursStart: "09:30 AM", workingHoursEnd: "12:00 PM", slotDuration: 30 },
+    preferences: { ...defaultOnlineBookingPreferences, enabled: true },
+  });
+  const input = {
+    action: "book", identity: { kind: "new", ...patient, phone: "+91 90000-00101" }, date, time: "10:00 AM",
+    durationMinutes: 30, visitType: "Consultation", requestId: randomUUID(),
+  };
+  await assert.rejects(submitOnlineBooking({
+    ...input, identity: { ...input.identity, phone: "90000001012" },
+  }, tenant, readPolicy), { status: 400, code: "invalid_identity" });
+  const [first, retried] = await Promise.all([
+    submitOnlineBooking(input, tenant, readPolicy),
+    submitOnlineBooking({ ...input, identity: { ...input.identity, phone: patient.phone } }, tenant, readPolicy),
+  ]);
+  assert.deepEqual(first, retried);
+  assert.match(first.reference, /^[A-F0-9]{24}$/);
+  assert.equal("patientId" in first, false);
+
+  const otherIdentity = { ...input.identity, name: "Another Patient" };
+  await assert.rejects(submitOnlineBooking({ ...input, identity: otherIdentity }, tenant, readPolicy), { code: "booking_changed" });
+  await assert.rejects(submitOnlineBooking({ ...input, requestId: randomUUID(), identity: otherIdentity }, tenant, readPolicy), { code: "slot_unavailable" });
+  const after = await getClinicData(tenant.email);
+  assert.equal(after.patients.length, 1);
+  assert.equal(after.patients[0].phone, patient.phone);
+  assert.equal(isOnlineRegistrationPatient(after.patients[0]._id), true);
+  assert.equal(after.appointments.length, 1);
+  assert.equal(after.appointments[0].patientPhone, patient.phone);
+  assert.equal(isOnlineBookingAppointment(after.appointments[0]._id), true);
+});
+
+test("online confirmation rechecks the active link and closed dates before any registration", async () => {
+  const tenant = { email: newTenant(), code: randomUUID().replaceAll("-", "") };
+  const input = {
+    action: "book", identity: { kind: "new", ...patient }, date, time: "10:00 AM",
+    durationMinutes: 30, visitType: "Consultation", requestId: randomUUID(),
+  };
+  await assert.rejects(submitOnlineBooking(input, tenant, async () => null), { code: "link_unavailable" });
+  await assert.rejects(submitOnlineBooking(input, tenant, async () => ({
+    hours: { workingHoursStart: "09:30 AM", workingHoursEnd: "12:00 PM", slotDuration: 30 },
+    preferences: { ...defaultOnlineBookingPreferences, enabled: true, closedDates: [date] },
+  })), { code: "slot_unavailable" });
+  const after = await getClinicData(tenant.email);
+  assert.equal(after.patients.length, 0);
+  assert.equal(after.appointments.length, 0);
+});
+
+test("online booking associates the correct clinic patient and preserves an existing registration", async () => {
+  const email = newTenant();
+  const tenant = { email, code: randomUUID().replaceAll("-", "") };
+  await register(email, { name: "Family Member" });
+  const existing = await register(email, { phone: "+91 90000 00101" });
+  const readPolicy = async () => ({
+    hours: { workingHoursStart: "09:30 AM", workingHoursEnd: "12:00 PM", slotDuration: 30 },
+    preferences: { ...defaultOnlineBookingPreferences, enabled: true },
+  });
+  const input = {
+    action: "book", identity: { ...patient, kind: "new", age: 31 }, date, time: "10:00 AM",
+    durationMinutes: 30, visitType: "Consultation", requestId: randomUUID(),
+  };
+  await submitOnlineBooking(input, tenant, readPolicy);
+  const clinic = await getClinicData(email);
+  assert.equal(clinic.appointments[0].patientId, existing._id);
+  assert.equal(isOnlineBookingAppointment(clinic.appointments[0]._id), true);
+  assert.equal(clinic.patients.length, 2);
+  assert.equal(isOnlineRegistrationPatient(existing._id), false);
+  const matched = clinic.patients.find(({ _id }) => _id === existing._id);
+  assert.equal(matched.age, patient.age);
+  assert.equal(matched.phone, existing.phone);
+
+  const otherClinic = { email: newTenant(), code: randomUUID().replaceAll("-", "") };
+  await assert.rejects(submitOnlineBooking({ ...input, identity: { ...patient, kind: "existing" } }, otherClinic, readPolicy), { code: "identity_unresolved" });
+  assert.equal((await getClinicData(otherClinic.email)).appointments.length, 0);
+});
 
 test("booking with only name and mobile persists a provisional patient and returns its real ID", async () => {
   const email = newTenant();

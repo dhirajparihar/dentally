@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { connection, mongo, type ClientSession } from "mongoose";
 import { connectDB } from "./connect";
 import { isClinicConfigured } from "@/lib/clinicOnboarding";
-import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate, type AppointmentInterval } from "@/lib/appointmentTime";
 import { patientSchema, provisionalPatientUpdateSchema } from "@/lib/validations/clinic";
 import { getVisitNotes, visitNoteId } from "@/lib/visitNotes";
 import PatientModel from "./models/Patient";
@@ -62,10 +62,10 @@ export async function ensureDbInitialized() {
 
 const memoryBookingLocks = new Map<string, Promise<void>>();
 
-async function withClinicBookingLock<T>(
+export async function withClinicBookingLock<T>(
   email: string,
   work: (session?: ClientSession) => Promise<T>,
-  afterCommit: (result: T) => void
+  afterCommit?: (result: T) => void
 ): Promise<T> {
   const conn = await ensureDbInitialized();
   if (conn) {
@@ -83,7 +83,7 @@ async function withClinicBookingLock<T>(
       await locks.updateOne({ _id: email }, { $inc: { revision: 1 } }, { session });
       return work(session);
     });
-    afterCommit(result);
+    afterCommit?.(result);
     return result;
   }
   if (isDbConfigured()) throw new Error("Clinic database is unavailable.");
@@ -95,7 +95,7 @@ async function withClinicBookingLock<T>(
   await previous;
   try {
     const result = await work();
-    afterCommit(result);
+    afterCommit?.(result);
     return result;
   } finally {
     release();
@@ -472,16 +472,27 @@ export async function saveVisitNote(
   return { appointmentId: result.visit._id, ...result.note, date: result.visit.date };
 }
 
+export async function readScheduledAppointmentIntervals(
+  date: string,
+  email: string,
+  session?: ClientSession
+): Promise<AppointmentInterval[]> {
+  const dates = [shiftAppointmentDate(date, -1), date, shiftAppointmentDate(date, 1)];
+  if (!session && !isDbConfigured()) {
+    return getOrCreateMemoryStore(email).appointments.filter((visit) => dates.includes(visit.date) && visit.status === "scheduled");
+  }
+  const query = AppointmentModel.find({ dentistEmail: email, date: { $in: dates }, status: "scheduled" })
+    .select("_id date time durationMinutes status");
+  if (session) query.session(session);
+  return query.lean<AppointmentInterval[]>().exec();
+}
+
 async function requireAvailableSlot(
-  appointment: Pick<Appointment, "_id" | "date" | "time" | "durationMinutes">,
+  { _id, date, time, durationMinutes }: Pick<Appointment, "_id" | "date" | "time" | "durationMinutes">,
   email: string,
   session?: ClientSession
 ) {
-  const { _id, date, time, durationMinutes } = appointment;
-  const dates = [shiftAppointmentDate(date, -1), date, shiftAppointmentDate(date, 1)];
-  const appointments = session
-    ? await AppointmentModel.find({ dentistEmail: email, date: { $in: dates }, status: "scheduled" }).session(session).lean().exec() as Appointment[]
-    : getOrCreateMemoryStore(email).appointments.filter((visit) => dates.includes(visit.date) && visit.status === "scheduled");
+  const appointments = await readScheduledAppointmentIntervals(date, email, session);
   const conflict = findAppointmentConflict(appointments, date, time, durationMinutes || 30, _id);
   if (conflict) throw new AppointmentTimeError(`Time slot conflicts with an existing appointment at ${conflict.time} on ${conflict.date}.`);
 }
@@ -550,18 +561,35 @@ export async function saveAppointment(appointment: Appointment, dentistEmail?: s
   return getOrCreateMemoryStore(email).appointments;
 }
 
+type BookingPatientCandidate = Pick<Patient, "_id" | "name" | "phone" | "age" | "gender">;
+
+export async function readBookingPatientCandidates(email: string, session?: ClientSession): Promise<BookingPatientCandidate[]> {
+  if (!session && !isDbConfigured()) return getOrCreateMemoryStore(email).patients;
+  const query = PatientModel.find({ dentistEmail: email }).select("_id name phone age gender");
+  if (session) query.session(session);
+  return query.lean<BookingPatientCandidate[]>().exec();
+}
+
 export async function bookAppointmentForPatient(
   appointment: Omit<Appointment, "patientId" | "patientName" | "patientPhone">,
   dentistEmail: string,
-  resolvePatient: (patients: readonly Patient[]) => { patient: Patient; isNew: boolean }
+  resolvePatient: (patients: readonly BookingPatientCandidate[]) =>
+    { patient: Patient; isNew: true } | { patient: BookingPatientCandidate; isNew: false },
+  options?: { validate: (previous: Appointment | null, session?: ClientSession) => Promise<void> }
 ) {
   const email = dentistEmail.toLowerCase().trim();
   if (!email) throw new Error("Missing dentist email for appointment record");
   const mem = getOrCreateMemoryStore(email);
   const result = await withClinicBookingLock(email, async (session) => {
-    const patients = session
-      ? await PatientModel.find({ dentistEmail: email }).session(session).lean().exec() as Patient[]
-      : mem.patients;
+    if (options) {
+      // Validate the current booking policy before replaying a committed request.
+      const previous = session
+        ? await AppointmentModel.findOne({ _id: appointment._id, dentistEmail: email }).session(session).lean<Appointment>().exec()
+        : mem.appointments.find((visit) => visit._id === appointment._id) ?? null;
+      await options.validate(previous, session);
+      if (previous) return { saved: previous };
+    }
+    const patients = await readBookingPatientCandidates(email, session);
     const { patient, isNew } = resolvePatient(patients);
     let bookablePatient = isNew
       ? { ...patient, dentistEmail: email }

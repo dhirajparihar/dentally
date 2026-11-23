@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { defaultAppointmentTreatments, type AppointmentTreatment } from "@/lib/appointmentTreatments";
+import type { OnlineBookingSettings } from "@/lib/onlineBooking";
 
 export interface IClinicProfile extends Document {
   dentistEmail: string;
@@ -16,6 +17,8 @@ export interface IClinicProfile extends Document {
   workingHoursEnd: string;
   receiptFooter: string;
   appointmentTreatments?: AppointmentTreatment[];
+  onlineBooking?: OnlineBookingSettings;
+  onlineBookingRate?: { window: number; count: number };
   isConfigured?: boolean;
   status: "active" | "suspended";
   isActive: boolean;
@@ -38,6 +41,17 @@ const AppointmentTreatmentSchema = new Schema<AppointmentTreatment>(
   { _id: false }
 );
 
+const OnlineBookingSchema = new Schema<OnlineBookingSettings>(
+  {
+    code: { type: String, required: true, match: /^[a-f0-9]{32}$/ },
+    enabled: { type: Boolean, required: true },
+    visitType: { type: String, required: true, trim: true, maxlength: 100 },
+    durationMinutes: { type: Number, required: true, min: 5, max: 480 },
+    closedDates: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const ClinicProfileSchema = new Schema<IClinicProfile>(
   {
     dentistEmail: { type: String, required: true, unique: true, index: true },
@@ -56,6 +70,11 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
       type: [AppointmentTreatmentSchema],
       default: () => defaultAppointmentTreatments.map((treatment) => ({ ...treatment })),
     },
+    onlineBooking: { type: OnlineBookingSchema },
+    onlineBookingRate: {
+      type: new Schema({ window: Number, count: Number }, { _id: false }),
+      select: false,
+    },
     receiptFooter: {
       type: String,
       default: "Thank you for visiting! For dental emergencies, contact our clinic.",
@@ -73,6 +92,8 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
   { timestamps: true }
 );
 
+ClinicProfileSchema.index({ "onlineBooking.code": 1 }, { unique: true, sparse: true });
+
 export const ClinicProfileModel =
-  mongoose.models.ClinicProfile ||
+  (mongoose.models.ClinicProfile as mongoose.Model<IClinicProfile> | undefined) ??
   mongoose.model<IClinicProfile>("ClinicProfile", ClinicProfileSchema);

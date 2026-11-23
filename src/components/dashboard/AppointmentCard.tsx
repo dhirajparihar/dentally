@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Phone } from "lucide-react";
 import type { AppointmentClock } from "@/lib/appointmentTime";
 import type { Appointment } from "@/lib/mockData";
+import { getOnlineBookingReference } from "@/lib/onlineBookingIds";
 import { AppointmentStatusControl } from "@/components/dashboard/AppointmentStatusControl";
 
 const replacementDate = new Intl.DateTimeFormat("en-GB", {
@@ -25,6 +26,7 @@ export function AppointmentCard({ appointment, clock, patientHref, showDate = fa
   const phone = <><Phone size={13} aria-hidden="true" />{appointment.patientPhone}</>;
   const phoneClassName = "mt-2 inline-flex items-center gap-1.5 text-xs text-[#52627A]";
   const isRescheduled = showRescheduled && Boolean(appointment.rescheduledToAppointmentId);
+  const bookingReference = getOnlineBookingReference(appointment._id);
 
   return (
     <article className="appointment-card">
@@ -37,6 +39,7 @@ export function AppointmentCard({ appointment, clock, patientHref, showDate = fa
           <Link href={patientHref} className="hover:text-[#0089A8]">{appointment.patientName}</Link>
         </h3>
         <p className="mt-1 text-sm font-medium text-[#007F96]">{appointment.procedure}</p>
+        {bookingReference && <p className="mt-1 break-words text-xs text-[#52627A]">Online booking · {bookingReference}</p>}
         {notes && <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-[#64748B]">{notes}</p>}
         {isRescheduled && replacement && (
           <p className="mt-1 text-xs text-[#52627A]">

@@ -45,6 +45,17 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/book/:code",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
+        source: "/api/booking/:code",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
     ];
   },
   webpack: (config) => {

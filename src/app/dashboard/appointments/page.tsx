@@ -19,6 +19,7 @@ import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
+import { isOnlineBookingAppointment } from "@/lib/onlineBookingIds";
 const RescheduleAppointmentDialog = dynamic(
   () => import("@/components/dashboard/RescheduleAppointmentDialog").then((mod) => mod.RescheduleAppointmentDialog),
   { ssr: false }
@@ -65,6 +66,8 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState(clock.date);
   const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
   const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "completed" | "missed" | "cancelled">("all");
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [onlineFirst, setOnlineFirst] = useState(false);
 
   // Modals
   const [rescheduleApt, setRescheduleApt] = useState<Appointment | null>(null);
@@ -95,19 +98,25 @@ export default function AppointmentsPage() {
   const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const isToday = selectedDate === clock.date;
   const isPastDay = selectedDate < clock.date;
+  const sourceAppointments = onlineOnly
+    ? appointments.filter((appointment) => isOnlineBookingAppointment(appointment._id))
+    : appointments;
 
   // Filtered by selected date for single dentist timeline
-  const dayAppointments = appointments
+  const dayAppointments = sourceAppointments
     .filter((a) => a.date === selectedDate)
     .sort((a, b) => (parseAppointmentTime(a.time) ?? 0) - (parseAppointmentTime(b.time) ?? 0));
 
-  // Filtered for list view (sorted chronologically: upcoming & recent first)
-  const listAppointments = appointments
+  const listAppointments = sourceAppointments
     .filter((a) => {
       if (statusFilter === "all") return true;
       return a.status === statusFilter;
     })
     .sort((a, b) => {
+      if (onlineFirst) {
+        const sourceOrder = Number(isOnlineBookingAppointment(b._id)) - Number(isOnlineBookingAppointment(a._id));
+        if (sourceOrder) return sourceOrder;
+      }
       const dComp = b.date.localeCompare(a.date);
       if (dComp !== 0) return dComp;
       return (parseAppointmentTime(a.time) ?? 0) - (parseAppointmentTime(b.time) ?? 0);
@@ -204,11 +213,29 @@ export default function AppointmentsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="appointments-list-heading" className="text-sm font-semibold">{viewMode === "list" ? "All Bookings" : isToday ? "Today's Appointments" : "Appointments"} <span className="ml-1 text-xs font-normal text-[#64748B]">({visibleAppointments.length})</span></h2>
           {viewMode === "timeline" && <AppointmentStatusSummary appointments={dayAppointments} />}
-          {viewMode === "list" && (
-            <select aria-label="Filter appointments by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="appointment-status-filter">
-              {(["all", "scheduled", "completed", "missed", "cancelled"] as const).map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.charAt(0).toUpperCase() + status.slice(1)} ({status === "all" ? appointments.length : appointments.filter((appointment) => appointment.status === status).length})</option>)}
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <select
+              aria-label="Filter appointments by booking source"
+              value={onlineOnly ? "online" : "all"}
+              onChange={(event) => setOnlineOnly(event.target.value === "online")}
+              disabled={loading}
+              className="appointment-status-filter min-h-11 flex-1 sm:flex-none"
+            >
+              <option value="all">All sources</option>
+              <option value="online">Booked online</option>
             </select>
-          )}
+            {viewMode === "list" && (
+              <>
+                <select aria-label="Filter appointments by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="appointment-status-filter min-h-11 flex-1 sm:flex-none">
+                  {(["all", "scheduled", "completed", "missed", "cancelled"] as const).map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.charAt(0).toUpperCase() + status.slice(1)} ({status === "all" ? sourceAppointments.length : sourceAppointments.filter((appointment) => appointment.status === status).length})</option>)}
+                </select>
+                <select aria-label="Sort appointments" value={onlineFirst ? "online" : "date"} onChange={(event) => setOnlineFirst(event.target.value === "online")} disabled={loading} className="appointment-status-filter min-h-11 flex-1 sm:flex-none">
+                  <option value="date">Sort: Date</option>
+                  <option value="online">Sort: Online First</option>
+                </select>
+              </>
+            )}
+          </div>
         </div>
         {loading ? (
           <div className="space-y-3" role="status" aria-label="Loading appointments">
@@ -228,9 +255,9 @@ export default function AppointmentsPage() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EDF7FA] text-[#0089A8] shadow-inner">
               <Calendar size={22} aria-hidden="true" />
             </div>
-            <p className="text-sm font-bold text-[#111C3A]">No appointments {viewMode === "timeline" ? "on this date" : "found"}</p>
+            <p className="text-sm font-bold text-[#111C3A]">{onlineOnly ? "No online bookings" : "No appointments"} {viewMode === "timeline" ? "on this date" : "found"}</p>
             <p className="mt-1 text-xs text-[#64748B]">
-              {viewMode === "list" ? "Try selecting another status filter above." : "Select a date above or book a new appointment from the top header."}
+              {viewMode === "list" ? "Try a different status or booking source." : onlineOnly ? "Choose another date or booking source." : "Select a date above or book a new appointment from the top header."}
             </p>
           </div>
         ) : (

@@ -69,25 +69,30 @@ export function findBookedFollowUp(appointments: Appointment[], sourceId: string
   );
 }
 
-export function getClinicAppointmentSlots({ workingHoursStart, workingHoursEnd, slotDuration }: Pick<ClinicProfile, "workingHoursStart" | "workingHoursEnd" | "slotDuration">) {
+export function getClinicAppointmentSlots(
+  { workingHoursStart, workingHoursEnd, slotDuration }: Pick<ClinicProfile, "workingHoursStart" | "workingHoursEnd" | "slotDuration">,
+  options?: { durationMinutes: number }
+) {
   const start = parseAppointmentTime(workingHoursStart) ?? 600;
   const end = parseAppointmentTime(workingHoursEnd) ?? 1140;
   const step = Math.max(15, slotDuration || 30);
   const slots: string[] = [];
 
-  for (let minute = start; minute + step <= end; minute += step) {
+  for (let minute = start; minute + (options?.durationMinutes ?? step) <= end; minute += step) {
     const hour = Math.floor(minute / 60);
     const hours = (hour % 12 || 12).toString().padStart(2, "0");
     const minutes = (minute % 60).toString().padStart(2, "0");
     slots.push(`${hours}:${minutes} ${hour >= 12 ? "PM" : "AM"}`);
   }
 
-  return slots.length
+  return slots.length || options
     ? slots
     : ["10:00 AM", "10:30 AM", "11:15 AM", "12:00 PM", "02:00 PM", "02:45 PM", "03:30 PM", "04:15 PM", "05:00 PM", "05:45 PM", "06:30 PM"];
 }
 
-export function findAppointmentConflict(appointments: Appointment[], date: string, time: string, durationMinutes = 30, excludeId?: string) {
+export type AppointmentInterval = Pick<Appointment, "_id" | "date" | "time" | "durationMinutes" | "status">;
+
+export function findAppointmentConflict<T extends AppointmentInterval>(appointments: readonly T[], date: string, time: string, durationMinutes = 30, excludeId?: string) {
   const start = parseAppointmentTime(time);
   const day = getDateMidnightUtc(date);
   if (start === null || day === null) return;
