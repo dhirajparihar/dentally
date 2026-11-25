@@ -3,6 +3,7 @@
  */
 
 import { defaultAppointmentTreatments, type AppointmentTreatment } from "@/lib/appointmentTreatments";
+import type { ClinicDateSchedule } from "@/lib/appointmentTime";
 
 export interface Patient {
   _id: string;
@@ -92,6 +93,7 @@ export interface ClinicProfile {
   slotDuration: number;
   workingHoursStart: string;
   workingHoursEnd: string;
+  dateSchedules?: ClinicDateSchedule[];
   receiptFooter: string;
   appointmentTreatments?: AppointmentTreatment[];
   isConfigured?: boolean;

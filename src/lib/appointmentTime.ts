@@ -1,4 +1,4 @@
-import type { Appointment, ClinicProfile } from "@/lib/mockData";
+import type { Appointment } from "@/lib/mockData";
 
 const clinicUtcOffsetMinutes = 5 * 60 + 30;
 const clinicClockFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -51,6 +51,11 @@ export function isFutureAppointment(date: string, time: string, clock = getAppoi
   return timeInMinutes !== null && (date > clock.date || timeInMinutes > clock.minutes);
 }
 
+export function isSunday(date: string) {
+  const day = getDateMidnightUtc(date);
+  return day !== null && new Date(day).getUTCDay() === 0;
+}
+
 export function getScheduledAppointmentEnd(appointment: Appointment) {
   if (appointment.status !== "scheduled") return null;
   const day = getDateMidnightUtc(appointment.date);
@@ -69,25 +74,47 @@ export function findBookedFollowUp(appointments: Appointment[], sourceId: string
   );
 }
 
+export type ClinicBookingHours = { workingHoursStart: string; workingHoursEnd: string; slotDuration: number };
+export type ClinicDateSchedule = { date: string } & (
+  | { status: "closed"; hours?: never }
+  | { status: "open"; hours?: ClinicBookingHours }
+);
+export type ClinicBookingSchedule = ClinicBookingHours & { dateSchedules?: readonly ClinicDateSchedule[] };
+
+export function getClinicHoursForDate(clinic: ClinicBookingSchedule, date: string): ClinicBookingHours | null {
+  const schedule = clinic.dateSchedules?.find((entry) => entry.date === date);
+  if (schedule?.status === "closed" || (!schedule && isSunday(date))) return null;
+  return schedule?.hours ?? clinic;
+}
+
 export function getClinicAppointmentSlots(
-  { workingHoursStart, workingHoursEnd, slotDuration }: Pick<ClinicProfile, "workingHoursStart" | "workingHoursEnd" | "slotDuration">,
-  options?: { durationMinutes: number }
+  clinic: ClinicBookingSchedule,
+  date: string,
+  durationMinutes?: number,
 ) {
-  const start = parseAppointmentTime(workingHoursStart) ?? 600;
-  const end = parseAppointmentTime(workingHoursEnd) ?? 1140;
-  const step = Math.max(15, slotDuration || 30);
+  const hours = getClinicHoursForDate(clinic, date);
+  if (!hours) return [];
+  const { workingHoursStart, workingHoursEnd, slotDuration } = hours;
+  const start = parseAppointmentTime(workingHoursStart);
+  const end = parseAppointmentTime(workingHoursEnd);
+  if (start === null || end === null) return [];
+  const step = Number.isInteger(slotDuration) && slotDuration >= 5 && slotDuration <= 120 ? slotDuration : 30;
+  const duration = durationMinutes ?? step;
+  if (!Number.isInteger(duration) || duration <= 0) return [];
   const slots: string[] = [];
 
-  for (let minute = start; minute + (options?.durationMinutes ?? step) <= end; minute += step) {
-    const hour = Math.floor(minute / 60);
-    const hours = (hour % 12 || 12).toString().padStart(2, "0");
-    const minutes = (minute % 60).toString().padStart(2, "0");
-    slots.push(`${hours}:${minutes} ${hour >= 12 ? "PM" : "AM"}`);
+  for (let minute = start; minute + duration <= end; minute += step) {
+    slots.push(formatAppointmentTime(minute));
   }
 
-  return slots.length || options
-    ? slots
-    : ["10:00 AM", "10:30 AM", "11:15 AM", "12:00 PM", "02:00 PM", "02:45 PM", "03:30 PM", "04:15 PM", "05:00 PM", "05:45 PM", "06:30 PM"];
+  return slots;
+}
+
+function formatAppointmentTime(minute: number) {
+  const hour = Math.floor(minute / 60);
+  const hours = (hour % 12 || 12).toString().padStart(2, "0");
+  const minutes = (minute % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
 export type AppointmentInterval = Pick<Appointment, "_id" | "date" | "time" | "durationMinutes" | "status">;

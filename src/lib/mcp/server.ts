@@ -10,7 +10,7 @@ import {
   savePayment,
   saveClinicProfile,
 } from "@/lib/db/repository";
-import { getAppointmentClock, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { getPatientPhoneQuery } from "@/lib/patientSearch";
 import { patientSchema, visitNoteSchema, visitNoteTargetSchema, visitNoteUpdateSchema } from "@/lib/validations/clinic";
 import { getVisitNoteAppointmentId, getVisitNotes } from "@/lib/visitNotes";
@@ -350,24 +350,15 @@ export async function executeMcpTool(name: string, args: any, dentistEmail?: str
       if (targetDate === "today") targetDate = appointmentClock.date;
       if (targetDate === "tomorrow") targetDate = shiftAppointmentDate(appointmentClock.date, 1);
 
-      const workingSlots = [
-        "10:00 AM",
-        "10:30 AM",
-        "11:15 AM",
-        "12:00 PM",
-        "02:30 PM",
-        "03:15 PM",
-        "04:00 PM",
-        "05:00 PM",
-        "06:00 PM",
-      ];
+      const duration = validateToolInput(z.number().int().min(5).max(480).default(30), args.durationMinutes, "Invalid visit duration");
 
       const bookedTimes = appointmentsState
         .filter((a) => a.date === targetDate && a.status !== "cancelled")
         .map((a) => a.time);
 
-      const availableSlots = workingSlots.filter((slot) =>
-        isFutureAppointment(targetDate, slot, appointmentClock) && !bookedTimes.includes(slot)
+      const scheduled = appointmentsState.filter((appointment) => appointment.status === "scheduled");
+      const availableSlots = getClinicAppointmentSlots(clinicProfile, targetDate, duration).filter((slot) =>
+        isFutureAppointment(targetDate, slot, appointmentClock) && !findAppointmentConflict(scheduled, targetDate, slot, duration)
       );
 
       return {

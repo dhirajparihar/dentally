@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { connection, mongo, type ClientSession } from "mongoose";
 import { connectDB } from "./connect";
 import { isClinicConfigured } from "@/lib/clinicOnboarding";
-import { findAppointmentConflict, getScheduledAppointmentEnd, isFutureAppointment, shiftAppointmentDate, type AppointmentInterval } from "@/lib/appointmentTime";
-import { patientSchema, provisionalPatientUpdateSchema } from "@/lib/validations/clinic";
+import { ClinicAccessError, clinicSetupRequired } from "@/lib/db/clinicOnboarding";
+import {
+  findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, getClinicHoursForDate, getScheduledAppointmentEnd,
+  isFutureAppointment, parseAppointmentTime, shiftAppointmentDate, type AppointmentInterval,
+} from "@/lib/appointmentTime";
+import { patientSchema, provisionalPatientUpdateSchema, type ClinicDateScheduleMutation } from "@/lib/validations/clinic";
 import { getVisitNotes, visitNoteId } from "@/lib/visitNotes";
 import PatientModel from "./models/Patient";
 import AppointmentModel from "./models/Appointment";
@@ -253,6 +257,7 @@ export async function getClinicData(dentistEmail?: string): Promise<{
             slotDuration: profileDoc.slotDuration || clinicProfile.slotDuration,
             workingHoursStart: profileDoc.workingHoursStart || clinicProfile.workingHoursStart,
             workingHoursEnd: profileDoc.workingHoursEnd || clinicProfile.workingHoursEnd,
+            dateSchedules: profileDoc.dateSchedules ?? [],
             receiptFooter: profileDoc.receiptFooter || clinicProfile.receiptFooter,
             appointmentTreatments: profileDoc.appointmentTreatments ?? clinicProfile.appointmentTreatments,
             isConfigured: Boolean(isConfigured),
@@ -344,6 +349,32 @@ export async function saveClinicProfile(
   };
   mem.clinicProfile = updated;
   return updated;
+}
+
+export async function saveClinicDateSchedule(mutation: ClinicDateScheduleMutation, email: string) {
+  const date = mutation.action === "save" ? mutation.schedule.date : mutation.date;
+  const mem = getOrCreateMemoryStore(email);
+  await withClinicBookingLock(email, async (session) => {
+    const today = getAppointmentClock().date;
+    if (mutation.action === "save" && date < today) {
+      throw new AppointmentTimeError("Choose today or a future date.");
+    }
+    const filter = { dentistEmail: email, status: { $ne: "suspended" }, isActive: { $ne: false } } as const;
+    const profile = session
+      ? await ClinicProfileModel.findOne(filter).select("dateSchedules isConfigured regNo upiId").session(session).lean().exec()
+      : mem.clinicProfile;
+    if (session && !isClinicConfigured(profile ?? null)) throw new ClinicAccessError(clinicSetupRequired, 403);
+
+    const dateSchedules = (profile?.dateSchedules ?? []).filter((entry) => entry.date >= today && entry.date !== date);
+    if (mutation.action === "save") dateSchedules.push(mutation.schedule);
+    dateSchedules.sort((a, b) => a.date.localeCompare(b.date));
+    if (session) {
+      await ClinicProfileModel.updateOne(filter, { $set: { dateSchedules } }, { session, runValidators: true }).exec();
+    }
+    return dateSchedules;
+  }, (dateSchedules) => {
+    mem.clinicProfile = { ...(mem.clinicProfile ?? { ...clinicProfile, email }), dateSchedules };
+  });
 }
 
 export async function savePatient(patient: Patient, dentistEmail?: string, options?: { requireExisting?: boolean }) {
@@ -492,6 +523,25 @@ async function requireAvailableSlot(
   email: string,
   session?: ClientSession
 ) {
+  const profile = session
+    ? await ClinicProfileModel.findOne({ dentistEmail: email })
+      .select("workingHoursStart workingHoursEnd slotDuration dateSchedules").session(session).lean().exec()
+    : getOrCreateMemoryStore(email).clinicProfile;
+  const clinic = {
+    workingHoursStart: profile?.workingHoursStart || clinicProfile.workingHoursStart,
+    workingHoursEnd: profile?.workingHoursEnd || clinicProfile.workingHoursEnd,
+    slotDuration: profile?.slotDuration || clinicProfile.slotDuration,
+    dateSchedules: profile?.dateSchedules,
+  };
+  if (!getClinicHoursForDate(clinic, date)) {
+    throw new AppointmentTimeError("The clinic is closed on this date. Choose another date.");
+  }
+  if (clinic.dateSchedules?.some((entry) => entry.date === date)) {
+    const start = parseAppointmentTime(time);
+    if (!getClinicAppointmentSlots(clinic, date, durationMinutes || 30).some((slot) => parseAppointmentTime(slot) === start)) {
+      throw new AppointmentTimeError("Choose an available start time that fits this date's booking schedule.");
+    }
+  }
   const appointments = await readScheduledAppointmentIntervals(date, email, session);
   const conflict = findAppointmentConflict(appointments, date, time, durationMinutes || 30, _id);
   if (conflict) throw new AppointmentTimeError(`Time slot conflicts with an existing appointment at ${conflict.time} on ${conflict.date}.`);

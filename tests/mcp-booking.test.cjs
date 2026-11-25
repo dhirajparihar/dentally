@@ -53,7 +53,7 @@ const { POST: clinicPost } = require("../src/app/api/clinic/route");
 const { GET: getOnlineSettings, POST: saveOnlineSettings } = require("../src/app/api/clinic/online-booking/route");
 Module._load = load;
 const { GET: getPublicSlots, POST: postPublicBooking } = require("../src/app/api/booking/[code]/route");
-const { getAppointmentClock, shiftAppointmentDate } = require("../src/lib/appointmentTime");
+const { getAppointmentClock, isSunday, shiftAppointmentDate } = require("../src/lib/appointmentTime");
 const { bookingIdentitySchema, defaultOnlineBookingPreferences, findOnlineBookingPatient, getOnlineAvailableSlots, getOnlineBookingDateRange } = require("../src/lib/onlineBooking");
 const { isOnlineBookingAppointment, isOnlineRegistrationPatient } = require("../src/lib/onlineBookingIds");
 const { normalizeOnlineRegistrationPhone } = require("../src/lib/patientSearch");
@@ -77,7 +77,11 @@ if (testUri) {
 
 const patient = { name: "Maya Rao", phone: "9000000101", age: 26, gender: "Female" };
 const newTenant = () => `${randomUUID()}@example.test`;
-const date = shiftAppointmentDate(getAppointmentClock().date, 2);
+const candidateDate = shiftAppointmentDate(getAppointmentClock().date, 2);
+const date = isSunday(candidateDate) || isSunday(shiftAppointmentDate(candidateDate, 1))
+  ? shiftAppointmentDate(candidateDate, isSunday(candidateDate) ? 1 : 2)
+  : candidateDate;
+const sunday = shiftAppointmentDate(date, 7 - new Date(date + "T00:00:00Z").getUTCDay());
 const book = (email, overrides = {}) => executeMcpTool("book_appointment", {
   patientName: patient.name,
   patientPhone: patient.phone,
@@ -169,6 +173,14 @@ test("clinic links are scoped, durable, replaceable, and share transactional boo
   const input = { action: "book", identity: newIdentity, date, time: "10:00 AM", durationMinutes: 30, visitType: "Consultation", requestId: randomUUID() };
   assert.deepEqual((await (await checkSlots(code, closedDate)).json()).times, []);
   assert.equal((await publicBooking(code, { ...input, date: closedDate })).status, 409);
+  assert.deepEqual((await (await checkSlots(code, sunday)).json()).times, []);
+  assert.equal((await publicBooking(code, { ...input, date: sunday })).status, 409);
+  const openSunday = await dashboardMutation(firstEmail, "update_clinic_date_schedule", {
+    action: "save", schedule: { date: sunday, status: "open", hours: { workingHoursStart: "13:00", workingHoursEnd: "14:00", slotDuration: 15 } },
+  });
+  assert.equal(openSunday.status, 200);
+  assert.deepEqual((await (await checkSlots(code, sunday)).json()).times, ["01:00 PM", "01:15 PM", "01:30 PM"]);
+  assert.deepEqual((await (await checkSlots(secondCode, sunday)).json()).times, []);
   assert.equal((await publicBooking(code, { action: "identify", identity: newIdentity })).status, 200);
   assert.equal((await getClinicData(firstEmail)).patients.length, 0);
   const [booked, retry] = await Promise.all([publicBooking(code, input), publicBooking(code, input)]);
@@ -201,6 +213,9 @@ test("clinic links are scoped, durable, replaceable, and share transactional boo
   assert.equal((await (await saveSettings(replace)).json()).code, replacement);
   assert.equal((await checkSlots(code)).status, 404);
   assert.equal((await checkSlots(replacement)).status, 200);
+  const sundayRequest = { ...input, date: sunday, identity: existingIdentity, requestId: randomUUID() };
+  assert.equal((await publicBooking(replacement, { ...sundayRequest, time: "01:05 PM" })).status, 409);
+  assert.equal((await publicBooking(replacement, { ...sundayRequest, time: "01:15 PM" })).status, 200);
 
   const rateWindow = Math.floor(Date.now() / 300_000);
   await ClinicProfileModel.collection.updateOne({ dentistEmail: firstEmail }, { $set: { onlineBookingRate: { window: rateWindow, count: 60 } } });
@@ -248,10 +263,45 @@ test("online slots respect calendar boundaries, working hours, closing time, and
   assert.deepEqual(slots(clock.date, [{ ...busy, status: "cancelled" }]), ["10:30 AM", "11:00 AM"]);
   assert.deepEqual(slots("2026-11-24"), []);
   assert.deepEqual(slots("2026-11-22"), []);
+  assert.deepEqual(slots("2026-11-29"), []);
+  const override = { date: "2026-11-29", status: "open", hours: { workingHoursStart: "13:00", workingHoursEnd: "14:00", slotDuration: 15 } };
+  assert.deepEqual(getOnlineAvailableSlots({ ...hours, dateSchedules: [override] }, preferences, override.date, [], clock), ["01:00 PM", "01:15 PM"]);
+  assert.deepEqual(getOnlineAvailableSlots({ ...hours, dateSchedules: [override] }, { ...preferences, closedDates: [override.date] }, override.date, [], clock), []);
   assert.deepEqual(slots("2026-11-31"), []);
   assert.deepEqual(slots(shiftAppointmentDate(getOnlineBookingDateRange(clock).lastDate, 1)), []);
   assert.deepEqual(getOnlineAvailableSlots({ ...hours, workingHoursStart: "invalid" }, preferences, clock.date, [], clock), []);
   assert.deepEqual(getOnlineAvailableSlots(hours, { ...preferences, durationMinutes: 180 }, clock.date, [], clock), []);
+});
+
+test("date schedules protect staff and MCP bookings, permit custom Sunday slots, and can be reset", async () => {
+  const email = newTenant();
+  const setSchedule = (data) => dashboardMutation(email, "update_clinic_date_schedule", data);
+  const visit = (await book(email)).appointment;
+  const available = async (selectedDate, durationMinutes) =>
+    (await executeMcpTool("check_available_slots", { date: selectedDate, durationMinutes }, email)).availableSlots;
+
+  assert.deepEqual(await available(sunday), []);
+  await assert.rejects(book(email, { date: sunday }), /closed/);
+  await assert.rejects(rescheduleAppointment(visit._id, sunday, "10:00 AM", undefined, email), /closed/);
+  assert.equal((await setSchedule({ action: "save", schedule: { date: sunday, status: "open" } })).status, 200);
+  assert.ok((await available(sunday)).includes("10:00 AM"));
+
+  const hours = { workingHoursStart: "13:00", workingHoursEnd: "14:00", slotDuration: 15 };
+  assert.equal((await setSchedule({
+    action: "save", schedule: { date: sunday, status: "open", hours: { ...hours, workingHoursEnd: "12:00" } },
+  })).status, 400);
+  assert.equal((await setSchedule({ action: "save", schedule: { date: sunday, status: "open", hours } })).status, 200);
+  assert.deepEqual(await available(sunday, 45), ["01:00 PM", "01:15 PM"]);
+  await assert.rejects(book(email, { date: sunday, time: "01:05 PM" }), /schedule/);
+  await assert.rejects(book(email, { date: sunday, time: "01:45 PM" }), /schedule/);
+  assert.equal((await rescheduleAppointment(visit._id, sunday, "13:15", undefined, email)).date, sunday);
+
+  assert.equal((await setSchedule({ action: "save", schedule: { date, status: "closed" } })).status, 200);
+  assert.deepEqual(await available(date), []);
+  await assert.rejects(book(email, { date }), /closed/);
+  assert.equal((await setSchedule({ action: "reset", date: sunday })).status, 200);
+  assert.deepEqual(await available(sunday), []);
+  assert.equal((await getClinicData(email)).appointments.find(({ _id }) => _id === visit._id).date, sunday);
 });
 
 test("online booking retries replay one committed visit and conflicting attempts cannot register extra patients", async () => {

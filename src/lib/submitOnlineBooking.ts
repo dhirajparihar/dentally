@@ -1,12 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ClientSession } from "mongoose";
-import { getAppointmentClock } from "@/lib/appointmentTime";
+import { getAppointmentClock, type ClinicBookingSchedule } from "@/lib/appointmentTime";
 import { AppointmentTimeError, bookAppointmentForPatient } from "@/lib/db/repository";
 import {
   findOnlineBookingPatient,
   getOnlineAvailableSlots,
   onlineRegistrationPhoneError,
-  type BookingHours,
   type OnlineBookingConfirmation,
   type OnlineBookingPreferences,
   type OnlineBookingRequest,
@@ -30,7 +29,7 @@ function unavailableSlot() {
 
 export const inactiveBookingLink = () => new OnlineBookingError("This booking link is no longer accepting appointments.", 404, "link_unavailable");
 
-type BookingPolicy = { hours: BookingHours; preferences: OnlineBookingPreferences };
+type BookingPolicy = { hours: ClinicBookingSchedule; preferences: OnlineBookingPreferences };
 
 export async function submitOnlineBooking(
   input: OnlineBookingRequest,

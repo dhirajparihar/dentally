@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Calendar,
@@ -15,7 +15,7 @@ import {
 import type { Appointment } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
 import { useClinic } from "@/context/ClinicContext";
-import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, getClinicHoursForDate, isFutureAppointment, parseAppointmentTime, shiftAppointmentDate } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { AppointmentCard, AppointmentStatusSummary } from "@/components/dashboard/AppointmentCard";
 import { AppointmentMenu } from "@/components/dashboard/AppointmentMenu";
@@ -91,11 +91,6 @@ export default function AppointmentsPage() {
     router.replace(`/dashboard/patients/${encodeURIComponent(visit.patientId)}?${query}=${encodeURIComponent(visit._id)}`);
   }, [appointments, loading, router]);
 
-  const workingHours = useMemo(() => getClinicAppointmentSlots(clinicProfile), [clinicProfile]);
-  const findSlotConflict = (date: string, time: string, durationMinutes = 30, excludeId?: string) =>
-    findAppointmentConflict(appointments, date, time, durationMinutes, excludeId);
-
-  const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const isToday = selectedDate === clock.date;
   const isPastDay = selectedDate < clock.date;
   const sourceAppointments = onlineOnly
@@ -155,7 +150,11 @@ export default function AppointmentsPage() {
     return `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
   };
 
-  const availableSlots = futureSlots(selectedDate).filter((slot) => !findSlotConflict(selectedDate, slot));
+  const hours = getClinicHoursForDate(clinicProfile, selectedDate);
+  const availableSlots = getClinicAppointmentSlots(clinicProfile, selectedDate).filter((slot) =>
+    isFutureAppointment(selectedDate, slot, clock) &&
+    !findAppointmentConflict(appointments, selectedDate, slot, hours?.slotDuration || 30)
+  );
   const visibleAppointments = viewMode === "timeline" ? dayAppointments : listAppointments;
   const selectedDateLabel = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
@@ -201,7 +200,7 @@ export default function AppointmentsPage() {
                 <div key={i} className="h-9 w-24 rounded-lg bg-slate-200/60" />
               ))}
             </div>
-          ) : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">No available slots on this date.</p> : (
+          ) : availableSlots.length === 0 ? <p className="text-xs text-[#64748B]">{hours ? "No available slots on this date." : "The clinic is closed on this date."}</p> : (
             <ul className="appointment-slot-list" role="list" aria-label={`Available slots on ${selectedDateLabel}`}>
               {availableSlots.map((slot) => <li key={slot} className="appointment-time-chip">{slot}</li>)}
             </ul>

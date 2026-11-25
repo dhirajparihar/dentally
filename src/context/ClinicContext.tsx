@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useSession } from "next-auth/react";
 import { getScheduledAppointmentEnd } from "@/lib/appointmentTime";
 import type { AppointmentTreatment } from "@/lib/appointmentTreatments";
+import type { ClinicDateScheduleMutation } from "@/lib/validations/clinic";
 import {
   Patient,
   Appointment,
@@ -41,6 +42,7 @@ export interface ClinicContextType {
   addFee: (fee: FeeItem) => Promise<void>;
   recordPayment: (payment: PaymentTransaction) => Promise<void>;
   updateClinicProfile: (profile: Partial<ClinicProfile>) => Promise<void>;
+  updateClinicDateSchedule: (mutation: ClinicDateScheduleMutation) => Promise<string | undefined>;
   saveAppointmentTreatments: (treatments: AppointmentTreatment[]) => Promise<boolean>;
 }
 
@@ -286,6 +288,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const saveAppointmentTreatments = (appointmentTreatments: AppointmentTreatment[]) =>
     postMutation({ action: "update_clinic_profile", data: { appointmentTreatments } });
 
+  const updateClinicDateSchedule = async (data: ClinicDateScheduleMutation) => {
+    let error: string | undefined;
+    const saved = await postMutation({ action: "update_clinic_date_schedule", data }, (result) => { error = result.error; });
+    return saved ? undefined : error || "Could not save the date schedule. Please try again.";
+  };
+
   return (
     <ClinicContext.Provider
       value={{
@@ -313,6 +321,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addFee,
         recordPayment,
         updateClinicProfile,
+        updateClinicDateSchedule,
         saveAppointmentTreatments,
       }}
     >

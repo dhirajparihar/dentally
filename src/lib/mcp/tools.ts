@@ -237,11 +237,12 @@ export const DENTALLY_MCP_TOOLS: McpToolDefinition[] = [
   {
     name: "check_available_slots",
     category: "appointment",
-    description: "Check available appointment slots for a given date between clinic working hours (10:00 AM to 07:00 PM).",
+    description: "Check available appointment slots using the clinic's hours and date-specific schedule.",
     inputSchema: {
       type: "object",
       properties: {
         date: { type: "string", description: "Date to check (YYYY-MM-DD, 'today' or 'tomorrow')" },
+        durationMinutes: { type: "integer", minimum: 5, maximum: 480, description: "Visit duration in minutes. Defaults to 30." },
       },
       required: ["date"],
     },

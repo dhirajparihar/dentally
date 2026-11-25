@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import { AppointmentTreatmentsSettings } from "@/components/dashboard/AppointmentTreatmentsSettings";
+import { ClinicScheduleSettings } from "@/components/dashboard/ClinicScheduleSettings";
 import { OnlineBookingSettings } from "@/components/dashboard/OnlineBookingSettings";
 
 type AutoSaveStatus = "saved" | "saving" | "unsaved" | "error";
@@ -366,7 +367,7 @@ export default function ClinicSettingsPage() {
 
               <div>
                 <label htmlFor="clinic-settings-default-chair-slot-duration" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
-                  Default Chair Slot Duration
+                  Regular Slot Interval
                 </label>
                 <select id="clinic-settings-default-chair-slot-duration"
                   value={form.slotDuration}
@@ -377,16 +378,17 @@ export default function ClinicSettingsPage() {
                   }}
                   className="w-full px-3 py-2.5 rounded-xl border border-[#E4E9F0] focus:border-[#0089A8] outline-hidden text-xs font-semibold bg-white cursor-pointer"
                 >
-                  <option value={15}>15 Minutes (Consultation)</option>
-                  <option value={30}>30 Minutes (Standard Procedure)</option>
-                  <option value={45}>45 Minutes (Root Canal / Crown)</option>
-                  <option value={60}>60 Minutes (Surgeries / Implants)</option>
+                  {![15, 30, 45, 60].includes(form.slotDuration) && <option value={form.slotDuration}>{form.slotDuration} minutes</option>}
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={45}>45 minutes</option>
+                  <option value={60}>60 minutes</option>
                 </select>
               </div>
 
               <div>
                 <span id="clinic-settings-working-hours" className="block text-xs font-semibold text-[#111C3A] mb-1.5">
-                  Working Hours Window
+                  Regular Working Hours (Monday–Saturday)
                 </span>
                 <div role="group" aria-labelledby="clinic-settings-working-hours" className="flex items-center gap-2">
                   <input
@@ -426,6 +428,7 @@ export default function ClinicSettingsPage() {
               </div>
             </div>
           </div>
+          <ClinicScheduleSettings />
           <OnlineBookingSettings />
           <AppointmentTreatmentsSettings />
         </div>

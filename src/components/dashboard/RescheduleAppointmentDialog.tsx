@@ -3,7 +3,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
-import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment, parseAppointmentTime } from "@/lib/appointmentTime";
+import { findAppointmentConflict, getAppointmentClock, getClinicAppointmentSlots, getClinicHoursForDate, isFutureAppointment, parseAppointmentTime } from "@/lib/appointmentTime";
 import type { Appointment } from "@/lib/mockData";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 
@@ -12,16 +12,17 @@ const fieldClassName = "w-full rounded-xl border border-[#E4E9F0] bg-[#FAFBFC] p
 export function RescheduleAppointmentDialog({ appointment, onClose }: { appointment: Appointment; onClose: () => void }) {
   const { appointments, clinicProfile, rescheduleAppointment } = useClinic();
   const clock = getAppointmentClock(useMinuteClock());
-  const workingHours = getClinicAppointmentSlots(clinicProfile);
   const [date, setDate] = useState(appointment.date >= clock.date ? appointment.date : clock.date);
+  const slots = getClinicAppointmentSlots(clinicProfile, date, appointment.durationMinutes || 30)
+    .filter((slot) => isFutureAppointment(date, slot, clock));
+  const clinicClosed = !getClinicHoursForDate(clinicProfile, date);
   const [time, setTime] = useState(() => appointment.status === "scheduled"
-    ? workingHours.find((slot) => parseAppointmentTime(slot) === parseAppointmentTime(appointment.time) && isFutureAppointment(date, slot, clock)) ?? ""
+    ? slots.find((slot) => parseAppointmentTime(slot) === parseAppointmentTime(appointment.time)) ?? ""
     : "");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
-  const slots = workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
   const conflict = findAppointmentConflict(
     appointments.filter((visit) => visit.status === "scheduled"),
     date, time, appointment.durationMinutes || 30, appointment._id,
@@ -37,7 +38,7 @@ export function RescheduleAppointmentDialog({ appointment, onClose }: { appointm
     event.preventDefault();
     if (saving || conflict) return;
     const currentClock = getAppointmentClock();
-    if (appointment.date < currentClock.date || !isFutureAppointment(date, time, currentClock)) {
+    if (appointment.date < currentClock.date || !slots.includes(time) || !isFutureAppointment(date, time, currentClock)) {
       setError("Choose a future time for a current appointment.");
       return;
     }
@@ -89,7 +90,7 @@ export function RescheduleAppointmentDialog({ appointment, onClose }: { appointm
                 setTime(event.target.value);
                 setError("");
               }} className={fieldClassName}>
-                <option value="" disabled>{slots.length ? "Choose a time" : "No future slots"}</option>
+                <option value="" disabled>{slots.length ? "Choose a time" : clinicClosed ? "Clinic closed on this date" : "No future slots"}</option>
                 {slots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
               </select>
             </label>

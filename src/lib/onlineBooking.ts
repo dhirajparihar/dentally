@@ -4,9 +4,9 @@ import {
   getAppointmentClock,
   getClinicAppointmentSlots,
   isFutureAppointment,
-  parseAppointmentTime,
   shiftAppointmentDate,
   type AppointmentInterval,
+  type ClinicBookingSchedule,
 } from "@/lib/appointmentTime";
 import type { Appointment, ClinicProfile, Patient } from "@/lib/mockData";
 import { isBookingMobile, normalizeOnlineRegistrationPhone, normalizePatientName, normalizePatientPhone } from "@/lib/patientSearch";
@@ -93,10 +93,8 @@ export function formatBookingDate(date: string) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-export type BookingHours = Pick<ClinicProfile, "workingHoursStart" | "workingHoursEnd" | "slotDuration">;
-
 export function getOnlineAvailableSlots(
-  clinic: BookingHours,
+  clinic: ClinicBookingSchedule,
   preferences: Pick<OnlineBookingPreferences, "durationMinutes" | "closedDates">,
   date: string,
   appointments: readonly AppointmentInterval[],
@@ -104,11 +102,7 @@ export function getOnlineAvailableSlots(
 ) {
   const { firstDate, lastDate } = getOnlineBookingDateRange(clock);
   if (!bookingDateSchema.safeParse(date).success || date < firstDate || date > lastDate || preferences.closedDates.includes(date)) return [];
-  const opening = parseAppointmentTime(clinic.workingHoursStart);
-  const closing = parseAppointmentTime(clinic.workingHoursEnd);
-  if (opening === null || closing === null || closing <= opening) return [];
-
-  return getClinicAppointmentSlots(clinic, { durationMinutes: preferences.durationMinutes }).filter((time) =>
+  return getClinicAppointmentSlots(clinic, date, preferences.durationMinutes).filter((time) =>
     isFutureAppointment(date, time, clock) && !findAppointmentConflict(appointments, date, time, preferences.durationMinutes)
   );
 }

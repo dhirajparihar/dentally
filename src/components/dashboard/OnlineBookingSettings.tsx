@@ -183,7 +183,7 @@ export function OnlineBookingSettings() {
               </div>
               <div>
                 <div className="flex flex-wrap items-end gap-2">
-                  <label className="min-w-0 flex-1 text-sm font-semibold sm:max-w-60">Closed date
+                  <label className="min-w-0 flex-1 text-sm font-semibold sm:max-w-60">Online-only closed date
                     <input className={inputClass} type="date" min={today} value={closedDate} onChange={(event) => setClosedDate(event.target.value)} />
                   </label>
                   <button type="button" className="workspace-button secondary" disabled={!closedDate} onClick={addDate}><Plus size={16} aria-hidden /> Add date</button>

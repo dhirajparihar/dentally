@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { ClientSession } from "mongoose";
-import { parseAppointmentTime } from "@/lib/appointmentTime";
+import { getAppointmentClock, getClinicAppointmentSlots, getClinicHoursForDate, parseAppointmentTime } from "@/lib/appointmentTime";
 import { isClinicConfigured } from "@/lib/clinicOnboarding";
 import { ClinicAccessError, clinicSetupRequired } from "@/lib/db/clinicOnboarding";
 import { connectDB } from "@/lib/db/connect";
@@ -18,14 +18,14 @@ import {
 } from "@/lib/onlineBooking";
 import { inactiveBookingLink, OnlineBookingError } from "@/lib/submitOnlineBooking";
 
-const clinicSelection = "dentistEmail name address phone workingHoursStart workingHoursEnd slotDuration isConfigured regNo upiId onlineBooking";
+const clinicSelection = "dentistEmail name address phone workingHoursStart workingHoursEnd slotDuration dateSchedules isConfigured regNo upiId onlineBooking";
 const activeClinic = { status: { $ne: "suspended" }, isActive: { $ne: false } } as const;
 const rateWindowSeconds = 5 * 60;
 const requestLimit = 60;
 
 type BookingClinic = Pick<IClinicProfile,
   "dentistEmail" | "name" | "address" | "phone" | "workingHoursStart" | "workingHoursEnd" | "slotDuration" |
-  "isConfigured" | "regNo" | "upiId" | "onlineBooking"
+  "dateSchedules" | "isConfigured" | "regNo" | "upiId" | "onlineBooking"
 >;
 type PublicClinic = BookingClinic & { onlineBooking: OnlineBookingSettings & { code: string } };
 
@@ -66,13 +66,14 @@ export function getPublicBookingDetails(clinic: PublicClinic): PublicBookingClin
 }
 
 export async function getPublicBookingSlots(clinic: PublicClinic, date: string) {
-  const { firstDate, lastDate } = getOnlineBookingDateRange();
+  const clock = getAppointmentClock();
+  const { firstDate, lastDate } = getOnlineBookingDateRange(clock);
   const { visitType, durationMinutes, closedDates } = clinic.onlineBooking;
-  const possible = date >= firstDate && date <= lastDate && !closedDates.includes(date);
+  const possible = date >= firstDate && date <= lastDate && !closedDates.includes(date) && getClinicHoursForDate(clinic, date);
   const intervals = possible ? await readScheduledAppointmentIntervals(date, clinic.dentistEmail) : [];
   return {
     firstDate, lastDate, visitType, durationMinutes,
-    times: possible ? getOnlineAvailableSlots(clinic, clinic.onlineBooking, date, intervals) : [],
+    times: possible ? getOnlineAvailableSlots(clinic, clinic.onlineBooking, date, intervals, clock) : [],
   };
 }
 
@@ -112,7 +113,10 @@ export async function mutateClinicBookingSettings(email: string, mutation: Onlin
       const { enabled, visitType, durationMinutes, closedDates } = mutation;
       const open = parseAppointmentTime(clinic.workingHoursStart);
       const close = parseAppointmentTime(clinic.workingHoursEnd);
-      if (enabled && (open === null || close === null || close - open < durationMinutes)) {
+      const today = getAppointmentClock().date;
+      if (enabled && (open === null || close === null || close - open < durationMinutes) &&
+        !clinic.dateSchedules?.some(({ date, hours }) => hours && date >= today && !closedDates.includes(date) &&
+          getClinicAppointmentSlots(clinic, date, durationMinutes).length > 0)) {
         throw new OnlineBookingError("Set working hours long enough for this visit before enabling online booking.", 400, "invalid_hours");
       }
       settings = {
@@ -120,7 +124,7 @@ export async function mutateClinicBookingSettings(email: string, mutation: Onlin
         enabled,
         visitType,
         durationMinutes,
-        closedDates: closedDates.filter((date) => date >= getOnlineBookingDateRange().firstDate),
+        closedDates: closedDates.filter((date) => date >= today),
       };
     }
     const update = await ClinicProfileModel.updateOne(

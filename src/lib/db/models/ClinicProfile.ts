@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { defaultAppointmentTreatments, type AppointmentTreatment } from "@/lib/appointmentTreatments";
+import type { ClinicBookingHours, ClinicDateSchedule } from "@/lib/appointmentTime";
 import type { OnlineBookingSettings } from "@/lib/onlineBooking";
 
 export interface IClinicProfile extends Document {
@@ -15,6 +16,7 @@ export interface IClinicProfile extends Document {
   slotDuration: number;
   workingHoursStart: string;
   workingHoursEnd: string;
+  dateSchedules?: ClinicDateSchedule[];
   receiptFooter: string;
   appointmentTreatments?: AppointmentTreatment[];
   onlineBooking?: OnlineBookingSettings;
@@ -52,6 +54,24 @@ const OnlineBookingSchema = new Schema<OnlineBookingSettings>(
   { _id: false }
 );
 
+const ClinicBookingHoursSchema = new Schema<ClinicBookingHours>(
+  {
+    workingHoursStart: { type: String, required: true },
+    workingHoursEnd: { type: String, required: true },
+    slotDuration: { type: Number, required: true, min: 5, max: 120 },
+  },
+  { _id: false }
+);
+
+const ClinicDateScheduleSchema = new Schema<ClinicDateSchedule>(
+  {
+    date: { type: String, required: true },
+    status: { type: String, required: true, enum: ["closed", "open"] },
+    hours: { type: ClinicBookingHoursSchema },
+  },
+  { _id: false }
+);
+
 const ClinicProfileSchema = new Schema<IClinicProfile>(
   {
     dentistEmail: { type: String, required: true, unique: true, index: true },
@@ -66,6 +86,7 @@ const ClinicProfileSchema = new Schema<IClinicProfile>(
     slotDuration: { type: Number, default: 30 },
     workingHoursStart: { type: String, default: "09:30 AM" },
     workingHoursEnd: { type: String, default: "08:00 PM" },
+    dateSchedules: { type: [ClinicDateScheduleSchema], default: undefined },
     appointmentTreatments: {
       type: [AppointmentTreatmentSchema],
       default: () => defaultAppointmentTreatments.map((treatment) => ({ ...treatment })),

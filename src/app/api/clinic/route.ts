@@ -18,6 +18,7 @@ import {
   saveFee,
   savePayment,
   saveClinicProfile,
+  saveClinicDateSchedule,
   seedSampleDataForDoctor,
 } from "@/lib/db/repository";
 import { Patient, Appointment, FeeItem, ClinicProfile } from "@/lib/mockData";
@@ -29,6 +30,7 @@ import {
   feeSchema,
   paymentSchema,
   clinicProfileSchema,
+  clinicDateScheduleMutationSchema,
   visitNoteSchema,
   visitNoteUpdateSchema,
 } from "@/lib/validations/clinic";
@@ -203,6 +205,11 @@ export async function POST(request: NextRequest) {
       case "update_clinic_profile": {
         const validated = clinicProfileSchema.omit({ email: true, isConfigured: true }).parse(data);
         await saveClinicProfile({ ...validated, email } as Partial<ClinicProfile>, email);
+        break;
+      }
+
+      case "update_clinic_date_schedule": {
+        await saveClinicDateSchedule(clinicDateScheduleMutationSchema.parse(data), email);
         break;
       }
 

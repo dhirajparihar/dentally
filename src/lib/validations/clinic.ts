@@ -159,3 +159,26 @@ export const clinicProfileSchema = z.object({
   isConfigured: z.boolean().optional(),
 });
 
+const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Enter a valid time.");
+const customBookingHoursSchema = z.object({
+  workingHoursStart: timeOfDaySchema,
+  workingHoursEnd: timeOfDaySchema,
+  slotDuration: clinicProfileSchema.shape.slotDuration.unwrap(),
+}).refine((hours) => hours.workingHoursStart < hours.workingHoursEnd, {
+  message: "Closing time must be after opening time.",
+  path: ["workingHoursEnd"],
+});
+
+export const clinicDateScheduleMutationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("save"),
+    schedule: z.discriminatedUnion("status", [
+      z.object({ date: z.iso.date(), status: z.literal("closed") }),
+      z.object({ date: z.iso.date(), status: z.literal("open"), hours: customBookingHoursSchema.optional() }),
+    ]),
+  }),
+  z.object({ action: z.literal("reset"), date: z.iso.date() }),
+]);
+
+export type ClinicDateScheduleMutation = z.infer<typeof clinicDateScheduleMutationSchema>;
+

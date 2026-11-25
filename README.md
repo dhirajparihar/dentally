@@ -86,7 +86,9 @@ Open **Patients → patient profile → Visits → Clinical Notes** on a complet
 
 You can leave the State Dental Council / DCI registration number blank during first-time clinic setup and add it later in Clinic Settings.
 
-In **Clinic Settings → Online Booking**, enable booking, choose the visit type and duration, and save. Copy the clinic link to share it with patients. The link uses the clinic's working hours and lets you block specific dates. Replacing the link disables the previous URL.
+Sundays are closed by default. In **Clinic Settings → Date-Specific Booking Schedule**, close a date, open it with regular hours, or set custom opening and closing times and a slot interval. Changes apply to new staff and online bookings and reschedules. To remove an override, edit the date and select **Restore default**.
+
+In **Clinic Settings → Online Booking**, enable booking, choose the visit type and duration, and save. Copy the clinic link to share it with patients. The link follows the clinic schedule and also supports online-only closed dates. Replacing the link disables the previous URL.
 
 Patients can book as new or existing patients for the next 30 calendar days in India Standard Time. Existing patients enter their name and mobile number. Confirmed visits and their booking references appear in the clinic calendar. Patients can call the clinic to cancel or reschedule.
 

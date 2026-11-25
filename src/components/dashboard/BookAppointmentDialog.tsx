@@ -1,11 +1,11 @@
 "use client";
 
-import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, MessageCircle, X } from "lucide-react";
 import { useClinic } from "@/context/ClinicContext";
 import type { Appointment } from "@/lib/mockData";
 import { getAppointmentTreatments, treatmentKey } from "@/lib/appointmentTreatments";
-import { findAppointmentConflict, findBookedFollowUp, getAppointmentClock, getClinicAppointmentSlots, isFutureAppointment } from "@/lib/appointmentTime";
+import { findAppointmentConflict, findBookedFollowUp, getAppointmentClock, getClinicAppointmentSlots, getClinicHoursForDate, isFutureAppointment } from "@/lib/appointmentTime";
 import { useMinuteClock } from "@/lib/useMinuteClock";
 import { PatientPicker } from "@/components/dashboard/PatientPicker";
 import { getPatientPhoneQuery, isBookingMobile } from "@/lib/patientSearch";
@@ -37,10 +37,10 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
   const [bookingError, setBookingError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const workingHours = useMemo(() => getClinicAppointmentSlots(clinicProfile), [clinicProfile]);
   const findSlotConflict = (date: string, time: string, durationMinutes = 30) =>
     findAppointmentConflict(appointments, date, time, durationMinutes);
-  const futureSlots = (date: string) => workingHours.filter((slot) => isFutureAppointment(date, slot, clock));
+  const futureSlots = (date: string, durationMinutes: number) =>
+    getClinicAppointmentSlots(clinicProfile, date, durationMinutes || 30).filter((slot) => isFutureAppointment(date, slot, clock));
   const [form, setForm] = useState(() => {
     const draftTreatment = treatments.find(({ name }) => name === draft?.procedure);
     const followUpTreatment = followUpSource && (
@@ -49,7 +49,7 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
     );
     const treatment = draftTreatment ?? followUpTreatment ?? treatments.find(({ name }) => name === "Root Canal Treatment (RCT)") ?? treatments[0];
     const durationMinutes = draftTreatment && draft ? draft.durationMinutes : treatment.duration;
-    const slots = futureSlots(initialDate);
+    const slots = futureSlots(initialDate, durationMinutes);
     const time = slots.find((slot) => !findSlotConflict(initialDate, slot, durationMinutes || 30)) ?? slots[0] ?? "";
     return {
       patientId: followUpSource?.patientId ?? draft?.patientId ?? "",
@@ -68,7 +68,8 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
   const readyToBook = newPatient
     ? Boolean(newPatient.name.trim() && isBookingMobile(newPatient.phone))
     : Boolean(selectedPatient && appointmentPhone);
-  const bookingSlots = futureSlots(form.date);
+  const bookingSlots = futureSlots(form.date, form.durationMinutes);
+  const clinicClosed = !getClinicHoursForDate(clinicProfile, form.date);
   const bookingConflict = findSlotConflict(form.date, form.time, form.durationMinutes || 30);
   const blockedByConflict = Boolean(bookingConflict && (followUpSource || !emergencyOverride));
 
@@ -306,7 +307,11 @@ export function BookAppointmentDialog({ initialDate, draft, followUpSource, onCl
                 );
               })}
             </div>
-            {bookingSlots.length === 0 && <p className="text-[#64748B]">Choose another date to see future slots.</p>}
+            {bookingSlots.length === 0 && (
+              <p role="status" className="text-[#64748B]">
+                {clinicClosed ? "The clinic is closed on this date." : "No time fits this appointment. Choose another date or duration."}
+              </p>
+            )}
           </div>
 
           {/* Overlap Conflict Detection Notice */}
